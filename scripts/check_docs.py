@@ -8,10 +8,11 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 LINK_PATTERN = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
-SKIP_PREFIXES = ("#", "http://", "https://", "mailto:", "tel:")
+SKIP_SCHEMES = {"http", "https", "mailto", "tel"}
 
 
 def main() -> int:
@@ -25,7 +26,7 @@ def main() -> int:
         content = document.read_text(encoding="utf-8")
         for raw_target in LINK_PATTERN.findall(content):
             target = raw_target.strip().split("#", 1)[0].split("?", 1)[0]
-            if not target or target.startswith(SKIP_PREFIXES):
+            if not target or urlsplit(target).scheme in SKIP_SCHEMES:
                 continue
             candidate = (document.parent / target).resolve()
             if not candidate.exists():

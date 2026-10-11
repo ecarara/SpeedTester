@@ -10,7 +10,9 @@ as licenças efetivamente instaladas e gere um SBOM da imagem publicada.
 | pandas e NumPy | agregações e análise | BSD/permissivas |
 | matplotlib | geração de PNG | Matplotlib License |
 | aiohttp | runner fast.com e HTTP | Apache-2.0 |
-| requests | integração auxiliar | Apache-2.0 |
+| coverage.py, HTTPX | testes Python | Apache-2.0 / BSD-3-Clause |
+| Playwright | testes do dashboard | Apache-2.0 |
+| age / OpenSSH | criptografia e replicação opcional de backups | BSD-3-Clause / BSD |
 | iPerf3 | medição TCP | BSD-3-Clause |
 | Ookla Speedtest CLI | runner opcional | termos da Ookla |
 | fast.com | endpoint de medição | termos do serviço Netflix |

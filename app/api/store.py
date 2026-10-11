@@ -39,10 +39,11 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Iterable, List, Optional
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 DB_SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -122,6 +123,16 @@ CREATE TABLE IF NOT EXISTS alerts (
 );
 CREATE INDEX IF NOT EXISTS idx_alerts_created_at ON alerts(created_at);
 CREATE INDEX IF NOT EXISTS idx_alerts_kind ON alerts(kind, created_at);
+CREATE TABLE IF NOT EXISTS measurement_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    slot_id INTEGER NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    reason TEXT,
+    metrics_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_attempts_slot ON measurement_attempts(slot_id, id);
 """
 
 
@@ -261,12 +272,7 @@ def _utc_from_epoch(ts: float) -> str:
 
 
 class SampleStore:
-    """Thread-safe wrapper around a single SQLite connection.
-
-    SQLite only allows a connection on the thread that created it; to keep the
-    FastAPI app and the background collector safe we open one connection per
-    thread using a small pool keyed by ``threading.get_ident()``.
-    """
+    """Thread-safe SQLite access with one short-lived connection per transaction."""
 
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
@@ -277,10 +283,13 @@ class SampleStore:
             conn.executescript(DB_SCHEMA)
             self._migrate_samples(conn)
             self._migrate_slots(conn)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_samples_date_runner ON samples(local_date, runner, started_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_samples_slot ON samples(slot_id)")
             conn.execute(
                 "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('version', ?)",
                 (str(SCHEMA_VERSION),),
             )
+        self.close()
 
     @staticmethod
     def _migrate_samples(conn: sqlite3.Connection) -> None:
@@ -341,6 +350,8 @@ class SampleStore:
         except Exception:
             conn.rollback()
             raise
+        finally:
+            self.close()
 
     # --- writes --------------------------------------------------------------
     def add_samples(self, samples: Iterable[Sample]) -> int:
@@ -367,7 +378,78 @@ class SampleStore:
 
     def add_sample(self, sample: Sample) -> int:
         """Insert one representative sample and return its database id."""
-        return self.add_samples([sample])
+        with self._connection() as conn:
+            # Claim, sample and completion must not produce duplicates after a crash.
+            conn.execute("BEGIN IMMEDIATE")
+            if sample.slot_id is not None:
+                existing = conn.execute("SELECT id FROM samples WHERE slot_id = ? ORDER BY id LIMIT 1", (sample.slot_id,)).fetchone()
+                if existing:
+                    return int(existing[0])
+            columns = list(sample.to_dict())
+            placeholders = ",".join("?" for _ in columns)
+            cur = conn.execute(
+                f"INSERT INTO samples ({','.join(columns)}) VALUES ({placeholders})",
+                sample.to_row(),
+            )
+            if sample.slot_id is not None:
+                if not sample.is_failure:
+                    status = "SUCCESS"
+                elif sample.failure_origin == "OPERATOR":
+                    status = "NO_INTERNET_OPERATOR"
+                elif sample.failure_origin == "INTERNAL":
+                    status = "NO_INTERNET_INTERNAL"
+                elif sample.failure_cause == "power":
+                    status = "POWER_OUTAGE"
+                else:
+                    status = "MEASUREMENT_ERROR"
+                conn.execute("UPDATE measurement_slots SET status = ?, updated_at = ? WHERE id = ? AND status = 'RUNNING'", (status, _utc_from_epoch(_utcnow()), sample.slot_id))
+            return int(cur.lastrowid)
+
+    def add_attempt(self, slot_id: int, started_at: str, ended_at: str,
+                    outcome: str, reason: Optional[str], metrics: dict) -> int:
+        """Preserve every attempt; only selected samples enter aggregate metrics."""
+        with self._connection() as conn:
+            cur = conn.execute(
+                "INSERT INTO measurement_attempts(slot_id, started_at, ended_at, outcome, reason, metrics_json) VALUES (?, ?, ?, ?, ?, ?)",
+                (slot_id, started_at, ended_at, outcome, reason, json.dumps(metrics, sort_keys=True)),
+            )
+            return int(cur.lastrowid)
+
+    def attempts_for_slot(self, slot_id: int) -> List[dict]:
+        with self._connection() as conn:
+            rows = conn.execute("SELECT * FROM measurement_attempts WHERE slot_id = ? ORDER BY id", (slot_id,)).fetchall()
+        result = [dict(row) for row in rows]
+        for row in result:
+            row["metrics"] = json.loads(row.pop("metrics_json"))
+        return result
+
+    def mark_attempt(self, attempt_id: int, outcome: str, reason: Optional[str] = None) -> None:
+        with self._connection() as conn:
+            conn.execute("UPDATE measurement_attempts SET outcome = ?, reason = ? WHERE id = ?", (outcome, reason, attempt_id))
+
+    def touch_slot(self, slot_id: int) -> None:
+        with self._connection() as conn:
+            conn.execute("UPDATE measurement_slots SET updated_at = ? WHERE id = ? AND status = 'RUNNING'", (_utc_from_epoch(_utcnow()), slot_id))
+
+    def recover_stale_slots(self, now_utc: str, lease_seconds: int = 300,
+                            late_tolerance_seconds: int = 900) -> int:
+        """Recover expired execution leases without replacing saved measurements."""
+        now = datetime.fromisoformat(now_utc.replace("Z", "+00:00"))
+        cutoff = (now - timedelta(seconds=lease_seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        late = (now - timedelta(seconds=late_tolerance_seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        recovered = 0
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            slots = conn.execute("SELECT * FROM measurement_slots WHERE status = 'RUNNING' AND updated_at < ?", (cutoff,)).fetchall()
+            for slot in slots:
+                sample = conn.execute("SELECT is_failure, failure_origin FROM samples WHERE slot_id = ? ORDER BY id DESC LIMIT 1", (slot["id"],)).fetchone()
+                if sample:
+                    status = "SUCCESS" if not sample["is_failure"] else {"OPERATOR": "NO_INTERNET_OPERATOR", "INTERNAL": "NO_INTERNET_INTERNAL"}.get(sample["failure_origin"], "MEASUREMENT_ERROR")
+                else:
+                    status = "PENDING" if slot["scheduled_for"] >= late else "MISSED_UNKNOWN"
+                conn.execute("UPDATE measurement_slots SET status = ?, updated_at = ?, classification_note = ?, classification_source = 'recovery' WHERE id = ?", (status, now_utc, "Execution lease expired; recovered after interruption", slot["id"]))
+                recovered += 1
+        return recovered
 
     # --- scheduling ---------------------------------------------------------
     def add_slots(self, slots: Iterable[MeasurementSlot]) -> int:
@@ -634,6 +716,59 @@ class SampleStore:
             rows = conn.execute(query, params).fetchall()
         return [dict(r) for r in rows]
 
+    def query_samples(self, *, runner: Optional[str] = None, local_date: Optional[str] = None,
+                      from_date: Optional[str] = None, to_date: Optional[str] = None,
+                      since: Optional[str] = None, quadrant: Optional[str] = None,
+                      timezone_name: str = "America/Sao_Paulo", limit: Optional[int] = None,
+                      offset: int = 0, descending: bool = False, max_id: Optional[int] = None) -> List[dict]:
+        """Apply all filters in SQL before sorting and pagination."""
+        clauses, values = [], []
+        if max_id is not None:
+            clauses.append("id <= ?")
+            values.append(max_id)
+        if runner:
+            clauses.append("runner = ?")
+            values.append(runner)
+        if quadrant:
+            clauses.append("quadrant = ?")
+            values.append(quadrant)
+        start, end = local_date or from_date, local_date or to_date
+        if start or end:
+            zone = ZoneInfo(timezone_name)
+            local_parts, legacy_parts, local_values, legacy_values = [], [], [], []
+            if start:
+                local_parts.append("local_date >= ?")
+                local_values.append(start)
+                utc_start = datetime.fromisoformat(start).replace(tzinfo=zone).astimezone(timezone.utc)
+                legacy_parts.append("started_at >= ?")
+                legacy_values.append(utc_start.strftime("%Y-%m-%dT%H:%M:%SZ"))
+            if end:
+                local_parts.append("local_date <= ?")
+                local_values.append(end)
+                utc_end = (datetime.fromisoformat(end) + timedelta(days=1)).replace(tzinfo=zone).astimezone(timezone.utc)
+                legacy_parts.append("started_at < ?")
+                legacy_values.append(utc_end.strftime("%Y-%m-%dT%H:%M:%SZ"))
+            clauses.append("((" + " AND ".join(local_parts) + ") OR (local_date IS NULL AND " + " AND ".join(legacy_parts) + "))")
+            values.extend(local_values + legacy_values)
+        if since:
+            clauses.append("started_at >= ?")
+            values.append(since)
+        query = "SELECT * FROM samples"
+        if clauses:
+            query += " WHERE " + " AND ".join(clauses)
+        direction = "DESC" if descending else "ASC"
+        query += f" ORDER BY started_at {direction}, id {direction}"
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            values.extend((max(1, min(int(limit), 5000)), max(0, int(offset))))
+        with self._connection() as conn:
+            rows = conn.execute(query, values).fetchall()
+        return [dict(row) for row in rows]
+
+    def max_sample_id(self) -> int:
+        with self._connection() as conn:
+            return int(conn.execute("SELECT COALESCE(MAX(id), 0) FROM samples").fetchone()[0])
+
     def samples_since(
         self,
         started_at: str,
@@ -711,6 +846,7 @@ class SampleStore:
             n += conn.execute("DELETE FROM measurement_slots").rowcount
             n += conn.execute("DELETE FROM availability_events").rowcount
             n += conn.execute("DELETE FROM alerts").rowcount
-        conn = self._connect()
-        conn.execute("VACUUM")
+            n += conn.execute("DELETE FROM measurement_attempts").rowcount
+        with self._connection() as conn:
+            conn.execute("VACUUM")
         return n

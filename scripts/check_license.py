@@ -22,7 +22,7 @@ REQUIRED_LICENSE_MARKERS = (
     "END OF TERMS AND CONDITIONS",
 )
 SOURCE_ROOTS = (ROOT / "app", ROOT / "scripts", ROOT / "tests")
-SOURCE_SUFFIXES = {".py", ".sh", ".html", ".cjs"}
+SOURCE_SUFFIXES = {".py", ".sh", ".html", ".cjs", ".js"}
 
 
 def source_files() -> list[Path]:

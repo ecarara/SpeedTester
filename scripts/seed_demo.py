@@ -22,8 +22,7 @@ def main() -> None:
     args = parser.parse_args()
     args.db.parent.mkdir(parents=True, exist_ok=True)
     # Exclusive creation also protects against overwriting an existing symlink.
-    with args.db.open("xb"):
-        pass
+    args.db.touch(exist_ok=False)
     store = SampleStore(str(args.db))
     for day_index in range(7):
         day = args.date - timedelta(days=6 - day_index)

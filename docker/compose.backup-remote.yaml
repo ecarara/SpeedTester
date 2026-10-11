@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+# Opt in with: -f docker/compose.yaml -f docker/compose.backup-remote.yaml
+services:
+  backup:
+    environment:
+      BACKUP_REMOTE: ${BACKUP_REMOTE:?Set an SSH destination}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:?Set an age public recipient}
+    volumes:
+      - ${BACKUP_SSH_DIR:?Set a directory containing the SSH key and known_hosts}:/root/.ssh:ro

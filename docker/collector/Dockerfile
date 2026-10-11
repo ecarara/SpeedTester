@@ -3,14 +3,18 @@
 
 FROM python:3.11-slim@sha256:be1575ed968de893bd54f4c56315ff7c4736ce522c1bca08fd521731aafc0d76
 
+ARG TARGETARCH
+
 # The collector includes the fast.com runner, official Ookla CLI and iperf3.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl iperf3 iproute2 iputils-ping libidn2-0 tar \
-    && curl -fsSL https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-linux-x86_64.tgz -o /tmp/ookla-speedtest.tgz \
+    && if [ "$TARGETARCH" = "amd64" ] || [ -z "$TARGETARCH" ]; then \
+       curl -fsSL https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-linux-x86_64.tgz -o /tmp/ookla-speedtest.tgz \
     && echo "5690596c54ff9bed63fa3732f818a05dbc2db19ad36ed68f21ca5f64d5cfeeb7  /tmp/ookla-speedtest.tgz" | sha256sum -c - \
     && tar -xzf /tmp/ookla-speedtest.tgz -C /tmp \
     && install -m 0755 /tmp/speedtest /usr/local/bin/speedtest \
-    && rm -rf /tmp/ookla-speedtest.tgz /tmp/speedtest \
+    && rm -rf /tmp/ookla-speedtest.tgz /tmp/speedtest; \
+       elif [ "$TARGETARCH" != "arm64" ]; then exit 1; fi \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

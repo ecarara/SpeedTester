@@ -19,22 +19,24 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-          cache-dependency-path: app/requirements.txt
+          cache-dependency-path: requirements-dev.txt
 
       - name: Install dependencies
-        run: python -m pip install -r app/requirements.txt
+        run: python -m pip install -r requirements-dev.txt
 
-      - name: Run unit tests
+      - name: Unit and integration tests with coverage
         env:
           PYTHONPATH: app
-        run: python -m unittest discover -s tests -v
+        run: |
+          python -m coverage run --source=app -m unittest discover -s tests -v
+          python -m coverage xml
 
       - name: Compile Python
         run: python -m compileall -q app
@@ -56,6 +58,7 @@ jobs:
           for (const match of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)) {
             new Function(match[1]);
           }
+          new Function(fs.readFileSync('app/dashboard/charts.js','utf8'));
           console.log('dashboard-js-ok');
           NODE
 
@@ -67,8 +70,45 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Validate Compose file
         run: docker compose -f docker/compose.yaml config --quiet
       - name: Build container images
         run: docker compose -f docker/compose.yaml build
+
+      - name: Start API and run container smoke tests
+        run: |
+          docker compose -f docker/compose.yaml up -d db api --wait --wait-timeout 120
+          curl --fail http://127.0.0.1:8000/health
+          curl --fail http://127.0.0.1:8000/api/config
+          test "$(docker compose -f docker/compose.yaml exec -T api id -u)" = 10001
+          docker compose -f docker/compose.yaml run --rm backup /opt/speedtester-scripts/backup.sh
+      - name: Clean up
+        if: always()
+        run: docker compose -f docker/compose.yaml down --volumes
+
+  dashboard:
+    name: Dashboard acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: python -m pip install -r requirements-dev.txt
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:ui
+
+  dependencies:
+    name: Dependency vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - run: python -m pip install pip-audit==2.10.1
+      - run: python -m pip_audit -r app/requirements.txt

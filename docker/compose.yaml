@@ -15,6 +15,7 @@ services:
       retries: 5
 
   api:
+    image: ghcr.io/ecarara/speedtester-api:${IMAGE_TAG:-main}
     build:
       context: ..
       dockerfile: docker/api/Dockerfile
@@ -39,6 +40,11 @@ services:
       API_REQUIRE_ADMIN_TOKEN: ${API_REQUIRE_ADMIN_TOKEN:-true}
       API_RATE_LIMIT_PER_MINUTE: ${API_RATE_LIMIT_PER_MINUTE:-120}
       COLLECTOR_HEARTBEAT_TIMEOUT_SECONDS: ${COLLECTOR_HEARTBEAT_TIMEOUT_SECONDS:-120}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
     volumes:
       - db_data:/data
     ports:
@@ -51,6 +57,7 @@ services:
       - no-new-privileges:true
 
   collector:
+    image: ghcr.io/ecarara/speedtester-collector:${IMAGE_TAG:-main}
     build:
       context: ..
       dockerfile: docker/collector/Dockerfile
@@ -70,6 +77,7 @@ services:
       IPERF3_PORT: ${IPERF3_PORT:-5201}
       IPERF3_DURATION_SECONDS: ${IPERF3_DURATION_SECONDS:-10}
       IPERF3_PARALLEL_STREAMS: ${IPERF3_PARALLEL_STREAMS:-5}
+      SLOT_LEASE_SECONDS: ${SLOT_LEASE_SECONDS:-300}
       MEASUREMENT_TIMEOUT_SECONDS: ${MEASUREMENT_TIMEOUT_SECONDS:-60}
       BANDWIDTH_CONTRACTED_MBP: ${BANDWIDTH_CONTRACTED_MBP:-}
       ISP_LOOKUP_ENABLED: ${ISP_LOOKUP_ENABLED:-true}
@@ -89,6 +97,7 @@ services:
       - no-new-privileges:true
 
   backup:
+    image: ghcr.io/ecarara/speedtester-backup:${IMAGE_TAG:-main}
     build:
       context: ..
       dockerfile: docker/backup/Dockerfile

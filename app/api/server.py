@@ -15,7 +15,8 @@ The chart is generated on the fly with matplotlib and returned as PNG.
 """
 from __future__ import annotations
 
-import base64
+import csv
+import json
 import hmac
 import io
 import os
@@ -33,7 +34,7 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
 from fastapi import Body, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from api.store import SampleStore
@@ -43,7 +44,7 @@ from shared.settings import Settings, load_settings
 settings = load_settings()
 store = SampleStore(settings.db_path)
 
-app = FastAPI(title="SpeedTester", version="1.0.0")
+app = FastAPI(title="SpeedTester", version="0.2.0")
 _rate_limit_lock = Lock()
 _rate_limit_buckets: dict[str, deque[float]] = defaultdict(deque)
 
@@ -146,22 +147,130 @@ def api_alerts(limit: int = Query(50, ge=1, le=200)):
     return JSONResponse(store.alerts(limit))
 
 
+def _query_filters(local_date=None, from_date=None, to_date=None, runner=None, quadrant=None):
+    if local_date and (from_date or to_date):
+        raise HTTPException(422, "date cannot be combined with from/to")
+    try:
+        for value in (local_date, from_date, to_date):
+            if value:
+                if date.fromisoformat(value).isoformat() != value:
+                    raise ValueError("date must use YYYY-MM-DD")
+        if from_date and to_date:
+            span = (date.fromisoformat(to_date) - date.fromisoformat(from_date)).days
+            if span < 0 or span > 366:
+                raise ValueError("period must be between 0 and 366 days")
+    except ValueError as exc:
+        raise HTTPException(422, "invalid date or period") from exc
+    if runner and runner not in {"iperf3", "ookla", "fast"}:
+        raise HTTPException(422, "invalid runner")
+    if quadrant and quadrant not in {"madrugada", "manha", "tarde", "noite"}:
+        raise HTTPException(422, "invalid quadrant")
+    return dict(local_date=local_date, from_date=from_date, to_date=to_date,
+                runner=runner, quadrant=quadrant, timezone_name=settings.timezone)
+
+
 @app.get("/api/samples")
 def api_samples(
-    since: Optional[str] = Query(None, description="ISO-8601 UTC cutoff, inclusive"),
-    minutes: Optional[int] = Query(None, description="Only the last N minutes"),
-    runner: Optional[str] = Query(None, description="Filter by fast, ookla or iperf3"),
-    limit: int = Query(1000, ge=1, le=5000),
-    offset: int = Query(0, ge=0),
+    since: Optional[str] = None, minutes: Optional[int] = Query(None, ge=1),
+    runner: Optional[str] = None, local_date: Optional[str] = Query(None, alias="date"),
+    from_date: Optional[str] = Query(None, alias="from"),
+    to_date: Optional[str] = Query(None, alias="to"), quadrant: Optional[str] = None,
+    limit: int = Query(1000, ge=1, le=5000), offset: int = Query(0, ge=0),
+    order: str = Query("desc", pattern="^(asc|desc)$"),
 ):
-    """Return paginated samples, optionally filtered by time window and runner."""
-    if minutes is not None:
-        rows = store.samples_last_minutes(minutes, limit=limit, offset=offset)
-    elif since is not None:
-        rows = store.samples_since(since, limit=limit, offset=offset)
-    else:
-        rows = store.all_samples(limit=limit, offset=offset)
-    return JSONResponse(_filter_rows_for_runner(rows, runner))
+    """Return filtered samples, newest first; filters precede pagination."""
+    filters = _query_filters(local_date, from_date, to_date, runner, quadrant)
+    if since:
+        try:
+            timestamp = datetime.fromisoformat(since.replace("Z", "+00:00"))
+            if timestamp.tzinfo is None:
+                raise ValueError("timezone required")
+            since = timestamp.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        except ValueError as exc:
+            raise HTTPException(422, "since must be an ISO timestamp with timezone") from exc
+    if minutes:
+        since = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return JSONResponse(store.query_samples(**filters, since=since, limit=limit,
+                                           offset=offset, descending=order == "desc"))
+
+
+@app.get("/api/attempts")
+def api_attempts(slot_id: int = Query(..., ge=1)):
+    return store.attempts_for_slot(slot_id)
+
+
+@app.get("/api/config")
+def api_config():
+    """Return only public display settings, never credentials or hostnames."""
+    return {"timezone": settings.timezone, "local_date": local_date_now(settings.timezone).isoformat(),
+            "version": "0.2.0", "bandwidth_contracted_mbps": settings.bandwidth_contracted_mbps}
+
+
+@app.get("/api/series")
+def api_series(local_date: Optional[str] = Query(None, alias="date"),
+               from_date: Optional[str] = Query(None, alias="from"),
+               to_date: Optional[str] = Query(None, alias="to"), runner: Optional[str] = None):
+    """Return the complete chart period, aggregating large series by local day."""
+    rows = store.query_samples(**_query_filters(local_date, from_date, to_date, runner))
+    count = len(rows)
+    if count <= 2000:
+        return {"rows": [{key: row[key] for key in ("started_at", "is_failure", "download_mbps", "upload_mbps")} for row in rows], "count": count, "aggregated": False}
+    days = {}
+    zone = ZoneInfo(settings.timezone)
+    for row in rows:
+        day = row.get("local_date") or datetime.fromisoformat(row["started_at"].replace("Z", "+00:00")).astimezone(zone).date().isoformat()
+        days.setdefault(day, []).append(row)
+    series = []
+    for day, group in sorted(days.items()):
+        good = pd.DataFrame([row for row in group if not row["is_failure"]])
+        timestamp = datetime.fromisoformat(day).replace(hour=12, tzinfo=zone).astimezone(timezone.utc)
+        series.append({"started_at": timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                       "is_failure": good.empty, "download_mbps": _metric_median(good, "download_mbps"),
+                       "upload_mbps": _metric_median(good, "upload_mbps")})
+    return {"rows": series, "count": count, "aggregated": True}
+
+
+@app.get("/api/export")
+def api_export(format: str = Query("json", pattern="^(json|csv)$"),
+               local_date: Optional[str] = Query(None, alias="date"),
+               from_date: Optional[str] = Query(None, alias="from"),
+               to_date: Optional[str] = Query(None, alias="to"), runner: Optional[str] = None,
+               quadrant: Optional[str] = None):
+    """Stream all filtered samples, independent of the dashboard's visible page."""
+    filters = _query_filters(local_date, from_date, to_date, runner, quadrant)
+    # Freeze the high-water mark so new samples do not make the export endless.
+    ceiling = store.max_sample_id()
+    def chunks():
+        offset, first = 0, True
+        if format == "json":
+            yield "["
+        headers = None
+        while True:
+            rows = store.query_samples(**filters, limit=1000, offset=offset, max_id=ceiling)
+            if not rows:
+                break
+            for row in rows:
+                if row["id"] > ceiling:
+                    continue
+                if format == "json":
+                    yield ("" if first else ",") + json.dumps(row, ensure_ascii=False, allow_nan=False)
+                else:
+                    output = io.StringIO()
+                    if headers is None:
+                        headers = list(row)
+                        csv.writer(output).writerow(headers)
+                    # Escape spreadsheet formulas in free-text fields.
+                    values = ["'" + value if isinstance(value, str) and value.startswith(("=", "+", "-", "@")) else value for value in (row[key] for key in headers)]
+                    csv.writer(output).writerow(values)
+                    yield output.getvalue()
+                first = False
+            offset += len(rows)
+            if len(rows) < 1000:
+                break
+        if format == "json":
+            yield "]"
+    return StreamingResponse(chunks(), media_type="application/json" if format == "json" else "text/csv",
+        headers={"Content-Disposition": f'attachment; filename="speedtester-export.{format}"'})
 
 
 @app.get("/api/slots")
@@ -200,9 +309,13 @@ def classify_slot(
 
 
 @app.get("/api/availability-events")
-def api_availability_events():
+def api_availability_events(local_date: Optional[str] = Query(None, alias="date"),
+                            from_date: Optional[str] = Query(None, alias="from"),
+                            to_date: Optional[str] = Query(None, alias="to")):
     """Return manually or externally registered availability intervals."""
-    return JSONResponse(store.availability_events())
+    _query_filters(local_date, from_date, to_date)
+    return JSONResponse(_events_in_period(store.availability_events(), local_date or from_date,
+                                         local_date or to_date))
 
 
 @app.post("/api/availability-events")
@@ -243,13 +356,16 @@ def create_availability_event(
 def api_summary(
     local_date: Optional[str] = Query(None, alias="date"),
     runner: Optional[str] = Query(None, description="Filter the main statistics by runner"),
+    from_date: Optional[str] = Query(None, alias="from"),
+    to_date: Optional[str] = Query(None, alias="to"),
 ):
     """Return aggregate speed, quality, failure, downtime and coverage metrics."""
-    all_rows = _filter_rows_for_date(store.all_samples(), local_date)
+    filters = _query_filters(local_date, from_date, to_date, runner)
+    all_rows = store.query_samples(**filters)
     by_runner_rows = _compute_runner_metrics(all_rows)
-    all_rows = _filter_rows_for_runner(all_rows, runner)
-    slots = store.slots_for_date(local_date) if local_date else store.all_slots()
-    events = _filter_events_for_date(store.availability_events(), local_date)
+    start, end = local_date or from_date, local_date or to_date
+    slots = [slot for slot in store.all_slots() if (not start or slot["local_date"] >= start) and (not end or slot["local_date"] <= end)]
+    events = _events_in_period(store.availability_events(), start, end)
     coverage = _compute_coverage(slots)
     downtime = _compute_downtime(events)
     if not all_rows:
@@ -338,7 +454,34 @@ def api_summary(
         "runner": runner,
         "by_runner": by_runner_rows,
     }
+    summary.update(_speed_statistics(good))
     return summary
+
+
+def _speed_statistics(good):
+    result = {}
+    for name in ("download_mbps", "upload_mbps", "ping_ms"):
+        values = pd.to_numeric(good[name], errors="coerce").dropna() if name in good else pd.Series(dtype=float)
+        for suffix, quantile in (("median", .5), ("p10", .1), ("p95", .95)):
+            unit = "ms" if name == "ping_ms" else "mbps"
+            key = name.rsplit("_", 1)[0] + "_" + suffix + "_" + unit
+            result[key] = round(float(values.quantile(quantile)), 2) if len(values) else None
+    return result
+
+
+def _events_in_period(events, start, end):
+    zone = ZoneInfo(settings.timezone)
+    lower = datetime.fromisoformat(start).replace(tzinfo=zone).astimezone(timezone.utc) if start else None
+    upper = (datetime.fromisoformat(end) + timedelta(days=1)).replace(tzinfo=zone).astimezone(timezone.utc) if end else None
+    result = []
+    now = datetime.now(timezone.utc)
+    for event in events:
+        begin = datetime.fromisoformat(event["started_at"].replace("Z", "+00:00"))
+        finish = datetime.fromisoformat(event["ended_at"].replace("Z", "+00:00")) if event.get("ended_at") else now
+        begin, finish = max(begin, lower) if lower else begin, min(finish, upper) if upper else finish
+        if finish > begin:
+            result.append({**event, "started_at": begin.isoformat(), "ended_at": finish.isoformat()})
+    return result
 
 
 @app.get("/api/comparison")
@@ -357,7 +500,7 @@ def api_comparison(
         raise HTTPException(status_code=422, detail="to must not precede from")
     if (end - start).days > 366:
         raise HTTPException(status_code=422, detail="comparison range is limited to 366 days")
-    rows = _filter_rows_for_runner(store.all_samples(), runner)
+    rows = store.query_samples(**_query_filters(None, from_date, to_date, runner))
     rows_by_day: dict[str, list[dict]] = {}
     for row in rows:
         row_day = row.get("local_date")
@@ -387,8 +530,10 @@ def api_comparison(
         contracted = contracted_values[-1] if contracted_values else settings.bandwidth_contracted_mbps
         download_avg = sum(downloads) / len(downloads) if downloads else None
         coverage = _compute_coverage(slots_by_day.get(day_key, []))
+        stats = _speed_statistics(pd.DataFrame(good))
         days.append(
             {
+                **stats,
                 "date": day_key,
                 "samples": len(day_rows),
                 "success_count": len(good),
@@ -420,9 +565,7 @@ def api_chart(
     runner: Optional[str] = Query(None, description="Filter chart by runner"),
 ):
     """Return a PNG chart of download & upload speeds over the last 24h."""
-    rows = _filter_rows_for_runner(
-        _filter_rows_for_date(store.all_samples(), local_date), runner
-    )
+    rows = store.query_samples(**_query_filters(local_date, None, None, runner))
     fig = _build_chart(rows)
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=110, bbox_inches="tight")
@@ -583,6 +726,7 @@ def _compute_quadrant_metrics(df: pd.DataFrame) -> dict:
         if group.empty:
             continue
         metrics[name] = {
+            **_speed_statistics(group),
             "count": int(len(group)),
             "download_avg_mbps": round(float(group["download_mbps"].mean()), 2),
             "upload_avg_mbps": round(float(group["upload_mbps"].mean()), 2),
@@ -625,38 +769,54 @@ def _metric_max(df: pd.DataFrame, name: str) -> Optional[float]:
     return round(float(values.max()), 2) if len(values) else None
 
 
-def _compute_coverage(slots: list[dict]) -> dict:
-    """Summarize expected, completed and classified slots."""
-    quadrants = {name: {"expected": 0, "completed": 0, "statuses": {}} for name in ("madrugada", "manha", "tarde", "noite")}
-    statuses: dict[str, int] = {}
-    completed = 0
+def _compute_coverage(slots: list[dict], now_utc: Optional[str] = None) -> dict:
+    """Coverage is successful/observed due slots; future plans are separate."""
+    now = now_utc or _utcnow_iso()
+    quadrants = {name: {"expected": 0, "completed": 0, "classified": 0, "future": 0, "statuses": {}}
+                 for name in ("madrugada", "manha", "tarde", "noite")}
+    statuses = {}
+    completed = expected = classified = future = 0
     for slot in slots:
-        status = slot.get("status", "PENDING")
-        quadrant = slot.get("quadrant")
+        status, quadrant = slot.get("status", "PENDING"), slot.get("quadrant")
         if quadrant not in quadrants:
             continue
-        quadrants[quadrant]["expected"] += 1
+        item = quadrants[quadrant]
         statuses[status] = statuses.get(status, 0) + 1
-        quadrants[quadrant]["statuses"][status] = quadrants[quadrant]["statuses"].get(status, 0) + 1
+        item["statuses"][status] = item["statuses"].get(status, 0) + 1
+        if slot["scheduled_for"] > now and status == "PENDING":
+            future += 1
+            item["future"] += 1
+            continue
+        expected += 1
+        item["expected"] += 1
         if status == "SUCCESS":
             completed += 1
-            quadrants[quadrant]["completed"] += 1
-    expected = len(slots)
-    return {
-        "expected": expected,
-        "completed": completed,
-        "missing": expected - completed,
-        "coverage_pct": round(100.0 * completed / expected, 2) if expected else None,
-        "statuses": statuses,
-        "by_quadrant": quadrants,
-    }
+            item["completed"] += 1
+        if status not in {"PENDING", "RUNNING", "MISSED_UNKNOWN"}:
+            classified += 1
+            item["classified"] += 1
+    return {"expected": expected, "completed": completed, "classified": classified,
+            "planned": len(slots), "future": future, "missing": expected - classified,
+            "coverage_pct": round(100 * completed / expected, 2) if expected else None,
+            "classified_pct": round(100 * classified / expected, 2) if expected else None,
+            "statuses": statuses, "by_quadrant": quadrants}
+
+
+def _merged_minutes(intervals):
+    merged = []
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return sum((end - start).total_seconds() / 60 for start, end in merged)
 
 
 def _compute_downtime(events: list[dict]) -> dict:
     """Calculate downtime from registered events, merging total overlaps."""
     now = pd.Timestamp.now(tz="UTC")
     intervals: list[tuple[pd.Timestamp, pd.Timestamp]] = []
-    by_origin: dict[str, float] = {}
+    origin_intervals: dict[str, list] = {}
     for event in events:
         start = pd.to_datetime(event["started_at"], utc=True)
         end = pd.to_datetime(event["ended_at"], utc=True) if event.get("ended_at") else now
@@ -664,7 +824,7 @@ def _compute_downtime(events: list[dict]) -> dict:
             continue
         intervals.append((start, end))
         origin = str(event.get("event_type", "UNKNOWN"))
-        by_origin[origin] = by_origin.get(origin, 0.0) + (end - start).total_seconds() / 60.0
+        origin_intervals.setdefault(origin, []).append((start, end))
 
     intervals.sort(key=lambda item: item[0])
     merged: list[list[pd.Timestamp]] = []
@@ -696,7 +856,7 @@ def _compute_downtime(events: list[dict]) -> dict:
         "hours": hours,
         "minutes": minutes,
         "by_origin_minutes": {
-            origin: round(value, 1) for origin, value in by_origin.items()
+            origin: round(_merged_minutes(values), 1) for origin, values in origin_intervals.items()
         },
     }
 

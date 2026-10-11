@@ -15,7 +15,7 @@ docs:
 	$(PYTHON) scripts/check_docs.py
 
 dashboard:
-	node -e 'const fs=require("fs"); const s=fs.readFileSync("app/dashboard/index.html","utf8"); for (const m of s.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)) new Function(m[1]); console.log("dashboard-js-ok")'
+	node -e 'const fs=require("fs"); const s=fs.readFileSync("app/dashboard/index.html","utf8"); for (const m of s.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)) new Function(m[1]); new Function(fs.readFileSync("app/dashboard/charts.js","utf8")); console.log("dashboard-js-ok")'
 
 license-check:
 	$(PYTHON) scripts/check_license.py

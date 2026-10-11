@@ -36,7 +36,10 @@ IP, hostname ou credencial do ambiente interno foi usado. Veja como executar a
 - **Persistência:** SQLite em `/data/speedtester.db` no Compose.
 - **API:** FastAPI para saúde, amostras, resumo, gráfico PNG e limpeza dos
   dados, comparação histórica, alertas e eventos de disponibilidade.
-- **Dashboard:** HTML/JavaScript servido pela própria API, atualizado a cada
+- **Dashboard:** gráficos SVG interativos, filtros de 7/30/90 dias, medianas e
+  percentis p10/p95, cobertura de slots devidos/classificados/futuros e
+  exportação completa CSV/JSON.
+- **Interface:** HTML/JavaScript servido pela própria API, atualizado a cada
   10 segundos.
 - **Deploy:** Docker Compose com os serviços `db`, `api`, `collector` e
   `backup`, além de `install.sh` para instalação no host com systemd user.
@@ -48,7 +51,7 @@ IP, hostname ou credencial do ambiente interno foi usado. Veja como executar a
 - [Requisitos e regras de negócio](docs/requirements.md)
 - [Arquitetura atual e arquitetura-alvo](docs/architecture.md)
 - [Modelo de dados e classificação de indisponibilidade](docs/data-model.md)
-- [API atual e API proposta](docs/api.md)
+- [API e exemplos](docs/api.md)
 - [Métricas e gráficos](docs/analytics-and-charts.md)
 - [Operação, instalação e troubleshooting](docs/operations.md)
 - [Desenvolvimento](docs/development.md)
@@ -119,7 +122,8 @@ Requisitos: Docker com Compose v2 e, para coleta iPerf3, um servidor
 controlado e alcançável (porta padrão `5201`). O destino não vem configurado:
 defina `IPERF3_SERVER` antes de iniciar o collector. O runner iPerf3 requer
 os binários `iperf3`, `ping` e `ip` no host Linux; eles já estão na imagem do
-collector. A imagem com o cliente Ookla é destinada a Linux x86_64.
+collector. As imagens suportam Linux AMD64 e ARM64. O cliente Ookla incluído permanece
+restrito a AMD64; ARM64 usa iPerf3 ou fast.com.
 Configure `API_ADMIN_TOKEN` para habilitar ações administrativas e
 `BANDWIDTH_CONTRACTED_MBP` para comparar a banda com seu contrato.
 
@@ -131,6 +135,19 @@ ssh usuario@servidor
 cd ~/SpeedTester
 ./install.sh
 ```
+
+As imagens são publicadas em GHCR para AMD64/ARM64 pelo workflow
+[Container images](https://github.com/ecarara/SpeedTester/actions/workflows/images.yml).
+Para instalar as imagens da branch principal sem compilar:
+
+```bash
+docker compose --env-file .env -f docker/compose.yaml -p speedtester pull
+docker compose --env-file .env -f docker/compose.yaml -p speedtester up -d --no-build --wait
+```
+
+Prefira `IMAGE_TAG=sha-<commit-completo>` para fixar uma revisão em produção.
+Consulte [operação](docs/operations.md) para o diagnóstico de instalação,
+backup externo criptografado e restauração.
 
 ## Configuração principal
 

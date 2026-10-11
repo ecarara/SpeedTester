@@ -13,7 +13,11 @@ em `/openapi.json` e documentação alternativa em `/redoc`.
 | `GET` | `/dashboard/index.html` | dashboard estático |
 | `GET` | `/health` | `{status, rows, ts, collector}` com heartbeat do collector |
 | `GET` | `/api/alerts` | alertas persistidos e estado de entrega opcional |
-| `GET` | `/api/samples` | amostras; aceita `since`, `minutes`, `runner`, `limit` e `offset` |
+| `GET` | `/api/samples` | amostras com filtros em SQL, ordenação e paginação |
+| `GET` | `/api/export` | CSV/JSON de todo o filtro, em streaming |
+| `GET` | `/api/series` | série completa; acima de 2.000 registros, medianas diárias |
+| `GET` | `/api/attempts` | tentativas auditadas; exige `slot_id` |
+| `GET` | `/api/config` | timezone, data operacional, versão e contrato |
 | `GET` | `/api/slots` | slots planejados para o dia local; aceita `date=YYYY-MM-DD` |
 | `GET` | `/api/availability-events` | intervalos de indisponibilidade registrados |
 | `POST` | `/api/availability-events` | registra energia/operadora/rede interna e reconcilia slots |
@@ -45,7 +49,22 @@ Filtros atuais:
 - `minutes`: somente os últimos N minutos.
 - `runner`: `fast`, `ookla` ou `iperf3`.
 - `limit`: quantidade máxima de linhas, de 1 a 5.000; padrão 1.000;
-- `offset`: deslocamento não negativo para paginação; padrão 0.
+- `offset`: deslocamento não negativo para paginação; padrão 0;
+- `order`: `desc` (padrão, medições mais recentes primeiro) ou `asc`;
+- `date`: dia local operacional, no formato `YYYY-MM-DD`;
+- `from` / `to`: período local inclusivo, até 366 dias entre as datas;
+- `quadrant`: `madrugada`, `manha`, `tarde` ou `noite`.
+
+Os filtros são aplicados antes da paginação. `date` não pode ser combinado
+com `from`/`to`; filtros inválidos retornam HTTP 422. Registros legados sem
+`local_date` são convertidos conforme `TZ` para os limites de consulta.
+`since` exige timezone; `minutes`, quando informado, substitui `since`.
+
+`/api/export?format=json` e `format=csv` aceitam `date`, `from`, `to`, `runner`
+e `quadrant`, e incluem todas as linhas do filtro, mesmo com mais de 1.000
+registros. A exportação congela o maior ID observado no início; novas inserções
+não prolongam o download. Texto CSV iniciado como fórmula é escapado.
+O gráfico usa `/api/series`, independente da página visível da tabela.
 
 O retorno é uma lista de objetos correspondentes às colunas de `samples`.
 
@@ -54,7 +73,15 @@ O retorno é uma lista de objetos correspondentes às colunas de `samples`.
 O retorno atual inclui `count`, `first`, `last`, `latest`, médias e máximos de
 download/upload, ISP, banda contratada, taxa de falhas, `downtime` e
 `outliers`, além de `coverage` com slots esperados/concluídos por quadrante. As
-médias excluem linhas com `is_failure=1`.
+médias excluem linhas com `is_failure=1`. O resumo aceita os mesmos filtros de
+período e runner da listagem, sem paginação. Retorna também mediana, p10 e p95
+para download/upload/ping, calculados por interpolação linear sobre resultados
+representativos válidos, além de distribuição por quadrante.
+
+`coverage.expected` conta apenas slots devidos; `future` informa os slots
+futuros, `completed` os sucessos e `classified` os slots com um resultado ou
+classificação terminal conhecida. `coverage_pct` mede sucessos/devidos;
+`classified_pct` mede classificados/devidos. A agenda é comum aos runners.
 
 Também retorna `ping_avg_ms`, `jitter_avg_ms`, `packet_loss_avg_pct` e
 `tcp_retransmits_avg`. Cada objeto de `/api/samples` traz ainda
@@ -68,7 +95,8 @@ download/upload e médias de qualidade. `?runner=ookla` restringe as métricas
 principais e o gráfico ao runner escolhido, sem misturar resultados.
 
 O campo `downtime` é calculado a partir de `availability_events`, unindo
-intervalos sobrepostos no total. Ausência de amostra, por si só, não é contada
+intervalos sobrepostos no total e por origem, recortados ao período local
+selecionado. `/api/availability-events` também aceita `date`, `from` e `to`. Ausência de amostra, por si só, não é contada
 como queda.
 
 ### Comparação histórica
@@ -119,7 +147,7 @@ Status aceitos: `POWER_OUTAGE`, `NO_INTERNET_OPERATOR`,
 O backend salva `classification_source=manual`, a justificativa truncada em
 400 caracteres e o horário da alteração.
 
-## API-alvo recomendada
+## Evoluções futuras da API
 
 ```text
 GET /api/days?from=2026-08-01&to=2026-08-26

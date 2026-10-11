@@ -28,14 +28,27 @@ Não remover o volume sem backup: ele contém o histórico.
 
 ## Instalação no servidor
 
-`install.sh` espera o projeto em `$HOME/SpeedTester`, verifica Docker,
-executa `docker compose --env-file .env -f docker/compose.yaml -p speedtester up -d --build` e cria um único
-serviço systemd user para o stack completo. Depois da instalação:
+`install.sh` usa o diretório do próprio checkout (ou `PROJECT_DIR`), executa
+`python3 scripts/doctor.py --env-file .env`, compila as imagens e valida o runner
+no container antes de iniciar. A instalação falha quando a API não fica saudável.
+Docker Engine e Compose precisam estar instalados e acessíveis ao usuário.
+Os serviços usam `restart: unless-stopped`; configure o daemon Docker para
+iniciar no boot conforme o sistema operacional.
 
 ```bash
-systemctl --user status speedtester.service
+python3 scripts/doctor.py --env-file .env
+# Opcional: verifica TCP do servidor configurado, sem medir velocidade.
+python3 scripts/doctor.py --env-file .env --network
+./install.sh
 docker compose --env-file .env -f docker/compose.yaml -p speedtester logs -f collector
 ```
+
+O preflight lê valores literais de `.env`, sem executar shell. Ele valida
+runner, timezone, portas, limites e acesso ao daemon. A validação de binários
+ocorre na imagem. AMD64 inclui o cliente Ookla; ARM64 suporta iPerf3 e fast.com.
+Imagens são publicadas em GHCR como `main`, `sha-<commit>` e tags de release.
+Use o SHA da revisão para uma instalação reproduzível; `up --no-build` usa as
+imagens obtidas com `docker compose pull`.
 
 Para uma instalação remota, configure `API_ADMIN_TOKEN` em `.env`. O mesmo
 token deve ser enviado no header `X-Admin-Token` para registrar a justificativa
@@ -73,7 +86,7 @@ para validação, mas podem impor limites ou ficar indisponíveis.
 
 Cada medição iPerf3 tem um limite total de 60 segundos por padrão
 (`MEASUREMENT_TIMEOUT_SECONDS`). Ao exceder esse limite, o processo é
-encerrado e a tentativa não é gravada. Antes de repetir, o collector revalida
+encerrado e a tentativa fica auditada como `timeout`. Antes de repetir, o collector revalida
 o gateway e destinos externos independentes. Se o gateway estiver acessível
 mas a internet não estiver, o slot é registrado como `external_unreachable`,
 com origem `UNKNOWN` nas duas primeiras ocorrências consecutivas. A terceira
@@ -87,7 +100,8 @@ o coletor aplica por padrão um reteste quando o download da primeira tentativa
 fica abaixo de 50% de `BANDWIDTH_CONTRACTED_MBP`. Ajuste
 `ANOMALY_RETRY_RATIO` para alterar a fração ou use
 `ANOMALY_RETRY_MIN_DOWNLOAD_MBPS` para adicionar um limiar absoluto. O reteste
-é único e imediato; somente a segunda leitura é gravada. Sem contrato e sem
+é único e imediato; a primeira leitura fica auditada como `discarded` e
+somente a segunda entra nas estatísticas representativas. Sem contrato e sem
 limiar absoluto, essa regra fica desabilitada.
 
 ### Comparar os três runners
@@ -120,7 +134,7 @@ Sinais úteis:
 - logs do collector exibem `down`, `up`, `ping`, interface e duração;
 - quando necessário, os logs exibem `discarding anomalous first result` e
   `retry selected as representative`; a primeira leitura não é amostra no
-  banco;
+  conjunto representativo; consulte `/api/attempts?slot_id=...` para auditá-la;
 - após timeout, os logs exibem a revalidação da conectividade e distinguem
   `OPERATOR` de `MEASUREMENT`;
 - `FAILURE cause=...` é uma classificação técnica preliminar, não uma causa de
@@ -130,43 +144,77 @@ Sinais úteis:
 
 ## Testes locais
 
-Os testes de scheduler e persistência usam apenas a biblioteca padrão e podem
-ser executados assim:
-
 ```bash
-PYTHONPATH=app python3 -m unittest discover -s tests -v
+python3 -m pip install -r requirements-dev.txt
+PYTHONPATH=app python3 -m coverage run --source=app -m unittest discover -s tests -v
+python3 -m coverage xml
+npm ci --ignore-scripts
+npx playwright install chromium
+npm run test:ui
 ```
+
+Os testes usam bancos temporários e dados fictícios, sem executar medições reais.
 
 ## Backup e restauração
 
-Com o stack parado, copie o arquivo SQLite do volume para um local seguro. O
-procedimento exato depende do nome do volume Docker; valide o caminho antes de
-copiar. Uma rotina de produção deve:
-
-1. criar cópia consistente do banco;
-2. guardar data, host e versão do schema;
-3. testar restauração em outro arquivo;
-4. manter retenção e pelo menos uma cópia fora do host.
-
-Não executar `POST /api/reset` como limpeza operacional: ele apaga todas as
-amostras e executa `VACUUM`.
-
-O backup recomendado usa o script versionado:
+O Compose inclui backup diário em `backup_data`, com retenção configurável.
+`scripts/backup.sh` usa o mecanismo consistente do SQLite e executa
+`PRAGMA integrity_check`. Falhas de backup ou replicação fazem o container
+encerrar com erro e ficam visíveis em seus logs/restarts. A retenção remove
+somente arquivos `speedtester-*.db` e `.db.age` antigos no diretório configurado.
 
 ```bash
 DB_PATH=/data/speedtester.db BACKUP_DIR=./backups RETENTION_DAYS=30 ./scripts/backup.sh
 ```
 
-O script usa o mecanismo de backup do SQLite, cria um arquivo com timestamp e
-executa `PRAGMA integrity_check` antes de considerar a cópia válida, removendo
-somente backups `speedtester-*.db` mais antigos que `RETENTION_DAYS`.
-O diretório de backups não deve ser versionado. Em produção, execute-o
-diariamente por systemd timer/cron e mantenha ao menos uma cópia fora do host.
+Para replicação externa, configure em `.env` `BACKUP_REMOTE` com destino SSH
+(ex.: `backup@backup.example.com:/srv/speedtester/`), `BACKUP_AGE_RECIPIENT` com
+a chave pública age e `BACKUP_SSH_DIR` com um diretório privado contendo chave
+SSH e `known_hosts` verificado. A chave privada age para descriptografia deve
+ficar fora do servidor. O envio usa apenas o arquivo `.db.age`, autenticação
+SSH em BatchMode e verificação obrigatória do host; falhas não são ignoradas.
 
-O Compose já inclui o serviço `backup`, que executa essa rotina em um volume
-separado (`backup_data`) e repete a operação conforme `BACKUP_INTERVAL_SECONDS`.
-O volume local ainda não substitui uma cópia fora do servidor; sincronize os
-arquivos válidos para outro host ou storage regularmente.
+```bash
+docker compose --env-file .env -f docker/compose.yaml \
+  -f docker/compose.backup-remote.yaml -p speedtester up -d --build backup
+```
+
+Teste a recuperação regularmente. Para uma cópia criptografada, primeiro use
+`age --decrypt -i /caminho/privado/identity.txt -o snapshot.db snapshot.db.age`.
+Depois pare todos os clientes do banco. Exemplo com backup local do volume:
+
+```bash
+docker compose --env-file .env -f docker/compose.yaml -p speedtester stop api collector backup
+# Substitua snapshot.db pelo nome existente no volume de backups.
+docker compose --env-file .env -f docker/compose.yaml -p speedtester run --rm --no-deps \
+  -v speedtester_backup_data:/restore:ro api \
+  python /opt/speedtester-scripts/restore.py /restore/snapshot.db \
+  --destination /data/speedtester.db --services-stopped
+docker compose --env-file .env -f docker/compose.yaml -p speedtester up -d --wait
+```
+
+O script valida a integridade e a tabela `samples`, recusa sidecars ativos,
+constrói a cópia num arquivo temporário e substitui o destino atomicamente.
+Quando existe um banco anterior, ele é preservado em `.before-restore-<data>`.
+O flag `--services-stopped` é uma confirmação operacional: o script não pode
+verificar todos os processos em outro container. Não remova WAL/SHM de um
+banco ativo. Confirme o nome do volume com `docker volume ls`.
+
+Ao atualizar para schema 8, o banco migra automaticamente de forma aditiva.
+Slots abandonados em `RUNNING` são recuperados após `SLOT_LEASE_SECONDS`
+(padrão 300s), renovada a cada 20s durante medições. Dentro da tolerância
+retornam a `PENDING`; fora dela ficam `MISSED_UNKNOWN`. Não use `/api/reset`
+como procedimento de atualização ou restauração.
+
+## SonarQube
+
+O projeto usa `sonar-project.properties`, cobertura Python e o workflow
+`.github/workflows/sonarqube.yml`. Configure os secrets `SONAR_TOKEN` e
+`SONAR_HOST_URL`, a variável `SONAR_ENABLED=true` e opcionalmente
+`SONAR_PROJECT_KEY`. Prefira um token restrito à análise do projeto.
+A edição Community analisa somente `main`; PRs de forks não recebem segredos.
+A URL interna do servidor não fica nos arquivos públicos. O workflow aguarda
+o quality gate e falha quando ele não é aprovado.
 
 ### Saúde e alertas
 

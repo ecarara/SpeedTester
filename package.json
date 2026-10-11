@@ -1,0 +1,8 @@
+{
+  "name": "speedtester-dashboard-tests",
+  "private": true,
+  "version": "0.2.0",
+  "license": "GPL-3.0-or-later",
+  "scripts": {"test:ui": "node scripts/test_dashboard.cjs"},
+  "devDependencies": {"playwright": "1.64.0"}
+}

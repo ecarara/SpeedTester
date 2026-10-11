@@ -140,9 +140,9 @@ def login(request: Request, payload: dict = Body(...)):
     client = request.client.host if request.client else 'unknown'
     now = time.monotonic()
     with _rate_limit_lock:
-        for key in list(_login_buckets):
-            if not _login_buckets[key] or now - _login_buckets[key][-1] >= 60:
-                del _login_buckets[key]
+        stale = [key for key, bucket in _login_buckets.items() if not bucket or now-bucket[-1]>=60]
+        for key in stale:
+            del _login_buckets[key]
         bucket = _login_buckets[client]
         if len(bucket) >= 5:
             raise HTTPException(429, 'login rate limit exceeded', headers={'Retry-After': '60'})

@@ -44,6 +44,7 @@ from zoneinfo import ZoneInfo
 from typing import Iterable, List, Optional
 
 SCHEMA_VERSION = 9
+WRITE_TRANSACTION = "BEGIN IMMEDIATE"
 
 DB_SCHEMA = """
 CREATE TABLE IF NOT EXISTS auth_sessions (
@@ -288,7 +289,7 @@ class SampleStore:
         self._local = threading.local()
         with self._connect() as conn:
             conn.executescript(DB_SCHEMA)
-            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(WRITE_TRANSACTION)
             self._migrate_samples(conn)
             self._migrate_slots(conn)
             existing = {row[1] for row in conn.execute("PRAGMA table_info(alerts)")}
@@ -393,7 +394,7 @@ class SampleStore:
         """Insert one representative sample and return its database id."""
         with self._connection() as conn:
             # Claim, sample and completion must not produce duplicates after a crash.
-            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(WRITE_TRANSACTION)
             if sample.slot_id is not None:
                 existing = conn.execute("SELECT id FROM samples WHERE slot_id = ? ORDER BY id LIMIT 1", (sample.slot_id,)).fetchone()
                 if existing:
@@ -452,7 +453,7 @@ class SampleStore:
         late = (now - timedelta(seconds=late_tolerance_seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
         recovered = 0
         with self._connection() as conn:
-            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(WRITE_TRANSACTION)
             slots = conn.execute("SELECT * FROM measurement_slots WHERE status = 'RUNNING' AND updated_at < ?", (cutoff,)).fetchall()
             for slot in slots:
                 sample = conn.execute("SELECT is_failure, failure_origin FROM samples WHERE slot_id = ? ORDER BY id DESC LIMIT 1", (slot["id"],)).fetchone()
@@ -662,7 +663,7 @@ class SampleStore:
         now_epoch = _utcnow()
         now = _utc_from_epoch(now_epoch)
         with self._connection() as conn:
-            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(WRITE_TRANSACTION)
             recent = conn.execute(
                 "SELECT id FROM alerts WHERE kind = ? "
                 "AND created_at >= ? AND id > COALESCE((SELECT MAX(id) FROM alerts WHERE kind=?),0) "
@@ -702,7 +703,7 @@ class SampleStore:
     def transition_alert_state(self, kind: str, active: bool, sample_id=None, payload=None) -> bool:
         """Persist incident state; return whether an active incident recovered."""
         with self._connection() as conn:
-            conn.execute('BEGIN IMMEDIATE')
+            conn.execute(WRITE_TRANSACTION)
             previous = conn.execute('SELECT active FROM alert_states WHERE kind=?', (kind,)).fetchone()
             conn.execute('INSERT OR REPLACE INTO alert_states VALUES (?,?,?)',
                          (kind, int(active), _utc_from_epoch(_utcnow())))
@@ -717,7 +718,7 @@ class SampleStore:
     def claim_alert_deliveries(self, now: float, limit: int = 10) -> List[dict]:
         """Lease due messages atomically, including messages abandoned on restart."""
         with self._connection() as conn:
-            conn.execute('BEGIN IMMEDIATE')
+            conn.execute(WRITE_TRANSACTION)
             conn.execute("UPDATE alerts SET delivery_status='failed' WHERE delivered=0 AND delivery_attempts>=6 AND lease_until<=?", (now,))
             rows = conn.execute("SELECT * FROM alerts WHERE delivered=0 AND delivery_status!='failed' "
                 "AND next_attempt_at<=? AND lease_until<=? AND delivery_attempts<6 ORDER BY id LIMIT ?",

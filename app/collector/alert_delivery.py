@@ -22,7 +22,7 @@ def deliver_due(store, webhook, now=None):
                     raise ValueError('unexpected response status')
                 response.read(1)
             store.finish_alert_delivery(alert['id'], True, now)
-        except (OSError, urllib.error.URLError, ValueError) as exc:
+        except (OSError, ValueError) as exc:
             # A webhook URL may contain credentials; never persist the raw exception.
             detail = f'HTTP {exc.code}' if isinstance(exc, urllib.error.HTTPError) else type(exc).__name__
             store.finish_alert_delivery(alert['id'], False, now, detail)

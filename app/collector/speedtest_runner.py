@@ -520,9 +520,12 @@ async def _one_rtt(host: str, timeout: float) -> float:
     writer = None
     start = time.perf_counter()
     try:
+        context = ssl.create_default_context()
+        context.check_hostname = True
+        context.verify_mode = ssl.CERT_REQUIRED
         async with asyncio.timeout(timeout):
             reader, writer = await asyncio.open_connection(
-                host, 443, ssl=ssl.create_default_context(), server_hostname=host)
+                host, 443, ssl=context, server_hostname=host)
             writer.write(b"GET / HTTP/1.1\r\nHost: fast.com\r\nConnection: close\r\n\r\n")
             await writer.drain()
             if not await reader.read(1):
@@ -534,7 +537,7 @@ async def _one_rtt(host: str, timeout: float) -> float:
             try:
                 async with asyncio.timeout(min(timeout, 1.0)):
                     await writer.wait_closed()
-            except (OSError, TimeoutError):
+            except OSError:
                 pass
 
 

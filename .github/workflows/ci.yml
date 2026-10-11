@@ -83,6 +83,10 @@ jobs:
           curl --fail http://127.0.0.1:8000/api/config
           test "$(docker compose -f docker/compose.yaml exec -T api id -u)" = 10001
           docker compose -f docker/compose.yaml run --rm backup /opt/speedtester-scripts/backup.sh
+      - name: Validate encrypted off-host backup and restore
+        run: |
+          docker compose -f docker/compose.yaml run --rm --entrypoint bash \
+            -v "${{ github.workspace }}:/workspace:ro" backup /workspace/scripts/test_backup.sh
       - name: Clean up
         if: always()
         run: docker compose -f docker/compose.yaml down --volumes

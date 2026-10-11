@@ -320,7 +320,9 @@ sudo journalctl -u speedtester-deploy.service
 A checagem ocorre a cada dez minutos. Python 3.12+ e Docker Compose são
 necessários no host. A configuração `.env` fica no host; o script não a sobrescreve
 nem a envia ao GitHub. A revisão aplicada e digests ficam em `deployment.json`;
-snapshots ficam em `deployment-backups` com permissões restritas. Preserve espaço
+snapshots ficam em `deployment-backups` com permissões restritas. Em hosts com
+SELinux, essa pasta dedicada usa rotulagem privada `:Z` nos bind mounts; não é
+necessário desativar SELinux nem alterar o contexto do restante do projeto. Preserve espaço
 para imagens/versões anteriores e snapshots. A API pública do GitHub tem limite
 de requisições; falhas de acesso interrompem a checagem sem modificar serviços.
 

@@ -7,6 +7,12 @@ ideia de [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e
 Projeto mantido por [Edson Angelo Carara (`ecarara`)](https://github.com/ecarara)
 em <https://github.com/ecarara/SpeedTester>.
 
+## [0.2.1] - 2026-10-11
+
+- Snapshot e restauração do deploy usam rotulagem privada de bind mounts em
+  hosts com SELinux, preservando as proteções do host.
+- Validado no staging: backup consistente do banco persistente e integridade SQLite.
+
 ## [0.2.0] - 2026-10-11
 
 - Login e perfis com sessões persistidas, expiração, CSRF e exportação protegida.

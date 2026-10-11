@@ -108,13 +108,13 @@ def backup_database(root, image, volume, sha):
     name = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f')+'-'+sha+'.db'
     code = "import sqlite3,os;from contextlib import closing;os.umask(0o077)\nwith closing(sqlite3.connect('file:/data/speedtester.db?mode=ro',uri=True)) as source,closing(sqlite3.connect('/snapshots/"+name+"')) as target:\n source.backup(target)\n assert target.execute('PRAGMA integrity_check').fetchone()[0]=='ok'"
     run('docker', 'run', '--rm', '--network', 'none', '--user', '0', '-v', volume+':/data:ro',
-        '-v', str(directory)+':/snapshots', image, 'python', '-c', code)
+        '-v', str(directory)+':/snapshots:Z', image, 'python', '-c', code)
     return name
 
 
 def restore_database(root, image, volume, snapshot):
     run('docker', 'run', '--rm', '--network', 'none', '--user', '0', '-v', volume+':/data',
-        '-v', str(root/'deployment-backups')+':/snapshots:ro', image, 'sh', '-c',
+        '-v', str(root/'deployment-backups')+':/snapshots:ro,Z', image, 'sh', '-c',
         'python /opt/speedtester-scripts/restore.py /snapshots/'+snapshot+
         ' --destination /data/speedtester.db --services-stopped && chown 10001:10001 /data/speedtester.db')
 

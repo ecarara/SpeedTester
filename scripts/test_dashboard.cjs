@@ -8,6 +8,10 @@ const path = require('node:path');
 const net = require('node:net');
 const { spawn, spawnSync } = require('node:child_process');
 const { chromium } = require('playwright');
+const v8toIstanbul = require('v8-to-istanbul');
+const { createCoverageMap } = require('istanbul-lib-coverage');
+const { createContext } = require('istanbul-lib-report');
+const reports = require('istanbul-reports');
 
 (async () => {
   const root = path.resolve(__dirname, '..'), temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'speedtester-ui-'));
@@ -31,6 +35,7 @@ const { chromium } = require('playwright');
       if(i===119)throw new Error('API startup timeout');
       await new Promise(resolve=>setTimeout(resolve,250));
     }
+    await page.coverage.startJSCoverage();
     await page.goto(base,{waitUntil:'networkidle'});
     await page.locator('#dayFilter').fill('2026-10-10');await page.locator('#dayFilter').dispatchEvent('change');
     await page.waitForFunction(()=>document.querySelector('#coverageTitle').textContent==='8 concluídos');
@@ -54,6 +59,14 @@ const { chromium } = require('playwright');
     await page.setViewportSize({width:390,height:844});
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth), 'Mobile page overflows horizontally');
     assert.deepEqual(errors,[]);
+    const coverage = await page.coverage.stopJSCoverage(), map=createCoverageMap({});
+    const chartCoverage=coverage.filter(entry=>entry.url.endsWith('/dashboard/charts.js'));
+    assert.equal(chartCoverage.length,1,'Chart coverage was not captured');
+    for(const entry of chartCoverage){
+      const converter=v8toIstanbul(path.join(root,'app/dashboard/charts.js'),0,{source:entry.source});
+      await converter.load();converter.applyCoverage(entry.functions);map.merge(converter.toIstanbul());
+    }
+    reports.create('lcovonly').execute(createContext({dir:path.join(root,'coverage-js'),coverageMap:map}));
     console.log('dashboard-e2e-ok: day/7/30/90, runner, empty state, keyboard chart, complete export, mobile, operational timezone');
   } finally {
     if(browser)await browser.close();

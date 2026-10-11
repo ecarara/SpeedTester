@@ -27,8 +27,12 @@ jobs:
         env:
           PYTHONPATH: app
         run: |
-          python -m coverage run --source=app -m unittest discover -s tests -v
+          python -m coverage run --source=app,scripts -m unittest discover -s tests -v
           python -m coverage xml
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Browser acceptance and JavaScript coverage
+        run: npm run test:ui
       - name: Analyze and wait for the quality gate
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         env:

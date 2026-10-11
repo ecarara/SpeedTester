@@ -146,7 +146,7 @@ Sinais úteis:
 
 ```bash
 python3 -m pip install -r requirements-dev.txt
-PYTHONPATH=app python3 -m coverage run --source=app -m unittest discover -s tests -v
+PYTHONPATH=app python3 -m coverage run --source=app,scripts -m unittest discover -s tests -v
 python3 -m coverage xml
 npm ci --ignore-scripts
 npx playwright install chromium
@@ -208,7 +208,7 @@ como procedimento de atualização ou restauração.
 
 ## SonarQube
 
-O projeto usa `sonar-project.properties`, cobertura Python e o workflow
+O projeto usa `sonar-project.properties`, cobertura Python/JavaScript e o workflow
 `.github/workflows/sonarqube.yml`. Configure os secrets `SONAR_TOKEN` e
 `SONAR_HOST_URL`, a variável `SONAR_ENABLED=true` e opcionalmente
 `SONAR_PROJECT_KEY`. Prefira um token restrito à análise do projeto.

@@ -21,7 +21,12 @@
       svg.append(el('line',{x1:85,y1:y,x2:800,y2:y,stroke:'#26413e'}));
       svg.append(el('text',{x:76,y:y+4,fill:colors.muted,'font-size':11,'text-anchor':'end'},Math.round(maxY*i/4)+' Mbps'));
     }
-    xlabels.forEach(({x,label})=>svg.append(el('text',{x,y:313,fill:colors.muted,'font-size':11,'text-anchor':x<120?'start':x>740?'end':'middle'},label)));
+    xlabels.forEach(({x,label})=>{
+      let anchor='middle';
+      if(x<120)anchor='start';
+      if(x>740)anchor='end';
+      svg.append(el('text',{x,y:313,fill:colors.muted,'font-size':11,'text-anchor':anchor},label));
+    });
   }
   function renderSpeed(target,rows,contract,zone='America/Sao_Paulo') {
     const svg=base(target,'Velocidade ao longo do tempo: download, upload e contrato'), good=rows.filter(row=>!row.is_failure&&row.download_mbps!=null).sort((a,b)=>Date.parse(a.started_at)-Date.parse(b.started_at));
@@ -54,7 +59,7 @@
     axes(svg,maxY,[]);
     Object.entries(labels).forEach(([key,label],index)=>{
       const row=metrics[key]||{},x=145+index*185;
-      svg.append(el('text',{x,y:313,fill:colors.muted,'font-size':13,'text-anchor':x<120?'start':x>740?'end':'middle'},label));
+      svg.append(el('text',{x,y:313,fill:colors.muted,'font-size':13,'text-anchor':'middle'},label));
       if(!row.count){svg.append(el('text',{x,y:160,fill:colors.muted,'font-size':12,'text-anchor':'middle'},'Sem dados'));return;}
       const low=row.download_p10_mbps??row.download_avg_mbps,high=row.download_p95_mbps??row.download_avg_mbps,median=row.download_median_mbps??row.download_avg_mbps;
       svg.append(el('line',{x1:x,y1:y(low),x2:x,y2:y(high),stroke:colors.contract,'stroke-width':3}));

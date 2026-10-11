@@ -42,7 +42,7 @@ PYTHONPATH=app DB_PATH=/tmp/speedtester-dev.db \
 
 ```bash
 make check
-PYTHONPATH=app python -m coverage run --source=app -m unittest discover -s tests -v
+PYTHONPATH=app python -m coverage run --source=app,scripts -m unittest discover -s tests -v
 python -m coverage xml
 npm ci --ignore-scripts
 npx playwright install chromium
@@ -54,7 +54,8 @@ migração, gravações concorrentes, recuperação de slots e restauração. O 
 Playwright inicia uma API isolada com dados sintéticos e verifica períodos,
 runner, exportação, teclado, timezone e largura móvel.
 O CI executa Python 3.11/3.12/3.13, aceitação da interface, smoke test Compose
-e builds AMD64/ARM64. A análise Sonar em `main` recebe o relatório `coverage.xml`.
+e builds AMD64/ARM64. A análise Sonar em `main` recebe `coverage.xml` (Python) e
+`coverage-js/lcov.info` (JavaScript realmente executado no Chromium).
 
 Testes dependentes de internet real devem permanecer fora do CI determinístico.
 

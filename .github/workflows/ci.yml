@@ -35,7 +35,7 @@ jobs:
         env:
           PYTHONPATH: app
         run: |
-          python -m coverage run --source=app -m unittest discover -s tests -v
+          python -m coverage run --source=app,scripts -m unittest discover -s tests -v
           python -m coverage xml
 
       - name: Compile Python

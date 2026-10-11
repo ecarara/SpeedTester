@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use SpeedTester in research or published analysis, please cite this software."
 type: software
 title: "SpeedTester"
-version: "0.1.0"
+version: "0.2.0"
 date-released: "2026-10-11"
 abstract: "Open-source broadband monitoring robot with scheduled measurements, historical statistics, and a responsive dashboard."
 authors:

@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import csv
 import json
-import hmac
 import io
 import os
 import time
@@ -34,18 +33,25 @@ import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
 from fastapi import Body, FastAPI, Header, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from api.store import SampleStore
+from api import auth
+from shared.observation import report as observation_report
 from collector.quadrants import local_date_now
 from shared.settings import Settings, load_settings
 
 settings = load_settings()
 store = SampleStore(settings.db_path)
 
-app = FastAPI(title="SpeedTester", version="0.2.0")
+API_ERRORS = {401: {"description": "Authentication required"}, 403: {"description": "Forbidden or invalid CSRF"},
+              404: {"description": "Resource not found"}, 415: {"description": "JSON required"},
+              422: {"description": "Invalid input"}, 429: {"description": "Rate limit exceeded"},
+              503: {"description": "Administrative credential not configured"}}
+app = FastAPI(title="SpeedTester", version="0.2.0", responses=API_ERRORS)
 _rate_limit_lock = Lock()
+_login_buckets: dict[str, deque[float]] = defaultdict(deque)
 _rate_limit_buckets: dict[str, deque[float]] = defaultdict(deque)
 
 # Serve the static dashboard HTML at /dashboard/index.html
@@ -96,6 +102,83 @@ async def api_rate_limit(request: Request, call_next):
     return response
 
 
+@app.middleware("http")
+async def session_access(request: Request, call_next):
+    identity = auth.principal(request, settings, store)
+    request.state.identity = identity
+    path = request.url.path
+    protected = path.startswith('/api/') and not path.startswith('/api/auth/')
+    protected = protected or path in {'/docs', '/redoc', '/openapi.json'}
+    if settings.api_require_login and protected and not identity:
+        return JSONResponse({'detail': 'authentication required'}, status_code=401)
+    if settings.api_require_login and path in {'/', '/dashboard/', '/dashboard/index.html'} and not identity:
+        return RedirectResponse('/login', status_code=303)
+    if identity and identity['method'] == 'session' and request.method not in {'GET', 'HEAD', 'OPTIONS'}:
+        if not auth.matches(request.headers.get('X-CSRF-Token', ''), identity['csrf_token']):
+            return JSONResponse({'detail': 'invalid CSRF token'}, status_code=403)
+        if protected and identity['role'] != 'admin':
+            return JSONResponse({'detail': 'administrator required'}, status_code=403)
+    response = await call_next(request)
+    if protected or path.startswith('/api/auth/'):
+        response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@app.get('/login')
+def login_page(request: Request):
+    if request.state.identity:
+        return RedirectResponse('/', status_code=303)
+    with open(os.path.join(_DASHBOARD_DIR, 'login.html'), encoding='utf-8') as source:
+        return HTMLResponse(source.read(), headers={'Cache-Control': 'no-store'})
+
+
+@app.post('/api/auth/login', responses=API_ERRORS)
+def login(request: Request, payload: dict = Body(...)):
+    if request.headers.get('Content-Type', '').split(';')[0] != 'application/json':
+        raise HTTPException(415, 'JSON required')
+    client = request.client.host if request.client else 'unknown'
+    now = time.monotonic()
+    with _rate_limit_lock:
+        stale = [key for key, bucket in _login_buckets.items() if not bucket or now-bucket[-1]>=60]
+        for key in stale:
+            del _login_buckets[key]
+        bucket = _login_buckets[client]
+        if len(bucket) >= 5:
+            raise HTTPException(429, 'login rate limit exceeded', headers={'Retry-After': '60'})
+        bucket.append(now)
+    username, password = payload.get('username'), payload.get('password')
+    if not isinstance(username, str) or not isinstance(password, str) or len(password) > 1024:
+        raise HTTPException(401, 'invalid credentials')
+    role = auth.authenticate(username, password, settings)
+    if not role:
+        raise HTTPException(401, 'invalid credentials')
+    token, csrf, expires = auth.create_session(role, settings, store)
+    response = JSONResponse({'username': username, 'role': role, 'csrf_token': csrf, 'expires_at': expires})
+    response.set_cookie(auth.COOKIE, token, max_age=settings.api_session_seconds,
+                        httponly=True, secure=settings.api_cookie_secure, samesite='strict', path='/')
+    return response
+
+
+@app.get('/api/auth/session', responses=API_ERRORS)
+def session(request: Request):
+    identity = request.state.identity
+    if not identity:
+        if settings.api_require_login:
+            raise HTTPException(401, 'authentication required')
+        return {'role': 'local', 'login_required': False}
+    return {key: identity.get(key) for key in ('username', 'role', 'csrf_token', 'expires_at')}
+
+
+@app.post('/api/auth/logout', responses=API_ERRORS)
+def logout(request: Request):
+    cookie = request.cookies.get(auth.COOKIE, '')
+    with store._connection() as conn:
+        conn.execute('DELETE FROM auth_sessions WHERE token_hash=?', (auth.token_hash(cookie),))
+    response = JSONResponse({'logged_out': True})
+    response.delete_cookie(auth.COOKIE, path='/')
+    return response
+
+
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -130,8 +213,10 @@ def _collector_health() -> dict:
 
 # --- routes ----------------------------------------------------------------
 @app.get("/health")
-def health():
+def health(request: Request):
     """Return API liveness, persisted row count and collector heartbeat."""
+    if settings.api_require_login and not request.state.identity:
+        return {"status": "alive", "version": "0.2.0"}
     collector = _collector_health()
     return {
         "status": "ok" if collector["status"] == "ok" else "degraded",
@@ -141,7 +226,12 @@ def health():
     }
 
 
-@app.get("/api/alerts")
+@app.get("/api/observation", responses=API_ERRORS)
+def api_observation(days: int = Query(14, ge=1, le=90)):
+    return observation_report(store, settings, days)
+
+
+@app.get("/api/alerts", responses=API_ERRORS)
 def api_alerts(limit: int = Query(50, ge=1, le=200)):
     """Return the newest persisted alerts, capped by ``limit``."""
     return JSONResponse(store.alerts(limit))
@@ -152,9 +242,8 @@ def _query_filters(local_date=None, from_date=None, to_date=None, runner=None, q
         raise HTTPException(422, "date cannot be combined with from/to")
     try:
         for value in (local_date, from_date, to_date):
-            if value:
-                if date.fromisoformat(value).isoformat() != value:
-                    raise ValueError("date must use YYYY-MM-DD")
+            if value and date.fromisoformat(value).isoformat() != value:
+                raise ValueError("date must use YYYY-MM-DD")
         if from_date and to_date:
             span = (date.fromisoformat(to_date) - date.fromisoformat(from_date)).days
             if span < 0 or span > 366:
@@ -165,11 +254,11 @@ def _query_filters(local_date=None, from_date=None, to_date=None, runner=None, q
         raise HTTPException(422, "invalid runner")
     if quadrant and quadrant not in {"madrugada", "manha", "tarde", "noite"}:
         raise HTTPException(422, "invalid quadrant")
-    return dict(local_date=local_date, from_date=from_date, to_date=to_date,
-                runner=runner, quadrant=quadrant, timezone_name=settings.timezone)
+    return {"local_date":local_date, "from_date":from_date, "to_date":to_date,
+            "runner":runner, "quadrant":quadrant, "timezone_name":settings.timezone}
 
 
-@app.get("/api/samples")
+@app.get("/api/samples", responses=API_ERRORS)
 def api_samples(
     since: Optional[str] = None, minutes: Optional[int] = Query(None, ge=1),
     runner: Optional[str] = None, local_date: Optional[str] = Query(None, alias="date"),
@@ -194,20 +283,21 @@ def api_samples(
                                            offset=offset, descending=order == "desc"))
 
 
-@app.get("/api/attempts")
+@app.get("/api/attempts", responses=API_ERRORS)
 def api_attempts(slot_id: int = Query(..., ge=1)):
     return store.attempts_for_slot(slot_id)
 
 
-@app.get("/api/config")
+@app.get("/api/config", responses=API_ERRORS)
 def api_config():
     """Return only public display settings, never credentials or hostnames."""
     return {"timezone": settings.timezone, "local_date": local_date_now(settings.timezone).isoformat(),
             "version": "0.2.0", "bandwidth_contracted_mbps": settings.bandwidth_contracted_mbps,
+            "target_controlled": settings.measurement_target_controlled,
             "demo": (store.latest_heartbeat("collector") or {}).get("metadata", {}).get("demo", False)}
 
 
-@app.get("/api/series")
+@app.get("/api/series", responses=API_ERRORS)
 def api_series(local_date: Optional[str] = Query(None, alias="date"),
                from_date: Optional[str] = Query(None, alias="from"),
                to_date: Optional[str] = Query(None, alias="to"), runner: Optional[str] = None):
@@ -231,7 +321,7 @@ def api_series(local_date: Optional[str] = Query(None, alias="date"),
     return {"rows": series, "count": count, "aggregated": True}
 
 
-@app.get("/api/export")
+@app.get("/api/export", responses=API_ERRORS)
 def api_export(format: str = Query("json", pattern="^(json|csv)$"),
                local_date: Optional[str] = Query(None, alias="date"),
                from_date: Optional[str] = Query(None, alias="from"),
@@ -274,7 +364,7 @@ def api_export(format: str = Query("json", pattern="^(json|csv)$"),
         headers={"Content-Disposition": f'attachment; filename="speedtester-export.{format}"'})
 
 
-@app.get("/api/slots")
+@app.get("/api/slots", responses=API_ERRORS)
 def api_slots(local_date: Optional[str] = Query(None, alias="date")):
     """Return the persisted measurement plan for one local calendar day."""
     if local_date is None:
@@ -282,14 +372,15 @@ def api_slots(local_date: Optional[str] = Query(None, alias="date")):
     return JSONResponse(store.slots_for_date(local_date))
 
 
-@app.post("/api/slots/{slot_id}/classify")
+@app.post("/api/slots/{slot_id}/classify", responses=API_ERRORS)
 def classify_slot(
     slot_id: int,
+    request: Request,
     payload: dict = Body(...),
     admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
 ):
     """Manually correct an unresolved slot while preserving the note."""
-    _require_admin_token(admin_token)
+    _require_admin_token(admin_token, request)
     status = str(payload.get("status", ""))
     allowed = {
         "POWER_OUTAGE",
@@ -309,7 +400,7 @@ def classify_slot(
     return {"id": slot_id, "status": status, "source": "manual"}
 
 
-@app.get("/api/availability-events")
+@app.get("/api/availability-events", responses=API_ERRORS)
 def api_availability_events(local_date: Optional[str] = Query(None, alias="date"),
                             from_date: Optional[str] = Query(None, alias="from"),
                             to_date: Optional[str] = Query(None, alias="to")):
@@ -319,13 +410,14 @@ def api_availability_events(local_date: Optional[str] = Query(None, alias="date"
                                          local_date or to_date))
 
 
-@app.post("/api/availability-events")
+@app.post("/api/availability-events", responses=API_ERRORS)
 def create_availability_event(
+    request: Request,
     payload: dict = Body(...),
     admin_token: Optional[str] = Header(None, alias="X-Admin-Token"),
 ):
     """Register an outage interval and reconcile affected pending slots."""
-    _require_admin_token(admin_token)
+    _require_admin_token(admin_token, request)
     required = ("started_at", "event_type", "source")
     missing = [name for name in required if not payload.get(name)]
     if missing:
@@ -353,7 +445,7 @@ def create_availability_event(
     return {"id": event_id, "event_type": event_type}
 
 
-@app.get("/api/summary")
+@app.get("/api/summary", responses=API_ERRORS)
 def api_summary(
     local_date: Optional[str] = Query(None, alias="date"),
     runner: Optional[str] = Query(None, description="Filter the main statistics by runner"),
@@ -485,7 +577,7 @@ def _events_in_period(events, start, end):
     return result
 
 
-@app.get("/api/comparison")
+@app.get("/api/comparison", responses=API_ERRORS)
 def api_comparison(
     from_date: str = Query(..., alias="from", description="First local date"),
     to_date: str = Query(..., alias="to", description="Last local date"),
@@ -552,15 +644,15 @@ def api_comparison(
     return {"from": from_date, "to": to_date, "runner": runner, "days": days}
 
 
-@app.post("/api/reset")
-async def api_reset(admin_token: Optional[str] = Header(None, alias="X-Admin-Token")):
+@app.post("/api/reset", responses=API_ERRORS)
+async def api_reset(request: Request, admin_token: Optional[str] = Header(None, alias="X-Admin-Token")):
     """Delete measurement history after validating the administrative token."""
-    _require_admin_token(admin_token)
+    _require_admin_token(admin_token, request)
     n = store.reset()
     return {"reset_rows": n}
 
 
-@app.get("/api/chart.png")
+@app.get("/api/chart.png", responses=API_ERRORS)
 def api_chart(
     local_date: Optional[str] = Query(None, alias="date"),
     runner: Optional[str] = Query(None, description="Filter chart by runner"),
@@ -618,13 +710,16 @@ def _build_chart(rows: list):
 
 
 # --- analytics helpers ------------------------------------------------------
-def _require_admin_token(token: Optional[str]) -> None:
+def _require_admin_token(token: Optional[str], request: Request) -> None:
     """Enforce the configured token when the API is deployed remotely."""
+    identity = request.state.identity
+    if identity and identity["role"] == "admin":
+        return
     if not settings.api_admin_token:
         if settings.api_require_admin_token:
             raise HTTPException(status_code=503, detail="admin token is not configured")
         return
-    if not token or not hmac.compare_digest(token, settings.api_admin_token):
+    if not token or not auth.matches(token, settings.api_admin_token):
         raise HTTPException(status_code=403, detail="invalid admin token")
 
 

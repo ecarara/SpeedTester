@@ -39,6 +39,7 @@ jobs:
             ghcr.io/ecarara/speedtester-${{ matrix.service }}:${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || github.ref_name }}
             ghcr.io/ecarara/speedtester-${{ matrix.service }}:sha-${{ github.sha }}
           labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.source=https://github.com/ecarara/SpeedTester
             org.opencontainers.image.licenses=GPL-3.0-or-later
           cache-from: type=gha,scope=${{ matrix.service }}

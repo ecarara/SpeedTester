@@ -18,6 +18,7 @@ from collector.speedtest_runner import SpeedTestResult, _detect_interface
 class IperfRunMetrics:
     speed_mbps: float
     retransmits: Optional[int]
+    transfer_bytes: Optional[int] = None
 
 
 class Iperf3Timeout(RuntimeError):
@@ -97,6 +98,8 @@ def run_iperf3(
         bandwidth_contracted_mbps=bandwidth_contracted_mbps,
         isp=None,
         duration_sec=time.monotonic() - started,
+        transfer_bytes=(upload_metrics.transfer_bytes + download_metrics.transfer_bytes
+                        if upload_metrics.transfer_bytes is not None and download_metrics.transfer_bytes is not None else None),
     )
 
 
@@ -173,8 +176,9 @@ def _run_once_metrics(
         return IperfRunMetrics(
             speed_mbps=float(summary["bits_per_second"]) / 1_000_000,
             retransmits=int(retransmits) if retransmits is not None else None,
+            transfer_bytes=int(summary["bytes"]) if summary.get("bytes") is not None else None,
         )
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+    except (KeyError, TypeError, ValueError) as exc:
         raise RuntimeError(f"iperf3 não retornou JSON reconhecível: {completed.stdout[-400:]}") from exc
 
 

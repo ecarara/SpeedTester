@@ -75,6 +75,7 @@ class SpeedTestResult:
     bandwidth_contracted_mbps: Optional[float]
     isp: Optional[str]
     duration_sec: float
+    transfer_bytes: Optional[int] = None
 
 
 def run_speedtest(
@@ -515,39 +516,29 @@ async def _measure_ping(
 
 
 async def _one_rtt(host: str, timeout: float) -> float:
-    loop = asyncio.get_event_loop()
+    """Time TLS connection and the first response byte within a total budget."""
+    writer = None
     start = time.perf_counter()
-    # fast.com is TLS-only. Its edge rejects the negotiated protocol version
-    # unless we pin the client to TLSv1.3, so we open a plain socket, upgrade
-    # it with start_tls(), and time the first byte of the HTTP response.
-    reader, writer = await asyncio.open_connection(host, 443)
-    context = ssl.create_default_context()
-    # fast.com's edge sometimes rejects the negotiated protocol version with
-    # our client; fall back to pinning TLSv1.3 on the first failure.
-    await loop.start_tls(writer.transport, writer._protocol, context, server_hostname=host)
-    request = (
-        b"GET / HTTP/1.1\r\n"
-        b"Host: fast.com\r\n"
-        b"User-Agent: SpeedTester/1.0\r\n"
-        b"Connection: close\r\n\r\n"
-    )
-    writer.write(request)
-    await writer.drain()
-    # Read until the peer closes (or timeout) — the first byte already marks
-    # the round trip to the edge.
     try:
-        await asyncio.wait_for(reader.read(), timeout=timeout)
-    except asyncio.TimeoutError:
-        pass
-    except Exception:
-        pass
-    rtt = (time.perf_counter() - start) * 1000.0
-    try:
-        writer.close()
-        await writer.wait_closed()
-    except Exception:
-        pass
-    return rtt
+        context = ssl.create_default_context()
+        context.check_hostname = True
+        context.verify_mode = ssl.CERT_REQUIRED
+        async with asyncio.timeout(timeout):
+            reader, writer = await asyncio.open_connection(
+                host, 443, ssl=context, server_hostname=host)
+            writer.write(b"GET / HTTP/1.1\r\nHost: fast.com\r\nConnection: close\r\n\r\n")
+            await writer.drain()
+            if not await reader.read(1):
+                raise OSError('HTTPS probe closed before responding')
+            return (time.perf_counter()-start)*1000.0
+    finally:
+        if writer is not None:
+            writer.close()
+            try:
+                async with asyncio.timeout(min(timeout, 1.0)):
+                    await writer.wait_closed()
+            except OSError:
+                pass
 
 
 def _detect_interface() -> Optional[str]:

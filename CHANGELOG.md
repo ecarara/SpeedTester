@@ -7,7 +7,13 @@ ideia de [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e
 Projeto mantido por [Edson Angelo Carara (`ecarara`)](https://github.com/ecarara)
 em <https://github.com/ecarara/SpeedTester>.
 
-## [Unreleased]
+## [0.2.0] - 2026-10-11
+
+- Login e perfis com sessões persistidas, expiração, CSRF e exportação protegida.
+- Fila durável de webhooks, retentativas, avisos de recuperação e estados de entrega.
+- Relatórios de observação sem alegação de SLA, com contadores reais de tráfego iPerf3.
+- Deploy com gates CI/Sonar, digests, backup antes da migração e retorno automático.
+- Ampliação de testes das falhas de rede e dos fluxos de operação.
 
 ### Adicionado
 

@@ -88,6 +88,21 @@ O requisito estará atendido quando todos os itens forem verdadeiros:
 - [x] fornecer doctor, ARM64, publicação GHCR e backup externo criptografado;
 - [x] integrar SonarQube e cobertura ao CI da branch principal.
 
-Próximas evoluções: autenticação de leitura para acesso remoto, integração com
-UPS/sensor independente e observação prolongada com destino iPerf3 controlado.
-Uma avaliação de SLA depende desse período e da qualidade do destino.
+## Próxima etapa aprovada
+
+- [x] login com perfis administrador e visualizador, leitura/exportação protegidas;
+- [x] sessões persistidas com expiração, revogação e proteção CSRF;
+- [x] fila de alertas persistida, retentativas, recuperação e estado de entrega;
+- [x] relatório de observação com cobertura, tentativas e tráfego conhecido;
+- [x] deploy por imagens fixadas por digest, condicionado a CI/Sonar/build;
+- [x] snapshot antes da migração e retorno automático quando a validação falha;
+- [x] ampliar testes de falhas de rede, runners, acesso e operação;
+- [ ] concluir observação contínua de 21 dias no staging.
+
+O destino iPerf3 existente será mantido: não há servidor externo sob controle
+confirmado. As medições não comprovam SLA. O tráfego reportado inclui tentativas
+com contadores disponíveis; timeouts e runners sem contador ficam explicitamente
+como consumo desconhecido, sem estimar zero.
+
+Integração com UPS/sensor foi retirada desta etapa porque esse equipamento não
+está disponível. Faltas de energia continuam sendo informadas manualmente.

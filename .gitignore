@@ -24,3 +24,8 @@ playwright-report/
 .venv*
 .venv314/
 coverage-js/
+deployment.json
+previous-deployment.json
+deploy-*.json
+deployment-backups/
+releases/

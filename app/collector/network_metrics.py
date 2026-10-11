@@ -53,15 +53,15 @@ def measure_ping(
             timeout=max(attempts * timeout_seconds + 3.0, 5.0),
             check=False,
         )
-    except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired):
         return PingMetrics()
 
     output = f"{completed.stdout}\n{completed.stderr}"
     # Support both dot and comma decimal separators emitted by ping variants.
-    raw_rtts = re.findall(r"time[=<]([0-9]+(?:[.,][0-9]+)?)\s*ms", output)
+    raw_rtts = re.findall(r"time[=<](\d+(?:[.,]\d+)?)\s*ms", output)
     rtts = [float(value.replace(",", ".")) for value in raw_rtts]
 
-    loss_match = re.search(r"([0-9]+(?:[.,][0-9]+)?)%\s*packet loss", output)
+    loss_match = re.search(r"\b(\d{1,3}(?:[.,]\d{1,3})?)%\s*packet loss", output)
     packet_loss = (
         float(loss_match.group(1).replace(",", ".")) if loss_match else None
     )

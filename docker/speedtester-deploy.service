@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+[Unit]
+Description=Deploy a SpeedTester revision approved by CI and SonarQube
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+EnvironmentFile=/etc/speedtester-deploy.conf
+ExecStart=/usr/bin/python3 /opt/speedtester/scripts/deploy.py --root ${DEPLOY_ROOT} --project ${COMPOSE_PROJECT} --db-volume ${DB_VOLUME} --backup-volume ${BACKUP_VOLUME}
+TimeoutStartSec=900
+

@@ -13,20 +13,20 @@ import json
 import signal
 import sys
 import time
-import urllib.error
-import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from contextlib import contextmanager
 from threading import Event, Thread
 from typing import Optional
 
 from api.store import MeasurementSlot, Sample, SampleStore
+from collector.alert_delivery import deliver_due
 from collector.anomaly import is_anomalous_download
 from collector.connectivity import ConnectivitySnapshot, probe_connectivity
 from collector.iperf3_runner import Iperf3Timeout
 from collector.quadrants import local_date_now, plan_day_slots
 from collector.runner_dispatch import run_named_runner
 from shared.settings import Settings, load_settings
+from shared.observation import start_observation
 
 
 class ConnectivityFailure(RuntimeError):
@@ -208,7 +208,7 @@ class Collector:
         metrics = {name: getattr(result, name, None) for name in (
             "download_mbps", "upload_mbps", "ping_ms", "jitter_ms", "duration_sec",
             "latency_min_ms", "latency_max_ms", "packet_loss_pct", "tcp_retransmits",
-            "server_name", "interface", "isp")}
+            "server_name", "interface", "isp", "transfer_bytes")}
         self._record_attempt("candidate", None, metrics)
         return result
 
@@ -427,6 +427,14 @@ class Collector:
                         f"Download abaixo do limite configurado: {sample.download_mbps:.2f} Mbps "
                         f"({delivery:.1f}% do contrato de {contracted:.2f} Mbps)."
                     )
+        transition = getattr(self.store, 'transition_alert_state', None)
+        if transition:
+            if kind:
+                transition(kind, True)
+            if not sample.is_failure:
+                for incident, resolved in (('operator_outage', True), ('speed_degraded', kind != 'speed_degraded')):
+                    if resolved:
+                        transition(incident, False, sample_id, {'started_at': sample.started_at})
         if not kind:
             return
         alert_id = add_alert(
@@ -447,30 +455,6 @@ class Collector:
         if alert_id is None:
             return
         print(f"[collector] ALERT id={alert_id} kind={kind}: {message}", flush=True)
-        webhook = getattr(self.settings, "alert_webhook_url", "")
-        if not webhook:
-            return
-        payload = json.dumps(
-            {"id": alert_id, "kind": kind, "severity": severity, "message": message},
-            sort_keys=True,
-        ).encode("utf-8")
-        request = urllib.request.Request(
-            webhook,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=5) as response:
-                response.read(1)
-            mark_delivery = getattr(self.store, "mark_alert_delivery", None)
-            if mark_delivery:
-                mark_delivery(alert_id, True)
-        except (OSError, urllib.error.URLError, ValueError) as exc:
-            mark_delivery = getattr(self.store, "mark_alert_delivery", None)
-            if mark_delivery:
-                mark_delivery(alert_id, False, str(exc))
-            print(f"[collector] alert webhook failed: {exc}", flush=True)
 
     def _classify_failure(self, exc: Exception) -> str:
         """Map a speedtest exception to a short, stable failure cause label."""
@@ -520,6 +504,20 @@ class Collector:
             {"runner": self.settings.speedtest_runner},
             force=True,
         )
+        start_observation(self.store, self.settings)
+        dispatcher_stop = Event()
+        def dispatch_alerts():
+            try:
+                while not dispatcher_stop.is_set():
+                    try:
+                        deliver_due(self.store, self.settings.alert_webhook_url)
+                    except Exception as exc:
+                        print(f"[collector] alert dispatcher unavailable: {type(exc).__name__}", flush=True)
+                    dispatcher_stop.wait(5)
+            finally:
+                self.store.close()
+        dispatcher = Thread(target=dispatch_alerts, daemon=True)
+        dispatcher.start()
         while not self._stop:
             now = datetime.now(timezone.utc)
             today = local_date_now(self.settings.timezone, now)
@@ -566,6 +564,8 @@ class Collector:
             # Poll frequently enough to start a slot close to its planned time.
             self._heartbeat("idle", {"runner": self.settings.speedtest_runner})
             time.sleep(5)
+        dispatcher_stop.set()
+        dispatcher.join(timeout=6)
         self._heartbeat("stopped", {"runner": self.settings.speedtest_runner}, force=True)
 
     @contextmanager

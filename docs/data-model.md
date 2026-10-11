@@ -169,3 +169,14 @@ amostra nem mascarar o fato de que o slot foi esperado.
   "evidence_json": {"probes": ["gateway", "resolver", "https"]}
 }
 ```
+
+## Schema 9: sessões e entrega de alertas
+
+`auth_sessions` armazena somente hash do token de sessão, perfil, CSRF, expiração
+e impressão da credencial; alterar a credencial revoga sessões anteriores.
+`alert_states` registra incidentes ativos. Recuperação e criação da mensagem são
+atômicas. `alerts` ganha estado, contagem de tentativas, próxima tentativa e lease;
+a fila permanece após reinício. Migrações são aditivas e serializadas por uma
+transação SQLite para API e collector iniciando simultaneamente.
+`schema_meta.observation` guarda início da observação e impressão do destino,
+sem devolver endereço no endpoint de relatórios.

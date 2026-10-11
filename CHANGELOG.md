@@ -9,6 +9,11 @@ em <https://github.com/ecarara/SpeedTester>.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-10-11
+
+Primeira publicação pública, disponibilizada como pré-release para validação
+de instalações e coleta em ambientes reais.
+
 ### Adicionado
 
 - scheduler por quadrantes, reteste de anomalia e classificação de falhas;

@@ -14,8 +14,8 @@ ativado nas configurações da organização ou do repositório.
 - [x] Anonimizar exemplos e relatório de validação; gerar a captura a partir
       de uma base inteiramente sintética, conforme [demo.md](demo.md).
 - [x] Executar `make check` em um ambiente com as dependências declaradas.
-- [ ] Validar Compose e build das imagens no CI (Docker indisponível no
-      ambiente local de preparação).
+- [x] Validar Compose e build das imagens no CI; verificar Python 3.11,
+      3.12 e 3.13 (Docker indisponível no ambiente local de preparação).
 - [x] Revisar [third-party.md](third-party.md), `REUSE.toml` e atualizar
       versões/licenças antes de cada release.
 - [ ] Criar a primeira tag seguindo SemVer somente após uma validação limpa.
@@ -63,7 +63,8 @@ uma publicação. O screenshot usa exclusivamente o banco fictício gerado por
 
 ## Pós-publicação
 
-- testar o clone anônimo em uma máquina limpa;
+- [x] Testar o clone anônimo em um diretório limpo e verificar os links da
+      documentação e o conteúdo público;
 - testar o fluxo Docker sem o `.env` original;
 - testar o fluxo de contribuição e o template de issue;
 - monitorar o primeiro build do CI e os alertas do Dependabot;

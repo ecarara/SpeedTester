@@ -7,4 +7,4 @@ pandas==2.2.3
 aiohttp==3.11.11
 
 # Retained for small utility integrations; the active runner uses aiohttp.
-requests==2.32.3
+requests==2.34.2

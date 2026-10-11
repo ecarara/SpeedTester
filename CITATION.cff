@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use SpeedTester in research or published analysis, please cite this software."
+type: software
+title: "SpeedTester"
+version: "0.1.0-dev"
+abstract: "Open-source broadband monitoring robot with scheduled measurements, historical statistics, and a responsive dashboard."
+authors:
+  - family-names: Carara
+    given-names: "Edson Angelo"
+    affiliation: "Independent open-source project"
+repository-code: "https://github.com/ecarara/SpeedTester"
+license: "GPL-3.0-or-later"
+keywords:
+  - broadband
+  - internet-monitoring
+  - iperf3
+  - network-measurement
+  - open-source

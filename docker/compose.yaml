@@ -1,0 +1,112 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+
+services:
+  db:
+    image: python:3.11-slim@sha256:be1575ed968de893bd54f4c56315ff7c4736ce522c1bca08fd521731aafc0d76
+    command: ["sh", "-c", "chown -R 10001:10001 /data && while true; do sleep 3600; done"]
+    volumes:
+      - db_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sqlite3; sqlite3.connect('/data/speedtester.db')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/api/Dockerfile
+    environment:
+      DB_PATH: /data/speedtester.db
+      SAMPLE_INTERVAL_SECONDS: ${SAMPLE_INTERVAL_SECONDS:-1800}
+      SAMPLE_DURATION_SECONDS: ${SAMPLE_DURATION_SECONDS:-30}
+      SPEEDTEST_RUNNER: ${SPEEDTEST_RUNNER:-iperf3}
+      MEASUREMENTS_PER_QUADRANT: ${MEASUREMENTS_PER_QUADRANT:-2}
+      SCHEDULER_LATE_TOLERANCE_SECONDS: ${SCHEDULER_LATE_TOLERANCE_SECONDS:-900}
+      ANOMALY_RETRY_RATIO: ${ANOMALY_RETRY_RATIO:-0.5}
+      ANOMALY_RETRY_MIN_DOWNLOAD_MBPS: ${ANOMALY_RETRY_MIN_DOWNLOAD_MBPS:-}
+      MAX_BYTES: ${MAX_BYTES:-10000000}
+      BANDWIDTH_CONTRACTED_MBP: ${BANDWIDTH_CONTRACTED_MBP:-}
+      ISP_LOOKUP_ENABLED: ${ISP_LOOKUP_ENABLED:-true}
+      ISP_LOOKUP_TIMEOUT_SECONDS: ${ISP_LOOKUP_TIMEOUT_SECONDS:-5}
+      TZ: ${TZ:-America/Sao_Paulo}
+      API_HOST: ${API_HOST:-0.0.0.0}
+      API_BIND_ADDRESS: ${API_BIND_ADDRESS:-127.0.0.1}
+      API_PORT: ${API_PORT:-8000}
+      API_ADMIN_TOKEN: ${API_ADMIN_TOKEN:-}
+      API_REQUIRE_ADMIN_TOKEN: ${API_REQUIRE_ADMIN_TOKEN:-true}
+      API_RATE_LIMIT_PER_MINUTE: ${API_RATE_LIMIT_PER_MINUTE:-120}
+      COLLECTOR_HEARTBEAT_TIMEOUT_SECONDS: ${COLLECTOR_HEARTBEAT_TIMEOUT_SECONDS:-120}
+    volumes:
+      - db_data:/data
+    ports:
+      - "${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  collector:
+    build:
+      context: ..
+      dockerfile: docker/collector/Dockerfile
+    environment:
+      DB_PATH: /data/speedtester.db
+      SAMPLE_INTERVAL_SECONDS: ${SAMPLE_INTERVAL_SECONDS:-1800}
+      SAMPLE_DURATION_SECONDS: ${SAMPLE_DURATION_SECONDS:-30}
+      SPEEDTEST_RUNNER: ${SPEEDTEST_RUNNER:-iperf3}
+      MEASUREMENTS_PER_QUADRANT: ${MEASUREMENTS_PER_QUADRANT:-2}
+      SCHEDULER_LATE_TOLERANCE_SECONDS: ${SCHEDULER_LATE_TOLERANCE_SECONDS:-900}
+      ANOMALY_RETRY_RATIO: ${ANOMALY_RETRY_RATIO:-0.5}
+      ANOMALY_RETRY_MIN_DOWNLOAD_MBPS: ${ANOMALY_RETRY_MIN_DOWNLOAD_MBPS:-}
+      MAX_BYTES: ${MAX_BYTES:-10000000}
+      SPEEDTEST_SERVER_IDS: ${SPEEDTEST_SERVER_IDS:-29564}
+      OOKLA_BINARY: ${OOKLA_BINARY:-speedtest}
+      IPERF3_SERVER: ${IPERF3_SERVER:-}
+      IPERF3_PORT: ${IPERF3_PORT:-5201}
+      IPERF3_DURATION_SECONDS: ${IPERF3_DURATION_SECONDS:-10}
+      IPERF3_PARALLEL_STREAMS: ${IPERF3_PARALLEL_STREAMS:-5}
+      MEASUREMENT_TIMEOUT_SECONDS: ${MEASUREMENT_TIMEOUT_SECONDS:-60}
+      BANDWIDTH_CONTRACTED_MBP: ${BANDWIDTH_CONTRACTED_MBP:-}
+      ISP_LOOKUP_ENABLED: ${ISP_LOOKUP_ENABLED:-true}
+      ISP_LOOKUP_TIMEOUT_SECONDS: ${ISP_LOOKUP_TIMEOUT_SECONDS:-5}
+      TZ: ${TZ:-America/Sao_Paulo}
+      COLLECTOR_HEARTBEAT_TIMEOUT_SECONDS: ${COLLECTOR_HEARTBEAT_TIMEOUT_SECONDS:-120}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+      ALERT_SPEED_THRESHOLD_PCT: ${ALERT_SPEED_THRESHOLD_PCT:-80}
+      ALERT_COOLDOWN_SECONDS: ${ALERT_COOLDOWN_SECONDS:-21600}
+    volumes:
+      - db_data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+  backup:
+    build:
+      context: ..
+      dockerfile: docker/backup/Dockerfile
+    environment:
+      DB_PATH: /data/speedtester.db
+      BACKUP_DIR: /backups
+      RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    volumes:
+      - db_data:/data:ro
+      - backup_data:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  db_data:
+  backup_data:

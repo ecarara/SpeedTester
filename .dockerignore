@@ -1,0 +1,38 @@
+# Python bytecode caches — they may be compiled for the host Python version
+# (e.g. 3.14) and are incompatible with the image's Python (3.11), causing
+# "ModuleNotFoundError" / "bad magic number" import failures.
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Python packaging / virtualenv
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Docker / compose (avoid recursion)
+docker/
+!docker/collector/Dockerfile
+
+# Editor / OS noise
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local data / logs
+*.log
+logs/
+.git/
+.env
+.env.*
+*.db
+*.db-*
+*.sqlite*
+*.pem
+*.key
+data/
+backups/
+.venv*/

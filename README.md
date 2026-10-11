@@ -1,0 +1,227 @@
+# SpeedTester
+
+[![CI](https://github.com/ecarara/SpeedTester/actions/workflows/ci.yml/badge.svg)](https://github.com/ecarara/SpeedTester/actions/workflows/ci.yml)
+[![License: GPL v3 or later](https://img.shields.io/badge/License-GPL_v3_or_later-blue.svg)](LICENSE)
+
+Robô para acompanhar a qualidade da banda larga ao longo do tempo. Ele executa
+testes de download, upload, latência e jitter, persiste cada observação em
+SQLite e disponibiliza uma API e um dashboard web.
+
+**Autor e mantenedor:** Edson Angelo Carara (`ecarara`)
+**Repositório oficial:** <https://github.com/ecarara/SpeedTester>
+
+> **Status:** software em evolução. A coleta contínua, o scheduler por
+> quadrantes, o iPerf3 como runner principal, a persistência SQLite, a API, o
+> dashboard e a classificação operacional estão implementados. Antes de usar
+> os dados como evidência de SLA, valide o ambiente e mantenha uma cópia
+> externa do banco.
+
+## Dashboard
+
+![Dashboard do SpeedTester com métricas, gráfico e cobertura da agenda](docs/images/dashboard.png)
+
+Captura da aplicação real com dados **inteiramente fictícios**. Nenhum banco,
+IP, hostname ou credencial do ambiente interno foi usado. Veja como executar a
+[demonstração local e reproduzir a captura](docs/demo.md).
+
+## O que existe hoje
+
+- **Collector:** scheduler contínuo que cria pelo menos dois slots aleatórios
+  por quadrante, persiste o plano e executa cada slot devido.
+- **Motor de medição principal:** iPerf3, com testes TCP de upload e download
+  reverso, retransmissões TCP e medição complementar de qualidade ICMP.
+  Ookla oficial e fast.com permanecem disponíveis para comparação. Todos os
+  runners coletam, quando possível, ping mediano, jitter, latência
+  mínima/máxima e perda de pacotes.
+- **Persistência:** SQLite em `/data/speedtester.db` no Compose.
+- **API:** FastAPI para saúde, amostras, resumo, gráfico PNG e limpeza dos
+  dados, comparação histórica, alertas e eventos de disponibilidade.
+- **Dashboard:** HTML/JavaScript servido pela própria API, atualizado a cada
+  10 segundos.
+- **Deploy:** Docker Compose com os serviços `db`, `api`, `collector` e
+  `backup`, além de `install.sh` para instalação no host com systemd user.
+
+## Documentação
+
+- [Índice da documentação](docs/README.md)
+- [Demonstração e screenshots](docs/demo.md)
+- [Requisitos e regras de negócio](docs/requirements.md)
+- [Arquitetura atual e arquitetura-alvo](docs/architecture.md)
+- [Modelo de dados e classificação de indisponibilidade](docs/data-model.md)
+- [API atual e API proposta](docs/api.md)
+- [Métricas e gráficos](docs/analytics-and-charts.md)
+- [Operação, instalação e troubleshooting](docs/operations.md)
+- [Desenvolvimento](docs/development.md)
+- [Referência de código](docs/code-reference.md)
+- [Dependências e licenças de terceiros](docs/third-party.md)
+- [Conformidade GPL e distribuição](docs/license-compliance.md)
+- [Checklist de publicação no GitHub](docs/publishing.md)
+- [Roadmap e critérios de aceite](docs/roadmap.md)
+- [Relatório de validação no servidor](docs/validation-2026-08-26.md)
+
+## Licença
+
+Este projeto é distribuído sob a **GNU General Public License, versão 3 ou
+posterior** (`GPL-3.0-or-later`). Consulte o texto completo em
+[LICENSE](LICENSE). Ao adicionar ou distribuir novos arquivos do projeto,
+preserve o aviso de copyright de Edson Angelo Carara e verifique a
+compatibilidade das dependências de terceiros.
+
+## Arquitetura atual
+
+```text
+collector ── grava ──▶ SQLite (/data/speedtester.db) ◀── lê ── api ──▶ dashboard
+```
+
+O Compose usa um volume nomeado (`db_data`) compartilhado pelo banco lógico,
+API e collector. O serviço `db` é apenas um container que mantém o volume e
+responde ao healthcheck; o SQLite é acessado diretamente pelos outros dois
+serviços.
+
+## Execução local
+
+A API e o collector usam imports absolutos. Execute a partir da raiz do
+repositório com `PYTHONPATH=app`; `aiohttp` está declarado em
+`app/requirements.txt`.
+
+```bash
+git clone https://github.com/ecarara/SpeedTester.git
+cd SpeedTester
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -r app/requirements.txt
+
+PYTHONPATH=app DB_PATH=/tmp/speedtester.db \
+  .venv/bin/python -m uvicorn api.server:app --host 127.0.0.1 --port 8000
+```
+
+Em outro terminal:
+
+```bash
+PYTHONPATH=app DB_PATH=/tmp/speedtester.db \
+  .venv/bin/python -m collector.collector
+```
+
+Abra <http://127.0.0.1:8000>.
+
+## Execução com Docker
+
+```bash
+cp env.example .env
+# Edite .env e configure IPERF3_SERVER com seu servidor iPerf3.
+docker compose --env-file .env -f docker/compose.yaml -p speedtester up -d --build
+docker compose --env-file .env -f docker/compose.yaml -p speedtester logs -f collector
+```
+
+Dashboard padrão: <http://localhost:8000>.
+
+Requisitos: Docker com Compose v2 e, para coleta iPerf3, um servidor
+controlado e alcançável (porta padrão `5201`). O destino não vem configurado:
+defina `IPERF3_SERVER` antes de iniciar o collector. O runner iPerf3 requer
+os binários `iperf3`, `ping` e `ip` no host Linux; eles já estão na imagem do
+collector. A imagem com o cliente Ookla é destinada a Linux x86_64.
+Configure `API_ADMIN_TOKEN` para habilitar ações administrativas e
+`BANDWIDTH_CONTRACTED_MBP` para comparar a banda com seu contrato.
+
+Instalação no servidor:
+
+```bash
+scp -r SpeedTester usuario@servidor:~/
+ssh usuario@servidor
+cd ~/SpeedTester
+./install.sh
+```
+
+## Configuração principal
+
+| Variável | Padrão | Uso |
+|---|---:|---|
+| `SAMPLE_INTERVAL_SECONDS` | `1800` | compatibilidade; a agenda atual usa slots por quadrante |
+| `SAMPLE_DURATION_SECONDS` | `30` | duração máxima/configurada do teste |
+| `SPEEDTEST_RUNNER` | `iperf3` | runner principal do collector: `iperf3`, `ookla` ou `fast` |
+| `MEASUREMENTS_PER_QUADRANT` | `2` | quantidade mínima de slots em cada quadrante |
+| `SCHEDULER_LATE_TOLERANCE_SECONDS` | `900` | atraso máximo antes de marcar um slot como perdido |
+| `ANOMALY_RETRY_RATIO` | `0.5` | retesta a primeira medição se o download ficar abaixo desta fração do contratado |
+| `ANOMALY_RETRY_MIN_DOWNLOAD_MBPS` | vazio | limiar absoluto opcional de download para acionar o reteste |
+| `MAX_BYTES` | `10000000` | teto por stream, conforme runner atual |
+| `SPEEDTEST_SERVER_IDS` | `29564` | compatibilidade; não usado pelo fast.com |
+| `IPERF3_SERVER` | vazio | servidor iperf3 para o runner `iperf3` |
+| `IPERF3_PORT` | `5201` | porta do servidor iperf3 |
+| `IPERF3_DURATION_SECONDS` | `10` | duração de cada direção do iperf3 |
+| `IPERF3_PARALLEL_STREAMS` | `5` | fluxos TCP paralelos do iperf3 |
+| `MEASUREMENT_TIMEOUT_SECONDS` | `60` | limite total de uma medição iPerf3; timeout é descartado e repetido como primeira tentativa |
+| `BANDWIDTH_CONTRACTED_MBP` | vazio | banda contratada em Mbps; o nome contém `MBP` e deve ser preservado até uma migração |
+| `ISP_LOOKUP_ENABLED` | `true` | identificação best-effort da operadora |
+| `ISP_LOOKUP_TIMEOUT_SECONDS` | `5` | timeout da consulta de operadora |
+| `TZ` | `America/Sao_Paulo` | timezone operacional desejado |
+| `API_HOST` / `API_PORT` | `0.0.0.0` / `8000` | bind interno da API |
+| `API_BIND_ADDRESS` | `127.0.0.1` | interface do host publicada pelo Docker |
+| `API_ADMIN_TOKEN` | vazio | token das operações administrativas; obrigatório quando `API_REQUIRE_ADMIN_TOKEN=true` |
+| `API_REQUIRE_ADMIN_TOKEN` | `true` | falha fechada: bloqueia operações administrativas sem token |
+| `API_RATE_LIMIT_PER_MINUTE` | `120` | limite de requisições por cliente nas rotas `/api/*` |
+
+Para o significado completo das variáveis, limitações e comandos operacionais,
+consulte [operations.md](docs/operations.md).
+
+## Limitações importantes conhecidas
+
+1. Falta de energia deve ser registrada manualmente; sem essa justificativa,
+   um slot vencido vira `MISSED_UNKNOWN`.
+2. O collector registra uma origem preliminar (`INTERNAL`, `OPERATOR` ou
+   `MEASUREMENT`) baseada em probes, mas a atribuição não é prova de SLA e a
+   classificação automática não substitui evidência contratual.
+3. O downtime considera eventos de indisponibilidade registrados; sem
+   evento explícito, não há minutos de queda comprovados. A fonte automática de
+   energia e os critérios formais de SLA são evoluções futuras.
+4. O gráfico PNG mostra download/upload em uma janela de até 24 horas; a
+   comparação histórica é apresentada em tabela e JSON.
+5. Quando configurado o contrato, uma primeira medição com download abaixo do
+   limiar de anomalia é descartada e substituída por um único reteste imediato.
+   A segunda medição é a representativa, mesmo que também fique abaixo do
+   limiar. A primeira não é gravada nem entra nas estatísticas.
+
+Essas limitações são parte do diagnóstico; os requisitos e o desenho para
+resolvê-las estão em [requirements.md](docs/requirements.md) e
+[architecture.md](docs/architecture.md).
+
+## Desenvolvimento e qualidade
+
+```bash
+PYTHONPATH=app python -m unittest discover -s tests -v
+python -m compileall -q app
+python scripts/check_docs.py
+git diff --check
+```
+
+Com `make` instalado, a verificação completa pode ser executada com `make check`.
+Ela também verifica a presença dos metadados GPL e dos avisos SPDX nos arquivos
+de código. O workflow do GitHub executa essas verificações em cada pull request.
+Veja
+[CONTRIBUTING.md](CONTRIBUTING.md) e [docs/development.md](docs/development.md).
+
+## Estrutura
+
+```text
+.
+├── app/
+│   ├── api/server.py                 # FastAPI e geração do gráfico atual
+│   ├── api/store.py                  # schema e acesso SQLite
+│   ├── collector/collector.py        # laço atual de coleta
+│   ├── collector/iperf3_runner.py    # runner principal
+│   ├── collector/runner_dispatch.py  # seleção de runner
+│   ├── dashboard/index.html          # dashboard responsivo
+│   └── shared/settings.py            # configuração por ambiente
+├── docker/
+│   ├── api/Dockerfile
+│   ├── collector/Dockerfile
+│   ├── backup/Dockerfile
+│   └── compose.yaml
+├── docs/                             # documentação funcional e técnica
+├── tests/                            # testes de domínio e runners
+├── scripts/                          # backup e utilitários
+├── .github/                          # CI, templates e Dependabot
+├── SECURITY.md
+├── CONTRIBUTING.md
+├── env.example
+└── install.sh
+```

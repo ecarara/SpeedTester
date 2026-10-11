@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: app/requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r app/requirements.txt
+
+      - name: Run unit tests
+        env:
+          PYTHONPATH: app
+        run: python -m unittest discover -s tests -v
+
+      - name: Compile Python
+        run: python -m compileall -q app
+
+      - name: Check documentation links
+        run: python scripts/check_docs.py
+
+      - name: Check GPL metadata
+        run: python scripts/check_license.py
+
+      - name: Check publication hygiene
+        run: python scripts/check_publication.py
+
+      - name: Validate dashboard JavaScript
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const html = fs.readFileSync('app/dashboard/index.html', 'utf8');
+          for (const match of html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/g)) {
+            new Function(match[1]);
+          }
+          console.log('dashboard-js-ok');
+          NODE
+
+      - name: Check whitespace
+        run: git diff --check
+
+  compose:
+    name: Compose syntax
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Validate Compose file
+        run: docker compose -f docker/compose.yaml config --quiet
+      - name: Build container images
+        run: docker compose -f docker/compose.yaml build

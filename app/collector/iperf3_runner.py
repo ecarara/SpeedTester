@@ -1,0 +1,190 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+
+"""Runner for an operator-provided or public iperf3 server."""
+from __future__ import annotations
+
+import json
+import subprocess
+import time
+from dataclasses import dataclass
+from typing import Optional
+
+from collector.network_metrics import measure_ping
+from collector.speedtest_runner import SpeedTestResult, _detect_interface
+
+
+@dataclass(frozen=True)
+class IperfRunMetrics:
+    speed_mbps: float
+    retransmits: Optional[int]
+
+
+class Iperf3Timeout(RuntimeError):
+    """Raised when one complete iPerf3 measurement exceeds its wall-clock budget."""
+
+
+def run_iperf3(
+    duration_seconds: int = 10,
+    share: bool = False,
+    server_ids: Optional[list[int]] = None,
+    max_bytes: int = 10_000_000,
+    bandwidth_contracted_mbps: Optional[float] = None,
+    isp_lookup_enabled: bool = True,
+    isp_lookup_timeout_seconds: float = 5.0,
+    server: Optional[str] = None,
+    port: int = 5201,
+    parallel_streams: int = 5,
+    binary: str = "iperf3",
+    timeout_seconds: float = 60.0,
+) -> SpeedTestResult:
+    """Run upload and reverse/download iperf3 tests against one server."""
+    del share, server_ids, max_bytes, isp_lookup_enabled, isp_lookup_timeout_seconds
+    if not server:
+        raise RuntimeError("IPERF3_SERVER não está configurado")
+    if duration_seconds < 1 or parallel_streams < 1:
+        raise ValueError("iperf3 duration and parallel streams must be positive")
+    if timeout_seconds <= 0:
+        raise ValueError("iperf3 timeout must be positive")
+
+    started = time.monotonic()
+    deadline = started + timeout_seconds
+    upload_metrics = _run_once_metrics(
+        binary,
+        server,
+        port,
+        duration_seconds,
+        parallel_streams,
+        reverse=False,
+        timeout_seconds=_remaining_timeout(deadline),
+    )
+    download_metrics = _run_once_metrics(
+        binary,
+        server,
+        port,
+        duration_seconds,
+        parallel_streams,
+        reverse=True,
+        timeout_seconds=_remaining_timeout(deadline),
+    )
+    remaining = _remaining_timeout(deadline)
+    if remaining <= 5.0:
+        raise Iperf3Timeout(
+            f"iperf3 excedeu o timeout total de {timeout_seconds:.0f} segundos"
+        )
+    # measure_ping has a minimum subprocess timeout of five seconds. Reduce
+    # the per-packet budget so the quality probe also stays inside the total
+    # measurement deadline.
+    ping_timeout = min(2.0, max((remaining - 3.0) / 5.0, 0.1))
+    network = measure_ping(server, timeout_seconds=ping_timeout)
+    retransmits = _sum_optional(
+        upload_metrics.retransmits, download_metrics.retransmits
+    )
+    return SpeedTestResult(
+        download_mbps=download_metrics.speed_mbps,
+        upload_mbps=upload_metrics.speed_mbps,
+        ping_ms=network.ping_ms,
+        jitter_ms=network.jitter_ms,
+        latency_min_ms=network.latency_min_ms,
+        latency_max_ms=network.latency_max_ms,
+        packet_loss_pct=network.packet_loss_pct,
+        tcp_retransmits=retransmits,
+        server_id=None,
+        server_name=f"iperf3:{server}:{port}",
+        server_location=None,
+        country=None,
+        interface=_detect_interface(),
+        bandwidth_contracted_mbps=bandwidth_contracted_mbps,
+        isp=None,
+        duration_sec=time.monotonic() - started,
+    )
+
+
+def _run_once(
+    binary: str,
+    server: str,
+    port: int,
+    duration_seconds: int,
+    parallel_streams: int,
+    reverse: bool,
+) -> float:
+    return _run_once_metrics(
+        binary, server, port, duration_seconds, parallel_streams, reverse
+    ).speed_mbps
+
+
+def _run_once_metrics(
+    binary: str,
+    server: str,
+    port: int,
+    duration_seconds: int,
+    parallel_streams: int,
+    reverse: bool,
+    timeout_seconds: Optional[float] = None,
+) -> IperfRunMetrics:
+    command = [
+        binary,
+        "--client",
+        server,
+        "--port",
+        str(port),
+        "--time",
+        str(duration_seconds),
+        "--parallel",
+        str(parallel_streams),
+        "--omit",
+        "2",
+        "--json",
+    ]
+    if reverse:
+        command.append("--reverse")
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=(
+                timeout_seconds
+                if timeout_seconds is not None
+                else duration_seconds * 2 + 30
+            ),
+            start_new_session=True,
+            check=False,
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError(f"iperf3 não encontrado: {binary}") from exc
+    except subprocess.TimeoutExpired as exc:
+        if timeout_seconds is not None:
+            raise Iperf3Timeout(
+                f"iperf3 excedeu o timeout total de {timeout_seconds:.0f} segundos"
+            ) from exc
+        raise RuntimeError("iperf3 excedeu o timeout") from exc
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "sem detalhes").strip()
+        raise RuntimeError(f"iperf3 falhou ({completed.returncode}): {detail[-400:]}")
+
+    try:
+        payload = json.loads(completed.stdout)
+        end = payload["end"]
+        summary = end["sum_received"] if reverse else end["sum_sent"]
+        retransmits = summary.get("retransmits")
+        if retransmits is None:
+            retransmits = end.get("sum_sent", {}).get("retransmits")
+        return IperfRunMetrics(
+            speed_mbps=float(summary["bits_per_second"]) / 1_000_000,
+            retransmits=int(retransmits) if retransmits is not None else None,
+        )
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"iperf3 não retornou JSON reconhecível: {completed.stdout[-400:]}") from exc
+
+
+def _sum_optional(*values: Optional[int]) -> Optional[int]:
+    present = [value for value in values if value is not None]
+    return sum(present) if present else None
+
+
+def _remaining_timeout(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise Iperf3Timeout("iperf3 excedeu o timeout total da medição")
+    return remaining

@@ -9,7 +9,7 @@ services:
       - db_data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import sqlite3; sqlite3.connect('/data/speedtester.db')"]
+      test: ["CMD", "python", "-c", "import os; assert os.stat('/data').st_uid == 10001"]
       interval: 5s
       timeout: 5s
       retries: 5

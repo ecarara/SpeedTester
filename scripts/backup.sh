@@ -22,10 +22,11 @@ destination="$BACKUP_DIR/speedtester-${timestamp}.db"
 python3 - "$DB_PATH" "$destination" <<'PY'
 import sqlite3
 from contextlib import closing
+from pathlib import Path
 import sys
 
 source, destination = sys.argv[1:]
-with closing(sqlite3.connect(f"file:{source}?mode=ro", uri=True)) as source_connection:
+with closing(sqlite3.connect(Path(source).resolve().as_uri() + "?mode=ro", uri=True)) as source_connection:
     with closing(sqlite3.connect(destination)) as destination_connection:
         source_connection.backup(destination_connection)
         result = destination_connection.execute("PRAGMA integrity_check").fetchone()[0]

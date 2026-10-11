@@ -203,7 +203,8 @@ def api_attempts(slot_id: int = Query(..., ge=1)):
 def api_config():
     """Return only public display settings, never credentials or hostnames."""
     return {"timezone": settings.timezone, "local_date": local_date_now(settings.timezone).isoformat(),
-            "version": "0.2.0", "bandwidth_contracted_mbps": settings.bandwidth_contracted_mbps}
+            "version": "0.2.0", "bandwidth_contracted_mbps": settings.bandwidth_contracted_mbps,
+            "demo": (store.latest_heartbeat("collector") or {}).get("metadata", {}).get("demo", False)}
 
 
 @app.get("/api/series")

@@ -49,7 +49,7 @@ API_ERRORS = {401: {"description": "Authentication required"}, 403: {"descriptio
               404: {"description": "Resource not found"}, 415: {"description": "JSON required"},
               422: {"description": "Invalid input"}, 429: {"description": "Rate limit exceeded"},
               503: {"description": "Administrative credential not configured"}}
-app = FastAPI(title="SpeedTester", version="0.2.0", responses=API_ERRORS)
+app = FastAPI(title="SpeedTester", version="0.2.1", responses=API_ERRORS)
 _rate_limit_lock = Lock()
 _login_buckets: dict[str, deque[float]] = defaultdict(deque)
 _rate_limit_buckets: dict[str, deque[float]] = defaultdict(deque)
@@ -216,7 +216,7 @@ def _collector_health() -> dict:
 def health(request: Request):
     """Return API liveness, persisted row count and collector heartbeat."""
     if settings.api_require_login and not request.state.identity:
-        return {"status": "alive", "version": "0.2.0"}
+        return {"status": "alive", "version": "0.2.1"}
     collector = _collector_health()
     return {
         "status": "ok" if collector["status"] == "ok" else "degraded",
@@ -292,7 +292,7 @@ def api_attempts(slot_id: int = Query(..., ge=1)):
 def api_config():
     """Return only public display settings, never credentials or hostnames."""
     return {"timezone": settings.timezone, "local_date": local_date_now(settings.timezone).isoformat(),
-            "version": "0.2.0", "bandwidth_contracted_mbps": settings.bandwidth_contracted_mbps,
+            "version": "0.2.1", "bandwidth_contracted_mbps": settings.bandwidth_contracted_mbps,
             "target_controlled": settings.measurement_target_controlled,
             "demo": (store.latest_heartbeat("collector") or {}).get("metadata", {}).get("demo", False)}
 

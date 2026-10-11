@@ -28,7 +28,7 @@ Consulte [code-reference.md](code-reference.md) para o contrato de cada módulo.
 ```bash
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install -r app/requirements.txt
+python -m pip install -r requirements-dev.txt
 ```
 
 Os imports usam `app` como raiz:
@@ -41,11 +41,21 @@ PYTHONPATH=app DB_PATH=/tmp/speedtester-dev.db \
 ## Testes e verificações
 
 ```bash
-PYTHONPATH=app python -m unittest discover -s tests -v
-python -m compileall -q app
-node -e 'const fs=require("fs"); const s=fs.readFileSync("app/dashboard/index.html","utf8"); for (const m of s.matchAll(/<script[^>]*>([\\s\\S]*?)<\\/script>/g)) new Function(m[1]);'
-git diff --check
+make check
+PYTHONPATH=app python -m coverage run --source=app,scripts -m unittest discover -s tests -v
+python -m coverage xml
+npm ci --ignore-scripts
+npx playwright install chromium
+npm run test:ui
 ```
+
+Os testes de integração exercitam filtros com mais de 1.000 linhas, autorização,
+migração, gravações concorrentes, recuperação de slots e restauração. O teste
+Playwright inicia uma API isolada com dados sintéticos e verifica períodos,
+runner, exportação, teclado, timezone e largura móvel.
+O CI executa Python 3.11/3.12/3.13, aceitação da interface, smoke test Compose
+e builds AMD64/ARM64. A análise Sonar em `main` recebe `coverage.xml` (Python) e
+`coverage-js/lcov.info` (JavaScript realmente executado no Chromium).
 
 Testes dependentes de internet real devem permanecer fora do CI determinístico.
 

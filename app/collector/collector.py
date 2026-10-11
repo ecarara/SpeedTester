@@ -16,6 +16,8 @@ import time
 import urllib.error
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
+from contextlib import contextmanager
+from threading import Event, Thread
 from typing import Optional
 
 from api.store import MeasurementSlot, Sample, SampleStore
@@ -61,6 +63,9 @@ class Collector:
         self.store = store
         self._stop = False
         self._last_heartbeat_monotonic = 0.0
+        self._current_slot = None
+        self._last_attempt_id = None
+        self._attempt_started_at = None
 
     def _handle_signal(self, signum, _frame):
         print(f"\n[collector] received signal {signum}, stopping gracefully")
@@ -68,6 +73,9 @@ class Collector:
 
     def _run_single(self, slot: dict) -> Optional[Sample]:
         """Execute one claimed slot and return its representative sample."""
+        self._current_slot = slot
+        self._last_attempt_id = None
+        self._attempt_started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         connectivity = probe_connectivity()
         if not connectivity.gateway_reachable:
             return self._save_failure(
@@ -99,6 +107,7 @@ class Collector:
             self.settings.anomaly_retry_ratio,
             self.settings.anomaly_retry_min_download_mbps,
         ):
+            self._mark_attempt("discarded", "Download below anomaly threshold; immediate retry selected")
             first_started_at = datetime.now(timezone.utc).strftime(
                 "%Y-%m-%dT%H:%M:%SZ"
             )
@@ -130,7 +139,8 @@ class Collector:
                 flush=True,
             )
 
-        started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self._mark_attempt("selected", "Representative result for the slot")
+        started_at = self._attempt_started_at
         sample = Sample(
             started_at=started_at,
             download_mbps=round(result.download_mbps, 3),
@@ -189,6 +199,31 @@ class Collector:
 
     def _execute_speedtest(self):
         """Dispatch one measurement using the configured runner."""
+        self._attempt_started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        try:
+            result = self._dispatch_speedtest()
+        except Exception as exc:
+            self._record_attempt("timeout" if isinstance(exc, Iperf3Timeout) else "error", str(exc)[:400], {})
+            raise
+        metrics = {name: getattr(result, name, None) for name in (
+            "download_mbps", "upload_mbps", "ping_ms", "jitter_ms", "duration_sec",
+            "latency_min_ms", "latency_max_ms", "packet_loss_pct", "tcp_retransmits",
+            "server_name", "interface", "isp")}
+        self._record_attempt("candidate", None, metrics)
+        return result
+
+    def _record_attempt(self, outcome: str, reason: Optional[str], metrics: dict) -> None:
+        record = getattr(self.store, "add_attempt", None)
+        if record and self._current_slot:
+            self._last_attempt_id = record(self._current_slot["id"], self._attempt_started_at,
+                datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), outcome, reason, metrics)
+
+    def _mark_attempt(self, outcome: str, reason: str) -> None:
+        mark = getattr(self.store, "mark_attempt", None)
+        if mark and self._last_attempt_id is not None:
+            mark(self._last_attempt_id, outcome, reason)
+
+    def _dispatch_speedtest(self):
         return run_named_runner(
             self.settings.speedtest_runner,
             duration_seconds=self.settings.sample_duration_seconds,
@@ -320,7 +355,7 @@ class Collector:
         note: Optional[str] = None,
         classification_confidence: Optional[str] = None,
     ) -> Sample:
-        started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        started_at = self._attempt_started_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         failure_note = note or json.dumps(snapshot.evidence, sort_keys=True)
         sample = Sample(
             started_at=started_at,
@@ -491,6 +526,10 @@ class Collector:
             self._ensure_schedule(today)
             self._ensure_schedule(today + timedelta(days=1))
 
+            self.store.recover_stale_slots(now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                lease_seconds=getattr(self.settings, "slot_lease_seconds", 300),
+                late_tolerance_seconds=self.settings.scheduler_late_tolerance_seconds)
+
             cutoff = now - timedelta(
                 seconds=self.settings.scheduler_late_tolerance_seconds
             )
@@ -500,6 +539,8 @@ class Collector:
             due = self.store.due_slots(now.strftime("%Y-%m-%dT%H:%M:%SZ"))
             if due:
                 for slot in due:
+                    if self._stop:
+                        break
                     if not self.store.claim_slot(slot["id"]):
                         continue
                     self._heartbeat(
@@ -507,8 +548,10 @@ class Collector:
                         {"runner": self.settings.speedtest_runner, "slot_id": slot["id"]},
                         force=True,
                     )
-                    sample = self._run_single(slot)
-                    self.store.finish_slot(slot["id"], self._slot_status_for_sample(sample))
+                    with self._keep_measurement_alive(slot["id"]):
+                        sample = self._run_single(slot)
+                    # add_sample commits the representative row and terminal
+                    # slot state in one transaction, including failure results.
                     self._heartbeat(
                         "idle",
                         {
@@ -524,6 +567,28 @@ class Collector:
             self._heartbeat("idle", {"runner": self.settings.speedtest_runner})
             time.sleep(5)
         self._heartbeat("stopped", {"runner": self.settings.speedtest_runner}, force=True)
+
+    @contextmanager
+    def _keep_measurement_alive(self, slot_id: int):
+        """Renew execution leases and heartbeat while blocking runners are active."""
+        stopped = Event()
+        def renew():
+            try:
+                while not stopped.wait(20):
+                    try:
+                        self.store.touch_slot(slot_id)
+                        self._heartbeat("measuring", {"slot_id": slot_id}, force=True)
+                    except Exception as exc:
+                        print(f"[collector] lease renewal unavailable: {exc}", flush=True)
+            finally:
+                self.store.close()
+        worker = Thread(target=renew, daemon=True)
+        worker.start()
+        try:
+            yield
+        finally:
+            stopped.set()
+            worker.join(timeout=10)
 
     @staticmethod
     def _slot_status_for_sample(sample: Optional[Sample]) -> str:

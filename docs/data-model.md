@@ -3,7 +3,7 @@
 ## Schema atual
 
 O SQLite atual contém `samples`, `measurement_slots`, `availability_events`,
-`service_heartbeats`, `alerts` e `schema_meta`. A tabela de medições é descrita
+`service_heartbeats`, `alerts`, `measurement_attempts` e `schema_meta` (versão 8). A tabela de medições é descrita
 abaixo; as demais tabelas preservam a obrigação de medir, o contexto de
 indisponibilidade, a saúde operacional e os alertas.
 
@@ -44,6 +44,25 @@ sequência é lida das amostras persistidas e reinicia após sucesso, falha
 interna, erro do runner ou troca de runner. A terceira ocorrência consecutiva
 recebe `failure_origin=OPERATOR`; as duas anteriores permanecem
 `failure_origin=UNKNOWN`.
+
+### `measurement_attempts`
+
+Cada execução do runner preserva `slot_id`, `started_at` real, `ended_at`,
+`outcome`, `reason` e `metrics_json`. Os outcomes são `candidate`, `selected`,
+`discarded`, `timeout` e `error`. O reteste mantém a primeira leitura descartada
+nesta tabela; somente o resultado representativo entra em `samples` e nas
+estatísticas. A API decodifica `metrics_json` como `metrics`.
+
+A gravação representativa e a conclusão do slot `RUNNING` são atômicas.
+Chamadas concorrentes de `add_sample` para o mesmo slot retornam o mesmo ID.
+`updated_at` renova a lease a cada 20 segundos durante testes longos. Após
+`SLOT_LEASE_SECONDS` sem renovação, o slot retorna a `PENDING` quando ainda
+está dentro da tolerância; slots antigos passam a `MISSED_UNKNOWN`. Um resultado
+já gravado é reconciliado antes de iniciar outra execução.
+
+A migração para versão 8 é aditiva: conserva amostras e classificações antigas,
+cria a auditoria e índices de data/runner/slot, e pode ser executada novamente.
+Tentativas antigas não são reconstruídas retroativamente.
 
 ## Limitações e invariantes
 

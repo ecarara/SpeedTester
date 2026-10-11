@@ -82,7 +82,7 @@ Também fornece detecção de interface e lookup best-effort da operadora.
 - `scripts/backup.sh`: cria cópia consistente do SQLite, verifica integridade
   e aplica retenção somente aos arquivos gerados pelo script;
 - `scripts/compare_runners.py`: compara runners sem gravar amostras;
-- `install.sh`: instala o stack Compose e o serviço systemd user.
+- `install.sh`: executa doctor, compila/valida o runner e inicia o stack Compose.
 
 Alterações em runners, status, colunas SQLite, payloads HTTP ou semântica de
 métricas são mudanças de contrato e exigem testes, documentação e changelog.

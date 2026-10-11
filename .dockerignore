@@ -36,3 +36,12 @@ logs/
 data/
 backups/
 .venv*/
+
+.coverage*
+coverage.xml
+htmlcov/
+.scannerwork/
+node_modules/
+test-results/
+playwright-report/
+coverage-js/

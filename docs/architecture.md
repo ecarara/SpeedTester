@@ -60,7 +60,7 @@ Componentes confirmados no código:
 4. Com internet disponível, o runner configurado mede download, upload, ping e
    jitter quando suportados.
 5. Se o primeiro download estiver abaixo do limiar configurado, o runner faz
-   uma única medição imediata adicional; a primeira não é persistida.
+   uma única medição imediata adicional; a primeira fica auditada, sem entrar nas estatísticas representativas.
 6. O resultado final é gravado com quadrante, banda contratada, interface e
    status. Quando houve reteste, ele é o resultado representativo do slot.
 7. Em falha, o sistema preserva o slot esperado, a tentativa, a evidência e a

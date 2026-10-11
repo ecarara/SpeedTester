@@ -9,6 +9,29 @@ em <https://github.com/ecarara/SpeedTester>.
 
 ## [Unreleased]
 
+### Adicionado
+
+- análise SonarQube com cobertura Python e quality gate no CI da branch principal;
+- auditoria de tentativas/retestes, recuperação de slots interrompidos e lease;
+- gráficos interativos de 7/30/90 dias, distribuição e percentis p10/mediana/p95;
+- testes de integração, restauração, interface responsiva e containers;
+- diagnóstico de instalação, imagens AMD64/ARM64 e publicação em GHCR;
+- backup externo criptografado com age/SSH e restauração validada com cópia anterior.
+
+### Corrigido
+
+- filtros antes da paginação, ordem por medições recentes e exportação completa;
+- horário real da tentativa, escrita idempotente e conclusão atômica do slot;
+- falso diagnóstico interno quando o gateway recusa probes TCP;
+- cobertura separa slots futuros, sucessos e classificações; downtime une sobreposições;
+- validação de configuração e liberação das conexões SQLite por transação.
+
+### Segurança e migração
+
+- aiohttp e FastAPI/Starlette atualizados; dependência requests sem uso removida;
+- ações do GitHub fixadas por commit e segredos Sonar mantidos fora do código;
+- schema 8 aditivo, preservando o histórico existente; faça backup antes da atualização.
+
 ## [0.1.0] - 2026-10-11
 
 Primeira publicação pública, disponibilizada como pré-release para validação

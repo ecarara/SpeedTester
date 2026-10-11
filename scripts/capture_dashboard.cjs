@@ -29,10 +29,7 @@ const path = require('node:path');
     await page.locator('#dayFilter').dispatchEvent('change');
     await page.locator('#runnerFilter').selectOption('iperf3');
     await page.waitForFunction(() => document.querySelector('#coverageTitle').textContent === '8 concluídos');
-    await page.waitForFunction(() => {
-      const image = document.querySelector('#chart');
-      return image.complete && image.naturalWidth > 0;
-    });
+    await page.waitForSelector('#chart svg circle');
     await page.evaluate(() => document.fonts.ready);
     await page.locator('.brand').click();
     if (errors.length) throw new Error(errors.join('\n'));

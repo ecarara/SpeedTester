@@ -29,6 +29,7 @@ def probe_connectivity(timeout_seconds: float = 2.0) -> ConnectivitySnapshot:
     """
     gateway, interface = _default_route()
     gateway_ports = _probe_host(gateway, (53, 80, 443), timeout_seconds)
+    gateway_icmp = _probe_gateway_icmp(gateway, timeout_seconds)
     external_results = {
         host: _probe_dns_and_tcp(host, timeout_seconds)
         for host in ("fast.com", "www.gstatic.com", "example.com")
@@ -36,15 +37,29 @@ def probe_connectivity(timeout_seconds: float = 2.0) -> ConnectivitySnapshot:
     external_reachable = any(result["reachable"] for result in external_results.values())
     return ConnectivitySnapshot(
         gateway=gateway,
-        gateway_reachable=bool(gateway_ports),
+        # Outbound connectivity proves the route works even when the router
+        # deliberately rejects TCP and ICMP probes (common on Docker bridges).
+        gateway_reachable=bool(gateway_ports) or gateway_icmp or external_reachable,
         external_reachable=external_reachable,
         evidence={
             "interface": interface,
             "gateway": gateway,
             "gateway_ports": gateway_ports,
+            "gateway_icmp": gateway_icmp,
             "external": external_results,
         },
     )
+
+
+def _probe_gateway_icmp(host: str | None, timeout: float) -> bool:
+    if not host:
+        return False
+    try:
+        result = subprocess.run(["ping", "-n", "-c", "1", host], capture_output=True,
+                                timeout=timeout, check=False)
+        return result.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 def _default_route() -> tuple[str | None, str | None]:

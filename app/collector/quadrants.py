@@ -73,6 +73,8 @@ def plan_day_slots(
         if available < required:
             raise ValueError(f"quadrant {quadrant} is too short for requested slots")
 
+        # Intentional non-cryptographic PRNG: only reproducible measurement
+        # times are generated; never credentials, identifiers or access decisions.
         rng = random.Random(f"{schedule_seed}:{local_day.isoformat()}:{quadrant}")
         offsets: list[int] = []
         attempts = 0

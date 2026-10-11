@@ -7,6 +7,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from typing import Optional
+from math import isfinite
+from zoneinfo import ZoneInfo
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,35 @@ class Settings:
     alert_webhook_url: str
     alert_speed_threshold_pct: float
     alert_cooldown_seconds: int
+    slot_lease_seconds: int = 300
+
+    def __post_init__(self) -> None:
+        ZoneInfo(self.timezone)
+        positive = ('sample_interval_seconds', 'sample_duration_seconds', 'measurements_per_quadrant',
+                    'max_bytes', 'iperf3_duration_seconds', 'iperf3_parallel_streams',
+                    'measurement_timeout_seconds', 'api_rate_limit_per_minute',
+                    'collector_heartbeat_timeout_seconds', 'isp_lookup_timeout_seconds')
+        for name in positive:
+            if not isfinite(getattr(self, name)) or getattr(self, name) <= 0:
+                raise ValueError(f'{name} must be positive and finite')
+        if self.measurements_per_quadrant > 100:
+            raise ValueError('measurements_per_quadrant must not exceed 100')
+        for name in ('iperf3_port', 'api_port'):
+            if not 1 <= getattr(self, name) <= 65535:
+                raise ValueError(f'{name} must be a valid TCP port')
+        if self.speedtest_runner not in {'iperf3', 'ookla', 'fast'}:
+            raise ValueError('speedtest_runner must be iperf3, ookla or fast')
+        if not 0 < self.anomaly_retry_ratio <= 1:
+            raise ValueError('anomaly_retry_ratio must be between 0 and 1')
+        if self.slot_lease_seconds < 60:
+            raise ValueError('slot_lease_seconds must be at least 60')
+        if self.scheduler_late_tolerance_seconds < 0 or self.alert_cooldown_seconds < 0:
+            raise ValueError('tolerance and cooldown must not be negative')
+        for value in (self.bandwidth_contracted_mbps, self.anomaly_retry_min_download_mbps):
+            if value is not None and (not isfinite(value) or value <= 0):
+                raise ValueError('contract and absolute retry threshold must be positive and finite')
+        if not 0 < self.alert_speed_threshold_pct <= 100:
+            raise ValueError('alert_speed_threshold_pct must be between 0 and 100')
 
     def __str__(self) -> str:  # pragma: no cover - trivial
         return (
@@ -75,7 +106,7 @@ def _env_float(name: str, default: Optional[float]) -> Optional[float]:
     """Return a float env var, or None when unset/blank."""
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
-        return None
+        return default
     try:
         return float(raw)
     except ValueError as exc:  # pragma: no cover - defensive
@@ -86,7 +117,10 @@ def _env_bool(name: str, default: bool) -> bool:
     raw = os.environ.get(name)
     if raw is None or raw.strip() == "":
         return default
-    return raw.strip().lower() in ("1", "true", "yes", "on", "y")
+    value = raw.strip().lower()
+    if value not in {'1', 'true', 'yes', 'on', 'y', '0', 'false', 'no', 'off', 'n'}:
+        raise ValueError(f'Invalid boolean for {name}')
+    return value in {'1', 'true', 'yes', 'on', 'y'}
 
 
 def _env_str(name: str, default: str) -> str:
@@ -121,7 +155,7 @@ def load_settings() -> Settings:
             "SCHEDULER_LATE_TOLERANCE_SECONDS", 900
         ),
         timezone=_env_str("TZ", "America/Sao_Paulo"),
-        anomaly_retry_ratio=_env_float("ANOMALY_RETRY_RATIO", 0.5) or 0.5,
+        anomaly_retry_ratio=_env_float("ANOMALY_RETRY_RATIO", 0.5),
         anomaly_retry_min_download_mbps=_env_float(
             "ANOMALY_RETRY_MIN_DOWNLOAD_MBPS", None
         ),
@@ -136,8 +170,7 @@ def load_settings() -> Settings:
         measurement_timeout_seconds=_env_int("MEASUREMENT_TIMEOUT_SECONDS", 60),
         bandwidth_contracted_mbps=_env_float("BANDWIDTH_CONTRACTED_MBP", None),
         isp_lookup_enabled=_env_bool("ISP_LOOKUP_ENABLED", True),
-        isp_lookup_timeout_seconds=_env_float("ISP_LOOKUP_TIMEOUT_SECONDS", 5.0)
-        or 5.0,
+        isp_lookup_timeout_seconds=_env_float("ISP_LOOKUP_TIMEOUT_SECONDS", 5.0),
         db_path=db_path,
         api_host=_env_str("API_HOST", "0.0.0.0"),
         api_bind_address=_env_str("API_BIND_ADDRESS", "127.0.0.1"),
@@ -149,7 +182,7 @@ def load_settings() -> Settings:
             "COLLECTOR_HEARTBEAT_TIMEOUT_SECONDS", 120
         ),
         alert_webhook_url=os.environ.get("ALERT_WEBHOOK_URL", "") or "",
-        alert_speed_threshold_pct=_env_float("ALERT_SPEED_THRESHOLD_PCT", 80.0)
-        or 80.0,
+        alert_speed_threshold_pct=_env_float("ALERT_SPEED_THRESHOLD_PCT", 80.0),
         alert_cooldown_seconds=_env_int("ALERT_COOLDOWN_SECONDS", 21600),
+        slot_lease_seconds=_env_int("SLOT_LEASE_SECONDS", 300),
     )

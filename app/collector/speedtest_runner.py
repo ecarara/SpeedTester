@@ -595,7 +595,7 @@ async def _resolve_isp(timeout_seconds: float = 5.0) -> Optional[str]:
 
     fast.com returns client metadata (``x-fast-isp-header``) on the speedtest
     API response, which we prefer. We fall back to a public IP lookup service
-    (ip-api.com) only when the header is absent.
+    (ipwho.is) only when the header is absent.
     """
     try:
         import aiohttp
@@ -613,10 +613,13 @@ async def _resolve_isp(timeout_seconds: float = 5.0) -> Optional[str]:
     try:
         import urllib.request
 
-        with urllib.request.urlopen(  # noqa: S310 - controlled http URL
-            "http://ip-api.com/json/", timeout=timeout_seconds
+        with urllib.request.urlopen(
+            "https://ipwho.is/?fields=success,connection.isp,connection.org", timeout=timeout_seconds
         ) as resp:
             data = json.loads(resp.read().decode())
-        return data.get("org") or data.get("isp") or data.get("as")
+        if not data.get("success"):
+            return None
+        connection = data.get("connection", {})
+        return connection.get("isp") or connection.get("org")
     except Exception:
         return None  # pragma: no cover - network dependent, best effort

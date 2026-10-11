@@ -14,6 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Application code + the static dashboard HTML.
 COPY app/ /app/
+COPY scripts/restore.py /opt/speedtester-scripts/restore.py
 
 RUN groupadd --system --gid 10001 speedtester \
     && useradd --system --uid 10001 --gid 10001 --no-create-home speedtester \

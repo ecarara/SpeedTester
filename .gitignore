@@ -14,5 +14,13 @@ data/
 *.key
 *.log
 .DS_Store
+.coverage*
+coverage.xml
+htmlcov/
+.scannerwork/
+node_modules/
+test-results/
+playwright-report/
 .venv*
 .venv314/
+coverage-js/

@@ -6,8 +6,7 @@
 - [x] alinhar Dockerfile, README e runner quanto a fast.com/Ookla;
 - [x] adicionar testes automatizados para persistência e scheduler;
 - [x] proteger o reset no modo não local;
-- [x] corrigir `install.sh` para ter fallback de `XDG_CONFIG_HOME` e um único
-  projeto Compose gerenciado pelo systemd;
+- [x] instalar com preflight, validação de saúde e reinício pelo Docker;
 - [x] calcular downtime a partir de eventos explícitos, sem usar gaps entre
   amostras como queda.
 
@@ -76,10 +75,19 @@ O requisito estará atendido quando todos os itens forem verdadeiros:
       aplicar avisos SPDX aos arquivos-fonte.
 - [x] Inventariar as licenças das dependências e imagens base.
 
-## Ordem recomendada de implementação
+## Melhorias de confiabilidade e publicação
 
-As próximas evoluções devem priorizar acesso remoto seguro, replicação externa
-e criptografada de backups, integração com uma fonte independente de energia e
-testes de aceitação do dashboard. O dashboard já apresenta dados reais, mas
-uma evidência de SLA exige período de observação suficiente e configuração de
-destino iPerf3 confiável.
+- [x] atualizar dependências vulneráveis e remover dependências sem uso;
+- [x] filtrar em SQL antes de paginar, priorizar registros recentes e exportar todo o filtro;
+- [x] recuperar slots interrompidos e persistir resultado/conclusão atomicamente;
+- [x] auditar retestes descartados e registrar o horário real da tentativa;
+- [x] usar evidência externa/ICMP quando o gateway recusa portas TCP;
+- [x] testar API, reinício, autorização, migração, restauração e interface;
+- [x] adicionar períodos 7/30/90, gráficos interativos e medianas/p10/p95;
+- [x] separar sucessos, slots classificados, devidos e futuros;
+- [x] fornecer doctor, ARM64, publicação GHCR e backup externo criptografado;
+- [x] integrar SonarQube e cobertura ao CI da branch principal.
+
+Próximas evoluções: autenticação de leitura para acesso remoto, integração com
+UPS/sensor independente e observação prolongada com destino iPerf3 controlado.
+Uma avaliação de SLA depende desse período e da qualidade do destino.

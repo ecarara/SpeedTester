@@ -1,0 +1,44 @@
+name: SonarQube
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: sonarqube-main
+  cancel-in-progress: false
+jobs:
+  analyze:
+    # Community Edition analyzes the default branch. Fork PRs never receive secrets.
+    if: vars.SONAR_ENABLED == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Generate coverage
+        env:
+          PYTHONPATH: app
+        run: |
+          python -m coverage run --source=app,scripts -m unittest discover -s tests -v
+          python -m coverage xml
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: Browser acceptance and JavaScript coverage
+        run: npm run test:ui
+      - name: Analyze and wait for the quality gate
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >-
+            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY || 'speedtester' }}
+            -Dsonar.qualitygate.wait=true

@@ -219,3 +219,18 @@ independente de energia.
 - não aceitar URLs arbitrárias de probe vindas do cliente;
 - adicionar autenticação de leitura antes de expor a API na internet;
 - usar HTTPS, VPN ou proxy reverso para qualquer acesso fora do host.
+
+## Sessões e observação
+
+Com `API_REQUIRE_LOGIN=true`, os endpoints de dados e exportação exigem sessão
+ou header administrativo `X-Admin-Token`. `POST /api/auth/login` recebe JSON
+`username` (`admin` ou `viewer`) e `password`, retornando perfil, expiração e
+`csrf_token`, além de cookie HttpOnly. `GET /api/auth/session` consulta a sessão;
+`POST /api/auth/logout` a revoga. Escritas com cookie exigem `X-CSRF-Token`;
+o perfil viewer não pode escrever, mesmo com CSRF válido.
+
+`GET /api/observation?days=14` aceita 1–90 dias. Inclui dias observados desde o
+startup do collector, estados dos slots devidos, resultados, percentis, bytes
+conhecidos e quantidade de tentativas sem contador. Nunca retorna host de destino
+nem certifica SLA. Alertas incluem `delivery_status`, `delivery_attempts` e
+`next_attempt_at`; falhas de transporte não incluem URLs/credenciais.

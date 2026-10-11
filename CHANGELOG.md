@@ -9,6 +9,12 @@ em <https://github.com/ecarara/SpeedTester>.
 
 ## [Unreleased]
 
+- Login e perfis com sessões persistidas, expiração, CSRF e exportação protegida.
+- Fila durável de webhooks, retentativas, avisos de recuperação e estados de entrega.
+- Relatórios de observação sem alegação de SLA, com contadores reais de tráfego iPerf3.
+- Deploy com gates CI/Sonar, digests, backup antes da migração e retorno automático.
+- Ampliação de testes das falhas de rede e dos fluxos de operação.
+
 ### Adicionado
 
 - análise SonarQube com cobertura Python e quality gate no CI da branch principal;

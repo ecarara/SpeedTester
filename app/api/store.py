@@ -43,9 +43,16 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Iterable, List, Optional
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 DB_SCHEMA = """
+CREATE TABLE IF NOT EXISTS auth_sessions (
+    token_hash TEXT PRIMARY KEY, username TEXT NOT NULL, role TEXT NOT NULL,
+    csrf_token TEXT NOT NULL, expires_at REAL NOT NULL, credential_hash TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS alert_states (
+    kind TEXT PRIMARY KEY, active INTEGER NOT NULL, updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS schema_meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -281,8 +288,14 @@ class SampleStore:
         self._local = threading.local()
         with self._connect() as conn:
             conn.executescript(DB_SCHEMA)
+            conn.execute("BEGIN IMMEDIATE")
             self._migrate_samples(conn)
             self._migrate_slots(conn)
+            existing = {row[1] for row in conn.execute("PRAGMA table_info(alerts)")}
+            for name, sql_type in (("delivery_attempts", "INTEGER NOT NULL DEFAULT 0"), ("next_attempt_at", "REAL NOT NULL DEFAULT 0"), ("lease_until", "REAL NOT NULL DEFAULT 0"), ("delivery_status", "TEXT NOT NULL DEFAULT 'pending'")):
+                if name not in existing:
+                    conn.execute(f"ALTER TABLE alerts ADD COLUMN {name} {sql_type}")
+            conn.execute("UPDATE alerts SET delivery_status='delivered' WHERE delivered=1")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_samples_date_runner ON samples(local_date, runner, started_at)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_samples_slot ON samples(slot_id)")
             conn.execute(
@@ -649,10 +662,13 @@ class SampleStore:
         now_epoch = _utcnow()
         now = _utc_from_epoch(now_epoch)
         with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
             recent = conn.execute(
                 "SELECT id FROM alerts WHERE kind = ? "
-                "AND created_at >= ? ORDER BY created_at DESC LIMIT 1",
-                (kind, _utc_from_epoch(now_epoch - max(cooldown_seconds, 0))),
+                "AND created_at >= ? AND id > COALESCE((SELECT MAX(id) FROM alerts WHERE kind=?),0) "
+                "ORDER BY created_at DESC LIMIT 1",
+                (kind, _utc_from_epoch(now_epoch - max(cooldown_seconds, 0)),
+                 {"operator_outage":"operator_recovered","speed_degraded":"speed_recovered"}.get(kind,"")),
             ).fetchone()
             if recent:
                 return None
@@ -682,6 +698,54 @@ class SampleStore:
                 "UPDATE alerts SET delivered = ?, delivery_error = ? WHERE id = ?",
                 (1 if delivered else 0, delivery_error[:400] if delivery_error else None, alert_id),
             )
+
+    def transition_alert_state(self, kind: str, active: bool, sample_id=None, payload=None) -> bool:
+        """Persist incident state; return whether an active incident recovered."""
+        with self._connection() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            previous = conn.execute('SELECT active FROM alert_states WHERE kind=?', (kind,)).fetchone()
+            conn.execute('INSERT OR REPLACE INTO alert_states VALUES (?,?,?)',
+                         (kind, int(active), _utc_from_epoch(_utcnow())))
+            recovered = bool(previous and previous[0] and not active)
+            if recovered:
+                recovery_kind = 'operator_recovered' if kind == 'operator_outage' else 'speed_recovered'
+                message = 'Conectividade recuperada.' if kind == 'operator_outage' else 'Velocidade voltou ao limite configurado.'
+                conn.execute("INSERT INTO alerts(created_at,kind,severity,message,sample_id,payload_json) VALUES (?,?,?,?,?,?)",
+                             (_utc_from_epoch(_utcnow()), recovery_kind, 'info', message, sample_id, json.dumps(payload or {})))
+            return recovered
+
+    def claim_alert_deliveries(self, now: float, limit: int = 10) -> List[dict]:
+        """Lease due messages atomically, including messages abandoned on restart."""
+        with self._connection() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            conn.execute("UPDATE alerts SET delivery_status='failed' WHERE delivered=0 AND delivery_attempts>=6 AND lease_until<=?", (now,))
+            rows = conn.execute("SELECT * FROM alerts WHERE delivered=0 AND delivery_status!='failed' "
+                "AND next_attempt_at<=? AND lease_until<=? AND delivery_attempts<6 ORDER BY id LIMIT ?",
+                (now, now, limit)).fetchall()
+            result = []
+            for row in rows:
+                conn.execute("UPDATE alerts SET lease_until=?,delivery_attempts=delivery_attempts+1, "
+                             "delivery_status='sending' WHERE id=?", (now + 120, row['id']))
+                item = dict(row)
+                item['payload'] = json.loads(item.pop('payload_json') or '{}')
+                result.append(item)
+            return result
+
+    def finish_alert_delivery(self, alert_id: int, success: bool, now: float, error=None):
+        with self._connection() as conn:
+            row = conn.execute('SELECT delivery_attempts FROM alerts WHERE id=?', (alert_id,)).fetchone()
+            if not row:
+                return
+            attempts = row[0]
+            status = 'pending'
+            if success:
+                status = 'delivered'
+            elif attempts >= 6:
+                status = 'failed'
+            delay = min(3600, 30 * 2 ** max(0, attempts - 1))
+            conn.execute('UPDATE alerts SET delivered=?,delivery_status=?,delivery_error=?, '
+                         'next_attempt_at=?,lease_until=0 WHERE id=?',
+                         (int(success), status, None if success else error, now + delay, alert_id))
 
     def alerts(self, limit: int = 50) -> List[dict]:
         """Return the newest alerts with decoded JSON payloads."""
@@ -846,6 +910,7 @@ class SampleStore:
             n += conn.execute("DELETE FROM measurement_slots").rowcount
             n += conn.execute("DELETE FROM availability_events").rowcount
             n += conn.execute("DELETE FROM alerts").rowcount
+            conn.execute("DELETE FROM alert_states")
             n += conn.execute("DELETE FROM measurement_attempts").rowcount
         with self._connection() as conn:
             conn.execute("VACUUM")

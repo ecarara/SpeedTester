@@ -55,9 +55,17 @@ class Settings:
     alert_speed_threshold_pct: float
     alert_cooldown_seconds: int
     slot_lease_seconds: int = 300
+    api_require_login: bool = True
+    api_viewer_password_hash: str = ""
+    api_admin_password_hash: str = ""
+    api_session_seconds: int = 28800
+    api_cookie_secure: bool = False
+    measurement_target_controlled: bool = False
 
     def __post_init__(self) -> None:
         ZoneInfo(self.timezone)
+        if not 60 <= self.api_session_seconds <= 86400:
+            raise ValueError("api_session_seconds must be between 60 and 86400")
         positive = ('sample_interval_seconds', 'sample_duration_seconds', 'measurements_per_quadrant',
                     'max_bytes', 'iperf3_duration_seconds', 'iperf3_parallel_streams',
                     'measurement_timeout_seconds', 'api_rate_limit_per_minute',
@@ -185,4 +193,10 @@ def load_settings() -> Settings:
         alert_speed_threshold_pct=_env_float("ALERT_SPEED_THRESHOLD_PCT", 80.0),
         alert_cooldown_seconds=_env_int("ALERT_COOLDOWN_SECONDS", 21600),
         slot_lease_seconds=_env_int("SLOT_LEASE_SECONDS", 300),
+        api_require_login=_env_bool("API_REQUIRE_LOGIN", True),
+        api_viewer_password_hash=os.environ.get("API_VIEWER_PASSWORD_HASH", ""),
+        api_admin_password_hash=os.environ.get("API_ADMIN_PASSWORD_HASH", ""),
+        api_session_seconds=_env_int("API_SESSION_SECONDS", 28800),
+        api_cookie_secure=_env_bool("API_COOKIE_SECURE", False),
+        measurement_target_controlled=_env_bool("MEASUREMENT_TARGET_CONTROLLED", False),
     )

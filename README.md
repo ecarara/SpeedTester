@@ -173,6 +173,9 @@ backup externo criptografado e restauração.
 | `TZ` | `America/Sao_Paulo` | timezone operacional desejado |
 | `API_HOST` / `API_PORT` | `0.0.0.0` / `8000` | bind interno da API |
 | `API_BIND_ADDRESS` | `127.0.0.1` | interface do host publicada pelo Docker |
+| `API_REQUIRE_LOGIN` | `true` | exige login também em leituras e exportações |
+| `API_VIEWER_PASSWORD_HASH` | vazio | hash scrypt do perfil visualizador |
+| `API_ADMIN_PASSWORD_HASH` | vazio | hash scrypt do administrador; usa token existente quando vazio |
 | `API_ADMIN_TOKEN` | vazio | token das operações administrativas; obrigatório quando `API_REQUIRE_ADMIN_TOKEN=true` |
 | `API_REQUIRE_ADMIN_TOKEN` | `true` | falha fechada: bloqueia operações administrativas sem token |
 | `API_RATE_LIMIT_PER_MINUTE` | `120` | limite de requisições por cliente nas rotas `/api/*` |
@@ -243,3 +246,13 @@ Veja
 ├── env.example
 └── install.sh
 ```
+
+### Acesso ao dashboard
+
+O dashboard exige login por padrão. Configure uma senha administrativa em
+`API_ADMIN_PASSWORD_HASH` ou use o `API_ADMIN_TOKEN` já configurado para entrar
+como `admin`. O perfil `viewer` usa `API_VIEWER_PASSWORD_HASH` e só consulta e
+exporta. Gere hashes com `python3 scripts/password_hash.py`; preserve as aspas
+simples no `.env`. Consulte [operação](docs/operations.md) para configuração,
+expiração de sessões e deploy automático. `API_REQUIRE_LOGIN=false` é reservado
+para demonstração local com dados fictícios.

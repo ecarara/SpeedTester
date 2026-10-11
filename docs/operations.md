@@ -200,7 +200,7 @@ O flag `--services-stopped` é uma confirmação operacional: o script não pode
 verificar todos os processos em outro container. Não remova WAL/SHM de um
 banco ativo. Confirme o nome do volume com `docker volume ls`.
 
-Ao atualizar para schema 8, o banco migra automaticamente de forma aditiva.
+Ao atualizar para schema 9, o banco migra automaticamente de forma aditiva.
 Slots abandonados em `RUNNING` são recuperados após `SLOT_LEASE_SECONDS`
 (padrão 300s), renovada a cada 20s durante medições. Dentro da tolerância
 retornam a `PENDING`; fora dela ficam `MISSED_UNKNOWN`. Não use `/api/reset`
@@ -264,3 +264,86 @@ reconciliar com os slots esperados.
 - manter destinos externos e timeouts definidos no servidor;
 - validar backups fora do host e atualizar dependências, digests e checksums;
 - consultar [SECURITY.md](../SECURITY.md) para o checklist e os riscos residuais.
+
+## Login e perfis
+
+`API_REQUIRE_LOGIN=true` protege consultas, exportações e documentação da API.
+O usuário `admin` administra dados; `viewer` só consulta e exporta. Configure
+`API_ADMIN_PASSWORD_HASH` e `API_VIEWER_PASSWORD_HASH` com hashes scrypt.
+Sem hash administrativo, `admin` usa o `API_ADMIN_TOKEN` existente como senha
+inicial, mantendo acesso durante a migração. Não compartilhe esse token com
+visualizadores. Credenciais nunca são enviadas por query string.
+
+```bash
+python3 scripts/password_hash.py
+# Copie a linha gerada para .env. Para admin, altere o nome da variável.
+```
+
+Mantenha os hashes entre aspas simples em `.env`: Compose interpreta `$` em
+valores sem aspas. Sessões duram oito horas (`API_SESSION_SECONDS`), usam cookie
+HttpOnly/SameSite=Strict e são armazenadas como hash no banco. Logout, expiração
+e rotação de credenciais revogam acesso. Escritas por sessão exigem CSRF e perfil
+admin. O header `X-Admin-Token` permanece para automação administrativa.
+`API_COOKIE_SECURE=true` exige HTTPS; em LAN HTTP confiável, mantenha false.
+Somente modo local/demonstração pode desabilitar login explicitamente.
+`/health` sem autenticação revela apenas liveness/versão, sem histórico ou rede.
+
+## Deploy automático no staging
+
+`scripts/deploy.py` consulta a revisão atual de `main` e exige sucesso dos
+workflows CI, Container images e SonarQube nessa revisão. O staging busca a
+versão; não há chave SSH do staging nos secrets do repositório público.
+As imagens precisam ter label da revisão e são fixadas por digest.
+O script preserva volumes, para API/collector/backup, cria snapshot consistente,
+sobe a versão e aguarda liveness real do collector. Uma falha restaura o snapshot
+e sobe as imagens anteriores; arquivos da versão anterior são preservados.
+Não remova os volumes nem use reset como procedimento de deploy.
+
+Instale as unidades `docker/speedtester-deploy.service` e `.timer` em
+`/etc/systemd/system/` e configure `/etc/speedtester-deploy.conf` com os caminhos
+e nomes reais da instalação:
+
+```ini
+DEPLOY_ROOT=/opt/speedtester
+COMPOSE_PROJECT=speedtester
+DB_VOLUME=speedtester_db_data
+BACKUP_VOLUME=speedtester_backup_data
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now speedtester-deploy.timer
+sudo systemctl start speedtester-deploy.service
+sudo journalctl -u speedtester-deploy.service
+```
+
+A checagem ocorre a cada dez minutos. Python 3.12+ e Docker Compose são
+necessários no host. A configuração `.env` fica no host; o script não a sobrescreve
+nem a envia ao GitHub. A revisão aplicada e digests ficam em `deployment.json`;
+snapshots ficam em `deployment-backups` com permissões restritas. Preserve espaço
+para imagens/versões anteriores e snapshots. A API pública do GitHub tem limite
+de requisições; falhas de acesso interrompem a checagem sem modificar serviços.
+
+## Observação contínua
+
+`/api/observation?days=14` apresenta dias efetivamente observados, sucessos,
+falhas, cobertura dos slots devidos, tentativas descartadas e percentis.
+A observação começa no primeiro startup desta versão e reinicia se o destino ou
+runner mudar. Reiniciar o processo mantém a janela. `known_transfer_bytes`
+inclui bytes informados nas tentativas iPerf3, inclusive retestes descartados;
+`unknown_transfer_attempts` identifica tentativas sem contador completo.
+Isso não é uma medição completa do tráfego da interface.
+
+O destino atual não tem controle confirmado: mantenha
+`MEASUREMENT_TARGET_CONTROLLED=false`. Mesmo num destino controlado, resultados
+de velocidade isolados não certificam SLA. Avalie pelo menos 21 dias e verifique
+lacunas de agenda, heartbeat, erros de medição e distribuição dos resultados.
+Alertas permanecem locais enquanto `ALERT_WEBHOOK_URL` estiver vazio.
+
+A entrega por webhook acontece em segundo plano, com seis tentativas e atraso
+exponencial (30, 60, 120, 240 e 480 segundos). A fila sobrevive a reinícios; leases
+expiradas voltam a ser tentadas. O destinatário deve deduplicar pelo header
+`Idempotency-Key` ou ID do alerta: a entrega é pelo menos uma vez. Depois de seis
+falhas, o alerta fica visível como `failed`. Recuperação de conectividade e
+velocidade gera alerta informativo; nunca se envia uma notificação externa sem
+um destino configurado pelo operador.

@@ -77,6 +77,8 @@ jobs:
         run: docker compose -f docker/compose.yaml build
 
       - name: Start API and run container smoke tests
+        env:
+          API_REQUIRE_LOGIN: 'false'
         run: |
           docker compose -f docker/compose.yaml up -d db api --wait --wait-timeout 120
           curl --fail http://127.0.0.1:8000/health

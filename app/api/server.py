@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import csv
 import json
-import hmac
 import io
 import os
 import time
@@ -115,7 +114,7 @@ async def session_access(request: Request, call_next):
     if settings.api_require_login and path in {'/', '/dashboard/', '/dashboard/index.html'} and not identity:
         return RedirectResponse('/login', status_code=303)
     if identity and identity['method'] == 'session' and request.method not in {'GET', 'HEAD', 'OPTIONS'}:
-        if not hmac.compare_digest(request.headers.get('X-CSRF-Token', ''), identity['csrf_token']):
+        if not auth.matches(request.headers.get('X-CSRF-Token', ''), identity['csrf_token']):
             return JSONResponse({'detail': 'invalid CSRF token'}, status_code=403)
         if protected and identity['role'] != 'admin':
             return JSONResponse({'detail': 'administrator required'}, status_code=403)
@@ -720,7 +719,7 @@ def _require_admin_token(token: Optional[str], request: Request) -> None:
         if settings.api_require_admin_token:
             raise HTTPException(status_code=503, detail="admin token is not configured")
         return
-    if not token or not hmac.compare_digest(token, settings.api_admin_token):
+    if not token or not auth.matches(token, settings.api_admin_token):
         raise HTTPException(status_code=403, detail="invalid admin token")
 
 

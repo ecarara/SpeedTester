@@ -256,3 +256,5 @@ exporta. Gere hashes com `python3 scripts/password_hash.py`; preserve as aspas
 simples no `.env`. Consulte [operação](docs/operations.md) para configuração,
 expiração de sessões e deploy automático. `API_REQUIRE_LOGIN=false` é reservado
 para demonstração local com dados fictícios.
+
+![Tela de login, sem credenciais preenchidas](docs/images/login.png)

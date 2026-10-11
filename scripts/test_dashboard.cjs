@@ -40,6 +40,7 @@ const reports = require('istanbul-reports');
     await page.coverage.startJSCoverage();
     assert.equal((await request.get(base+'/api/samples')).status(),401);
     await page.goto(base,{waitUntil:'networkidle'});
+    if(process.env.DASHBOARD_SCREENSHOT)await page.screenshot({path:path.join(root,'docs/images/login.png'),fullPage:true});
     await page.locator('#username').fill('admin');await page.locator('#password').fill('wrong');await page.locator('#loginForm button').click();
     await page.waitForFunction(()=>document.querySelector('#loginError').textContent.length>0);
     await page.locator('#password').fill('ui-example-admin-token');await page.locator('#loginForm button').click();
@@ -66,6 +67,7 @@ const reports = require('istanbul-reports');
     assert.match(await page.locator('#chart').textContent(),/Sem medições/);
     await page.locator('#runnerFilter').selectOption('iperf3');
     await page.waitForFunction(()=>document.querySelector('#coverageTitle').textContent==='56 concluídos'&&document.querySelectorAll('#chart circle').length===112);
+    if(process.env.DASHBOARD_SCREENSHOT){await page.locator('#periodFilter').selectOption('7');await page.waitForFunction(()=>document.querySelector('#coveragePeriod').textContent==='7 dias');await page.screenshot({path:path.join(root,'docs/images/dashboard.png')});}
     await page.setViewportSize({width:390,height:844});
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth), 'Mobile page overflows horizontally');
     assert.deepEqual(errors,[]);

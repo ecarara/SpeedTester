@@ -70,7 +70,8 @@ class AccessTests(IntegrationFixture):
         self.assertEqual(self.client.get('/api/export',headers={'X-Admin-Token':'rotated-example-token'}).status_code,200)
 
     def test_bad_logins_are_limited_and_hash_parser_rejects_invalid_input(self):
-        for _ in range(5):
+        self.assertEqual(self.client.post('/api/auth/login',json={'username':'admin','password':'senha inválida'}).status_code,401)
+        for _ in range(4):
             self.assertEqual(self.client.post('/api/auth/login',json={'username':'admin','password':'wrong'}).status_code,401)
         self.assertEqual(self.client.post('/api/auth/login',json={'username':'admin','password':'integration-test'}).status_code,429)
         for invalid in ('x', 'other$00$00', 'scrypt$'+'z'*32+'$'+'0'*128):

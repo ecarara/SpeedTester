@@ -9,6 +9,10 @@ import time
 COOKIE = 'speedtester_session'
 
 
+def matches(first: str, second: str) -> bool:
+    return hmac.compare_digest(first.encode(), second.encode())
+
+
 def password_hash(password: str) -> str:
     salt = secrets.token_hex(16)
     digest = hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=16384, r=8, p=1).hex()
@@ -32,7 +36,7 @@ def token_hash(token: str) -> str:
 
 def principal(request, settings, store):
     token = request.headers.get('X-Admin-Token', '')
-    if token and settings.api_admin_token and hmac.compare_digest(token, settings.api_admin_token):
+    if token and settings.api_admin_token and matches(token, settings.api_admin_token):
         return {'role': 'admin', 'username': 'admin', 'method': 'token'}
     cookie = request.cookies.get(COOKIE, '')
     if not cookie or len(cookie) > 256:
@@ -62,7 +66,7 @@ def authenticate(username, password, settings):
     if encoded and verify_password(password, encoded):
         return username
     if username == 'admin' and not encoded and settings.api_admin_token:
-        if hmac.compare_digest(password, settings.api_admin_token):
+        if matches(password, settings.api_admin_token):
             return 'admin'
     return None
 

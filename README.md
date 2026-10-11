@@ -42,7 +42,7 @@ IP, hostname ou credencial do ambiente interno foi usado. Veja como executar a
 - **Interface:** HTML/JavaScript servido pela própria API, atualizado a cada
   10 segundos.
 - **Deploy:** Docker Compose com os serviços `db`, `api`, `collector` e
-  `backup`, além de `install.sh` para instalação no host com systemd user.
+  `backup`, além de `install.sh` com preflight e reinício pelo Docker.
 
 ## Documentação
 
@@ -190,12 +190,12 @@ consulte [operations.md](docs/operations.md).
 3. O downtime considera eventos de indisponibilidade registrados; sem
    evento explícito, não há minutos de queda comprovados. A fonte automática de
    energia e os critérios formais de SLA são evoluções futuras.
-4. O gráfico PNG mostra download/upload em uma janela de até 24 horas; a
-   comparação histórica é apresentada em tabela e JSON.
+4. O gráfico PNG legado mantém a janela de 24 horas; o dashboard interativo
+   mostra períodos de 7/30/90 dias e distribuições por quadrante.
 5. Quando configurado o contrato, uma primeira medição com download abaixo do
    limiar de anomalia é descartada e substituída por um único reteste imediato.
    A segunda medição é a representativa, mesmo que também fique abaixo do
-   limiar. A primeira não é gravada nem entra nas estatísticas.
+   limiar. A primeira fica auditada em `measurement_attempts` e não entra nas estatísticas.
 
 Essas limitações são parte do diagnóstico; os requisitos e o desenho para
 resolvê-las estão em [requirements.md](docs/requirements.md) e
@@ -204,6 +204,7 @@ resolvê-las estão em [requirements.md](docs/requirements.md) e
 ## Desenvolvimento e qualidade
 
 ```bash
+python -m pip install -r requirements-dev.txt
 PYTHONPATH=app python -m unittest discover -s tests -v
 python -m compileall -q app
 python scripts/check_docs.py

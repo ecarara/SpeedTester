@@ -181,6 +181,18 @@ finally:
     execute(['docker', 'exec', '-i', project + '-api-1', 'python', '-c', code], json.dumps(event))
 
 
+def smtp_password():
+    if os.environ.get('SMTP_PASSWORD_FILE'):
+        path = Path(os.environ['SMTP_PASSWORD_FILE'])
+        if path.is_symlink() or path.stat().st_mode & 0o077:
+            raise OSError('SMTP password file must be private')
+        return path.read_text().strip()
+    password = os.environ.get('SMTP_PASSWORD', '')
+    if not password:
+        raise OSError('SMTP credential unavailable')
+    return password
+
+
 def email_delivery(event):
     recipient = os.environ.get('ALERT_EMAIL_TO', '')
     if not recipient:
@@ -200,10 +212,7 @@ def email_delivery(event):
             smtp.starttls(context=context)
         username = os.environ.get('SMTP_USER')
         if username:
-            password_file = Path(os.environ['SMTP_PASSWORD_FILE'])
-            if password_file.is_symlink() or password_file.stat().st_mode & 0o077:
-                raise OSError('SMTP password file must be private')
-            smtp.login(username, password_file.read_text().strip())
+            smtp.login(username, smtp_password())
         smtp.send_message(message)
 
 

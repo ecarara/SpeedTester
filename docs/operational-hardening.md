@@ -84,7 +84,7 @@ fila e deduplicação entre execuções. Repetições do mesmo incidente têm in
 mínimo de seis horas. Entregas falhas recebem retry com atraso crescente; a fila
 é limitada a 100 eventos recentes e não contém credenciais.
 
-Para e-mail, configure no arquivo privado `/etc/speedtester-operations.conf`:
+Para e-mail, configure no `.env` privado da aplicação (0600):
 
 ```ini
 ALERT_EMAIL_TO=operator@example.com
@@ -95,7 +95,8 @@ SMTP_USER=alerts@example.com
 SMTP_PASSWORD_FILE=/etc/speedtester/smtp-password
 ```
 
-A senha fica em arquivo 0600. Porta 465 usa TLS desde a conexão; outras portas
+A senha/token fica em `SMTP_PASSWORD` no `.env` privado; opcionalmente use
+`SMTP_PASSWORD_FILE` com um arquivo 0600. Porta 465 usa TLS desde a conexão; outras portas
 exigem STARTTLS com validação do certificado. O e-mail não contém IP interno,
 URLs secretas ou dados das medições. Uma falha do dashboard não impede o envio
 por e-mail; os dois destinos têm estado de entrega separado. Sem SMTP configurado,

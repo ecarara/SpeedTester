@@ -310,7 +310,14 @@ class MonitorTests(TempTests):
         smtp.reset_mock()
         with patch.dict(os.environ, {**environment,'SMTP_PORT':'465'}, clear=True), patch.object(operations.smtplib, 'SMTP_SSL', return_value=smtp):
             operations.email_delivery({**event, 'severity': 'info'}); smtp.starttls.assert_not_called()
-        with patch.dict(os.environ, {}, clear=True): operations.email_delivery(event)
+        with patch.dict(os.environ, {}, clear=True):
+            operations.email_delivery(event)
+            with self.assertRaises(OSError): operations.smtp_password()
+        with patch.dict(os.environ, {'SMTP_PASSWORD':'fixture'}, clear=True):
+            self.assertEqual(operations.smtp_password(),'fixture')
+        secret.chmod(0o644)
+        with patch.dict(os.environ, {'SMTP_PASSWORD_FILE':str(secret)}, clear=True):
+            with self.assertRaises(OSError): operations.smtp_password()
 
     def test_collection_checks_staleness_disk_and_security_and_failed_commands_are_private(self):
         (self.root / 'deployment.json').write_text('{}')

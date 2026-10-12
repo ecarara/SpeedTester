@@ -10,5 +10,6 @@ User=root
 UMask=0077
 EnvironmentFile=/etc/speedtester-deploy.conf
 EnvironmentFile=-/etc/speedtester-operations.conf
+EnvironmentFile=-/opt/speedtester/.env
 ExecStart=/usr/bin/python3 /opt/speedtester/scripts/operations.py monitor --root ${DEPLOY_ROOT} --project ${COMPOSE_PROJECT} --backup-volume ${BACKUP_VOLUME} --state-dir ${OPERATIONS_STATE_DIR}
 TimeoutStartSec=900

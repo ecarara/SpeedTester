@@ -22,6 +22,16 @@ test_unbounded_memory_fails if {
         "services": {"collector": object.union(safe_service, {"mem_limit": 0})}}
 }
 
+test_compose_string_memory_is_supported if {
+    count(deny) == 0 with input as {"services": {"collector": object.union(safe_service,
+        {"mem_limit": "536870912"})}}
+}
+
+test_over_limit_string_memory_fails if {
+    "collector: memory limit must be positive and <= 1 GiB" in deny with input as {
+        "services": {"collector": object.union(safe_service, {"mem_limit": "2147483648"})}}
+}
+
 test_login_disabled_fails if {
     "api: login and administrative authorization must stay enabled" in deny with input as {
         "services": {"api": object.union(safe_service, {"environment": {"API_REQUIRE_LOGIN": "false"}})}}

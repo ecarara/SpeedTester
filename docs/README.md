@@ -27,6 +27,7 @@ interna ou pelo próprio sistema de medição.
 | [Dependências](third-party.md) | Componentes externos e licenças a revisar |
 | [Conformidade GPL](license-compliance.md) | Licença do projeto, componentes externos e obrigações de distribuição |
 | [Publicação](publishing.md) | Checklist para configurar e liberar o projeto no GitHub |
+| [Pipeline de segurança](security-pipeline.md) | Gates Grype, Conftest, ZAP e attestations no deploy |
 | [Segurança](../SECURITY.md) | Controles implementados, configuração segura e riscos residuais |
 | [Roadmap](roadmap.md) | Ordem recomendada de implementação e critérios de aceite |
 | [Validação de 26/08/2026](validation-2026-08-26.md) | Resultado real no servidor e coerência com 1 Gbps |
@@ -58,4 +59,3 @@ O SpeedTester usa a **GNU GPL versão 3 ou posterior**, identificada como
 arquivos devem manter o aviso de copyright de Edson Angelo Carara e não devem
 introduzir dependências com licença incompatível sem revisão.
 
-- [Segurança no pipeline e no deploy](security-pipeline.md)

@@ -25,7 +25,9 @@ RUN apt-get update && apt-get upgrade -y \
 RUN python -m pip uninstall -y setuptools wheel pip
 
 COPY --from=age-builder /go/bin/age /go/bin/age-keygen /usr/local/bin/
+COPY --from=age-builder /go/pkg/mod/filippo.io/age@v1.3.2/LICENSE /usr/share/doc/age/LICENSE
 COPY --from=ssh-builder /tmp/openssh-10.6p1/ssh /tmp/openssh-10.6p1/scp /usr/local/bin/
+COPY --from=ssh-builder /tmp/openssh-10.6p1/LICENCE /usr/share/doc/openssh/LICENCE
 
 COPY scripts/backup.sh /opt/speedtester-scripts/backup.sh
 RUN chmod 0755 /opt/speedtester-scripts/backup.sh

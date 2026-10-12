@@ -30,6 +30,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=iperf-builder /tmp/iperf-3.22/src/iperf3 /usr/local/bin/iperf3
+COPY --from=iperf-builder /tmp/iperf-3.22/LICENSE /usr/share/doc/iperf3/LICENSE
 
 WORKDIR /app
 COPY app/requirements.txt /app/requirements.txt

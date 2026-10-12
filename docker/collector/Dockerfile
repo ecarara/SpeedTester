@@ -9,7 +9,7 @@ ADD --checksum=sha256:1c0d0fb02c52626111d6e132db80edfbf27bbaff8bd9245df2a371dcb0
     https://github.com/esnet/iperf/releases/download/3.22/iperf-3.22.tar.gz /tmp/iperf.tar.gz
 RUN tar -xzf /tmp/iperf.tar.gz -C /tmp \
     && cd /tmp/iperf-3.22 \
-    && ./configure --disable-shared --enable-static --without-sctp --with-openssl \
+    && ./configure --disable-shared --enable-static --without-sctp --with-openssl=/usr \
     && make -j2
 
 FROM python:3.11.17-slim-trixie@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce

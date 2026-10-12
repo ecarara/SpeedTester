@@ -132,7 +132,9 @@ Dependabot acompanha semanalmente as bases Docker, inclusive Go e seus digests.
 `Native dependency updates` verifica semanalmente releases estáveis de OpenSSH,
 iPerf3 e age, calcula SHA256 dos arquivos nas origens oficiais e atualiza caminhos
 de compilação/licenças. O PR é revisável e não faz merge automático.
-Use `NATIVE_UPDATES_TOKEN` com permissão de conteúdo e PR neste repositório para
-que os PRs do bot acionem os workflows obrigatórios; o GITHUB_TOKEN padrão não
-aciona workflows por eventos gerados por ele. Sem token e havendo atualização,
-a rotina falha explicitamente. Todos os gates continuam exigidos no deploy.
+O bot usa o GITHUB_TOKEN do próprio repositório com permissões de conteúdo, PR e
+actions. Como eventos gerados por esse token não acionam workflows de PR,
+o bot despacha explicitamente CI, scans de imagens sem publicação e Security
+no seu branch de atualização. A permissão do repositório para o Actions criar PRs
+precisa estar habilitada. Nenhum token pessoal extra é necessário.
+Todos os gates continuam exigidos no deploy.

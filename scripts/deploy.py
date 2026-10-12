@@ -184,7 +184,7 @@ def validate_service(command):
     raise RuntimeError('Collector failed health validation')
 
 
-def fresh_image_gate(root, release, images, sha):
+def fresh_image_gate(release, images, sha):
     parent = Path(os.environ.get('SECURITY_REPORT_ROOT', '/var/lib/speedtester-security'))
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
@@ -212,7 +212,7 @@ def deploy(root, sha, project, db_volume, backup_volume):
         return 'unchanged'
     release = release_source(root, sha)
     images = image_digests(sha)
-    image_report = fresh_image_gate(root, release, images, sha)
+    image_report = fresh_image_gate(release, images, sha)
     if not previous:
         previous = {'release_dir': str(root), 'images': {service: json.loads(run('docker', 'inspect', f'{project}-{service}-1'))[0]['Image'] for service in SERVICES}}
     old = compose_command(root, Path(previous['release_dir']), previous['images'], project, db_volume, backup_volume, 'previous')

@@ -206,11 +206,14 @@ class RecheckTests(TempTests):
         for images, platforms in (({'api': 'image:main'}, ('linux/amd64',)),
                                   ({'wrong': self.images()['api']}, ('linux/amd64',)),
                                   (self.images(), ('bad',))):
-            with self.assertRaises(ValueError): recheck_images.scan(images, self.root / str(len(list(self.root.iterdir()))), platforms=platforms)
+            output = self.root / str(len(list(self.root.iterdir())))
+            with self.assertRaises(ValueError): recheck_images.scan(images, output, platforms=platforms)
+        images = self.images()
+        partial = {'api': images['api']}
         with patch.object(recheck_images.subprocess, 'run', return_value=SimpleNamespace(returncode=1)):
-            with self.assertRaises(RuntimeError): recheck_images.scan(self.images(), self.root / 'failed')
+            with self.assertRaises(RuntimeError): recheck_images.scan(images, self.root / 'failed')
         with patch.object(recheck_images.subprocess, 'run', side_effect=self.execute):
-            with self.assertRaises(ValueError): recheck_images.scan({'api': self.images()['api']}, self.root / 'partial')
+            with self.assertRaises(ValueError): recheck_images.scan(partial, self.root / 'partial')
         with patch.object(recheck_images.subprocess, 'run', side_effect=self.execute), patch.object(recheck_images, 'check_report', return_value={'blocking_findings': 0}):
             self.assertEqual(recheck_images.scan(self.images(), self.root / 'passed')['status'], 'passed')
 
@@ -222,7 +225,7 @@ class RecheckTests(TempTests):
             with self.assertRaises(RuntimeError): deployment.deploy(self.root, 'a' * 40, 'fixture', 'db', 'backup')
         execute.assert_not_called()
         with patch.dict(os.environ, {'SECURITY_REPORT_ROOT': str(self.root / 'reports')}), patch.object(deployment, 'run') as execute:
-            path = deployment.fresh_image_gate(self.root, self.root, self.images(), 'a' * 40)
+            path = deployment.fresh_image_gate(self.root, self.images(), 'a' * 40)
         self.assertIn('recheck-', path)
         self.assertIn('--state', execute.call_args.args)
         state_path = execute.call_args.args[execute.call_args.args.index('--state') + 1]

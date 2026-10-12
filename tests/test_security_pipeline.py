@@ -28,6 +28,7 @@ deploy = module('security_deploy', 'scripts/deploy.py')
 zap = module('security_zap', 'scripts/zap_scan.py')
 grype = module('security_grype', 'scripts/check_image_report.py')
 installer = module('security_installer', 'scripts/install_security_tools.py')
+runtime_hook = module('security_runtime_hook', 'security/zap_runtime_hook.py')
 
 
 class InstallerTests(unittest.TestCase):
@@ -185,6 +186,18 @@ class AttestationTests(unittest.TestCase):
 
 
 class ZAPTests(unittest.TestCase):
+    def test_runtime_hook_keeps_listener_and_client_on_ipv4_loopback(self):
+        class Client:
+            def __init__(self, **kwargs):
+                self.proxies = kwargs['proxies']
+        common = SimpleNamespace(create_start_options=lambda *args:
+                                 ['-host', '0.0.0.0', '-host', '127.0.0.1'])
+        with patch.dict(sys.modules, {'zap_common': common, 'zapv2': SimpleNamespace(ZAPv2=Client)}):
+            runtime_hook.start_zap(8090, [])
+            self.assertEqual(common.create_start_options('-daemon', 8090, []),
+                             ['-host', '127.0.0.1', '-host', '127.0.0.1'])
+            client = Client(proxies={'http': 'http://localhost:8090'})
+            self.assertEqual(client.proxies['http'], 'http://127.0.0.1:8090')
     def test_active_scan_uses_fixed_target_and_disposable_data_then_cleans_up(self):
         project = 'speedtester-security-1-1'
         container = {'Config': {'Env': ['SPEEDTEST_SECURITY_FIXTURE=true', 'API_ADMIN_TOKEN=security-fixture-admin']},

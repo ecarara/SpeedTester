@@ -86,8 +86,8 @@ def scan(mode, output, project=None, target=None):
             os.chown(file, uid, gid)
     args = base + scan_args + ['--hook', '/zap/wrk/hook.py', '-I', '-T', '5', '-J', 'zap.json', '-r', 'zap.html', '-s',
                              '-z', '-silent -dir /zap/wrk/zap-home -host 127.0.0.1 '
-                             '-config api.addrs.addr.name=127.0.0.1 '
-                             '-config api.addrs.addr.regex=false '
+                             '-config api.addrs.addr.name=^(127[.]0[.]0[.]1|localhost|zap)$ '
+                             '-config api.addrs.addr.regex=true '
                              '-config ascan.maxScanDurationInMins=10']
     try:
         with (output / 'execution.log').open('w') as log:

@@ -3,7 +3,7 @@
 """Header applies only to the disposable API host; never to external origins."""
 
 
-def zap_started(zap, target):
+def zap_started(zap, _target):
     # A private -dir starts without the packaged user's API scan policy.
     zap.ascan.import_scan_policy('/home/zap/.ZAP/policies/API-Minimal.policy')
     if 'API Minimal' not in zap.ascan.scan_policy_names:
@@ -13,7 +13,7 @@ def zap_started(zap, target):
         replacement='security-fixture-admin', initiators='', url=r'^http://api:8000/.*')
 
 
-def zap_active_scan(zap, target, policy):
+def zap_active_scan(zap, target, _policy):
     # Import uses the XML policy title, while the packaged script passes the
     # filename stem. Select the imported policy with the same unchanged rules.
     return zap, target, 'API Minimal'

@@ -3,7 +3,7 @@
 """Bind the packaged scanner control API to IPv4 loopback before startup."""
 
 
-def start_zap(port, extra_zap_params):
+def start_zap(_port, _extra_zap_params):
     import zap_common
     from zapv2 import ZAPv2
     original = zap_common.create_start_options

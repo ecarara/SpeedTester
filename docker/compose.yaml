@@ -3,11 +3,18 @@
 
 services:
   db:
-    image: python:3.11-slim@sha256:be1575ed968de893bd54f4c56315ff7c4736ce522c1bca08fd521731aafc0d76
+    image: python:3.11.17-slim-bookworm@sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89
     command: ["sh", "-c", "chown -R 10001:10001 /data && while true; do sleep 3600; done"]
     volumes:
       - db_data:/data
     restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 64m
+    cpus: 0.1
+    pids_limit: 32
     healthcheck:
       test: ["CMD", "python", "-c", "import os; assert os.stat('/data').st_uid == 10001"]
       interval: 5s
@@ -19,6 +26,13 @@ services:
     build:
       context: ..
       dockerfile: docker/api/Dockerfile
+    user: "10001:10001"
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,noexec,size=134217728,mode=1777"]
+    cap_drop: [ALL]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
     environment:
       DB_PATH: /data/speedtester.db
       SAMPLE_INTERVAL_SECONDS: ${SAMPLE_INTERVAL_SECONDS:-1800}
@@ -67,6 +81,14 @@ services:
     build:
       context: ..
       dockerfile: docker/collector/Dockerfile
+    user: "10001:10001"
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,noexec,size=134217728,mode=1777"]
+    cap_drop: [ALL]
+    cap_add: [NET_RAW]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
     environment:
       DB_PATH: /data/speedtester.db
       SAMPLE_INTERVAL_SECONDS: ${SAMPLE_INTERVAL_SECONDS:-1800}
@@ -107,6 +129,13 @@ services:
     build:
       context: ..
       dockerfile: docker/backup/Dockerfile
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,noexec,size=67108864,mode=1777"]
+    cap_drop: [ALL]
+    cap_add: [DAC_OVERRIDE]
+    mem_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
     environment:
       DB_PATH: /data/speedtester.db
       BACKUP_DIR: /backups

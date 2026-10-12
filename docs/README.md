@@ -57,3 +57,5 @@ O SpeedTester usa a **GNU GPL versão 3 ou posterior**, identificada como
 `GPL-3.0-or-later`. O texto integral está em [../LICENSE](../LICENSE). Novos
 arquivos devem manter o aviso de copyright de Edson Angelo Carara e não devem
 introduzir dependências com licença incompatível sem revisão.
+
+- [Segurança no pipeline e no deploy](security-pipeline.md)

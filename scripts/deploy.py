@@ -3,7 +3,6 @@
 # Copyright (C) 2026 Edson Angelo Carara
 """Pull deployment after CI, images and Sonar pass; keep secrets on the host."""
 import argparse
-from contextlib import contextmanager
 from datetime import datetime, timezone
 import fcntl
 import json
@@ -18,13 +17,18 @@ import urllib.request
 
 REPO = 'ecarara/SpeedTester'
 SERVICES = ('api', 'collector', 'backup')
-REQUIRED = {'CI', 'Container images', 'SonarQube'}
+WORKFLOWS = {'CI': '.github/workflows/ci.yml', 'Container images': '.github/workflows/images.yml',
+             'SonarQube': '.github/workflows/sonarqube.yml', 'Security': '.github/workflows/security.yml'}
+REQUIRED = set(WORKFLOWS)
 
 
 def fetch_json(url):
     request = urllib.request.Request(url, headers={'User-Agent': 'SpeedTester-staging-deploy', 'Accept': 'application/vnd.github+json'})
     with urllib.request.urlopen(request, timeout=30) as response:
-        return json.load(response)
+        data = response.read(8 * 1024 * 1024 + 1)
+        if len(data) > 8 * 1024 * 1024:
+            raise ValueError('Unexpected GitHub response size')
+        return json.loads(data)
 
 
 def eligible_revision():
@@ -33,9 +37,12 @@ def eligible_revision():
     runs = fetch_json(base+'/actions/runs?branch=main&event=push&per_page=100')['workflow_runs']
     latest = {}
     for run in sorted(runs, key=lambda item: item['id'], reverse=True):
-        if run['head_sha'] == sha and run['name'] not in latest:
-            latest[run['name']] = run
-    if all(name in latest and latest[name]['conclusion'] == 'success' for name in REQUIRED):
+        path = run.get('path')
+        if (run['head_sha'] == sha and path in WORKFLOWS.values() and path not in latest
+                and run.get('event') == 'push' and run.get('head_branch') == 'main'):
+            latest[path] = run
+    if all(path in latest and latest[path]['conclusion'] == 'success'
+           and latest[path].get('status') == 'completed' for path in WORKFLOWS.values()):
         return sha
     return None
 
@@ -77,6 +84,24 @@ def release_source(root, sha):
     return release
 
 
+def verify_attestation(image, sha):
+    """Public bundles + offline CLI verification: no staging GitHub credential."""
+    digest = image.rsplit('@', 1)[1]
+    if not re.fullmatch(r'sha256:[0-9a-f]{64}', digest):
+        raise ValueError('Expected an immutable image digest')
+    data = fetch_json('https://api.github.com/repos/' + REPO + '/attestations/' + digest)
+    bundles = [item['bundle'] for item in data.get('attestations', []) if item.get('bundle')]
+    if not bundles:
+        raise ValueError('Image has no build attestation')
+    with tempfile.TemporaryDirectory(prefix='speedtester-attestation-') as directory:
+        path = Path(directory) / 'bundles.jsonl'
+        path.write_text('\n'.join(json.dumps(bundle) for bundle in bundles))
+        run('gh', 'attestation', 'verify', 'oci://' + image, '--bundle', str(path), '--repo', REPO,
+            '--signer-workflow', REPO + '/.github/workflows/images.yml',
+            '--source-ref', 'refs/heads/main', '--source-digest', sha,
+            '--deny-self-hosted-runners', '--format', 'json')
+
+
 def image_digests(sha):
     result = {}
     for service in SERVICES:
@@ -89,6 +114,7 @@ def image_digests(sha):
         digest = next((item for item in image['RepoDigests'] if item.startswith(prefix)), None)
         if not digest:
             raise ValueError('Image digest unavailable')
+        verify_attestation(digest, sha)
         result[service] = digest
     return result
 
@@ -98,8 +124,32 @@ def compose_command(root, release, images, project, db_volume, backup_volume, su
     save_json(override, {'services': {service: {'image': images[service]} for service in SERVICES},
                        'volumes': {'db_data': {'external': True, 'name': db_volume},
                                    'backup_data': {'external': True, 'name': backup_volume}}})
-    return ('docker', 'compose', '--env-file', str(root/'.env'), '-p', project,
-            '-f', str(release/'docker/compose.yaml'), '-f', str(override))
+    command = ['docker', 'compose', '--env-file', str(root/'.env'), '-p', project,
+               '-f', str(release/'docker/compose.yaml')]
+    # An explicitly enabled remote backup remains enabled on deploy AND rollback.
+    if os.environ.get('BACKUP_REMOTE_ENABLED', 'false').lower() == 'true':
+        command.extend(('-f', str(release/'docker/compose.backup-remote.yaml')))
+    return tuple(command + ['-f', str(override)])
+
+
+def validate_policy(command, release):
+    rendered = run(*command, 'config', '--format', 'json')
+    with tempfile.TemporaryDirectory(prefix='speedtester-policy-') as directory:
+        path = Path(directory) / 'compose.json'
+        path.write_text(rendered)
+        path.chmod(0o600)  # Rendered Compose contains credentials, never log it.
+        run('conftest', 'test', str(path), '--policy', str(release/'security/policy'), '--all-namespaces')
+
+
+def staging_baseline(release, sha):
+    target = os.environ.get('STAGING_BASELINE_URL', '')
+    if not target:
+        raise ValueError('STAGING_BASELINE_URL must be configured before deployment')
+    parent = Path(os.environ.get('SECURITY_REPORT_ROOT', '/var/lib/speedtester-security'))
+    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    output = parent / (datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f') + '-' + sha)
+    run('python3', str(release/'scripts/zap_scan.py'), 'baseline', '--target', target, '--output', str(output))
+    return str(output)
 
 
 def backup_database(root, image, volume, sha):
@@ -145,22 +195,28 @@ def deploy(root, sha, project, db_volume, backup_volume):
     old = compose_command(root, Path(previous['release_dir']), previous['images'], project, db_volume, backup_volume, 'previous')
     new = compose_command(root, release, images, project, db_volume, backup_volume, 'candidate')
     run(*new, 'config', '--quiet')
+    validate_policy(new, release)
     # Pause every SQLite client before the pre-migration snapshot.
     run(*old, 'stop', 'api', 'collector', 'backup')
     snapshot = None
     try:
-        snapshot = backup_database(root, images['api'], db_volume, sha)
+        # The previous known image supplies recovery tooling; candidate ENTRYPOINT
+        # code must never run as root over the snapshots before rollout.
+        snapshot = backup_database(root, previous['images']['api'], db_volume, sha)
         run(*new, 'up', '-d', '--no-build', '--wait', '--wait-timeout', '180')
         validate_service(new)
+        baseline_report = staging_baseline(release, sha)
         state = {'revision': sha, 'release_dir': str(release), 'images': images, 'backup': snapshot,
-                 'deployed_at': datetime.now(timezone.utc).isoformat()}
+                 'deployed_at': datetime.now(timezone.utc).isoformat(),
+                 'security': {'attestation': 'verified', 'policy': 'passed',
+                              'zap_mode': 'baseline', 'baseline_report': baseline_report}}
         save_json(root/'previous-deployment.json', previous)
         save_json(state_file, state)
         return 'deployed'
     except Exception:
         run(*new, 'stop', 'api', 'collector', 'backup')
         if snapshot:
-            restore_database(root, images['api'], db_volume, snapshot)
+            restore_database(root, previous['images']['api'], db_volume, snapshot)
         run(*old, 'up', '-d', '--no-build', '--wait', '--wait-timeout', '180')
         raise
 

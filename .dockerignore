@@ -45,3 +45,5 @@ node_modules/
 test-results/
 playwright-report/
 coverage-js/
+security-reports/
+.security-tools/

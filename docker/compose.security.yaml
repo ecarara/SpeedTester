@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+# CI fixture only: separate project/network/volume; no collector or host data.
+services:
+  db:
+    image: python:3.11.17-slim-bookworm@sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89
+    command: ["sh", "-c", "chown -R 10001:10001 /data && sleep infinity"]
+    volumes: ["fixture_data:/data"]
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 64m
+    cpus: 0.1
+    pids_limit: 32
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; assert os.stat('/data').st_uid == 10001"]
+      interval: 2s
+      retries: 15
+    networks: [isolated]
+  api:
+    image: speedtester-security-api:fixture
+    build:
+      context: ..
+      dockerfile: docker/api/Dockerfile
+    user: "10001:10001"
+    environment:
+      DB_PATH: /data/fixture.db
+      API_ADMIN_TOKEN: security-fixture-admin
+      API_REQUIRE_LOGIN: "true"
+      API_REQUIRE_ADMIN_TOKEN: "true"
+      # The isolated scan needs enough requests to exercise the API.
+      API_RATE_LIMIT_PER_MINUTE: "100000"
+      ISP_LOOKUP_ENABLED: "false"
+      SPEEDTEST_SECURITY_FIXTURE: "true"
+    volumes: ["fixture_data:/data"]
+    ports: ["127.0.0.1:18000:8000"]
+    read_only: true
+    tmpfs: ["/tmp:rw,nosuid,noexec,size=134217728,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    cpus: 1.0
+    pids_limit: 128
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 2s
+      retries: 30
+    networks: [isolated]
+networks:
+  isolated:
+    internal: true
+volumes:
+  fixture_data:

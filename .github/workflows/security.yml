@@ -1,0 +1,65 @@
+name: Security
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  policy:
+    name: Compose security policies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install verified Conftest
+        run: python3 scripts/install_security_tools.py conftest --destination .security-tools
+      - name: Test policy rejection cases
+        run: .security-tools/conftest verify --policy security/policy
+      - name: Validate normalized Compose
+        run: |
+          mkdir -p security-reports
+          docker compose --env-file /dev/null -f docker/compose.yaml config --format json > security-reports/compose.json
+          .security-tools/conftest test security-reports/compose.json --policy security/policy
+          docker compose --env-file /dev/null -f docker/compose.security.yaml config --format json > security-reports/fixture.json
+          .security-tools/conftest test security-reports/fixture.json --policy security/policy
+  dast:
+    name: ZAP active disposable API
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Start isolated synthetic API
+        env:
+          FIXTURE_PROJECT: speedtester-security-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          docker compose --env-file /dev/null -f docker/compose.security.yaml -p "$FIXTURE_PROJECT" build api
+          docker compose --env-file /dev/null -f docker/compose.security.yaml -p "$FIXTURE_PROJECT" up -d db --wait
+          docker compose --env-file /dev/null -f docker/compose.security.yaml -p "$FIXTURE_PROJECT" run --rm --no-deps api \
+            python -c "$(cat scripts/seed_demo.py)" --db /data/fixture.db
+          docker compose --env-file /dev/null -f docker/compose.security.yaml -p "$FIXTURE_PROJECT" up -d api --wait
+      - name: Active API scan and high-risk gate
+        env:
+          FIXTURE_PROJECT: speedtester-security-${{ github.run_id }}-${{ github.run_attempt }}
+        run: python3 scripts/zap_scan.py active --project "$FIXTURE_PROJECT" --output security-reports/zap-active
+      - name: Retain synthetic scan evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: zap-active-synthetic
+          path: |
+            security-reports/zap-active/zap.json
+            security-reports/zap-active/zap.html
+            security-reports/zap-active/summary.json
+            security-reports/zap-active/execution.log
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Destroy disposable stack and volume
+        if: always()
+        env:
+          FIXTURE_PROJECT: speedtester-security-${{ github.run_id }}-${{ github.run_attempt }}
+        run: docker compose --env-file /dev/null -f docker/compose.security.yaml -p "$FIXTURE_PROJECT" down --volumes --remove-orphans

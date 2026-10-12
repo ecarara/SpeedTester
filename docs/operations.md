@@ -291,9 +291,11 @@ Somente modo local/demonstração pode desabilitar login explicitamente.
 ## Deploy automático no staging
 
 `scripts/deploy.py` consulta a revisão atual de `main` e exige sucesso dos
-workflows CI, Container images e SonarQube nessa revisão. O staging busca a
+workflows CI, Container images, SonarQube e Security nessa revisão. O staging busca a
 versão; não há chave SSH do staging nos secrets do repositório público.
-As imagens precisam ter label da revisão e são fixadas por digest.
+As imagens precisam ter label da revisão, digest e attestation verificada.
+Consulte [Segurança no pipeline](security-pipeline.md) para instalação dos
+verificadores e configuração do Baseline obrigatório.
 O script preserva volumes, para API/collector/backup, cria snapshot consistente,
 sobe a versão e aguarda liveness real do collector. Uma falha restaura o snapshot
 e sobe as imagens anteriores; arquivos da versão anterior são preservados.

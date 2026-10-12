@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
 
-FROM python:3.11-slim@sha256:be1575ed968de893bd54f4c56315ff7c4736ce522c1bca08fd521731aafc0d76
+FROM python:3.11.17-slim-bookworm@sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89
 
 ARG TARGETARCH
 
 # The collector includes the fast.com runner, official Ookla CLI and iperf3.
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends ca-certificates curl iperf3 iproute2 iputils-ping libidn2-0 tar \
     && if [ "$TARGETARCH" = "amd64" ] || [ -z "$TARGETARCH" ]; then \
        curl -fsSL https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-linux-x86_64.tgz -o /tmp/ookla-speedtest.tgz \
@@ -19,7 +20,8 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY app/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && python -m pip uninstall -y setuptools wheel pip
 
 # Application code (shared, collector, api).
 # Stale __pycache__ from the build host (wrong Python version) is cleared first

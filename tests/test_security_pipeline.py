@@ -2,10 +2,14 @@
 # Copyright (C) 2026 Edson Angelo Carara
 """Trust failures and scan isolation; all fixtures are disposable and offline."""
 from importlib.util import module_from_spec, spec_from_file_location
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import tempfile
+import tarfile
+import sys
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -23,6 +27,43 @@ def module(name, path):
 deploy = module('security_deploy', 'scripts/deploy.py')
 zap = module('security_zap', 'scripts/zap_scan.py')
 grype = module('security_grype', 'scripts/check_image_report.py')
+installer = module('security_installer', 'scripts/install_security_tools.py')
+
+
+class InstallerTests(unittest.TestCase):
+    def test_only_verified_binary_is_installed_and_archive_paths_are_not_extracted(self):
+        stream = io.BytesIO()
+        with tarfile.open(fileobj=stream, mode='w:gz') as archive:
+            for name in ('../../escaped', 'release/bin/gh'):
+                member = tarfile.TarInfo(name)
+                member.size = 6
+                archive.addfile(member, io.BytesIO(b'binary'))
+        payload = stream.getvalue()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / 'security').mkdir()
+            asset = {'name': 'fixture.tar.gz', 'sha256': hashlib.sha256(payload).hexdigest()}
+            manifest = {'gh': {'version': 'fixture', 'repository': 'cli/cli',
+                               'archives': {'Linux-x86_64': asset}}}
+            (root / 'security/tools.json').write_text(json.dumps(manifest))
+            with patch.object(installer, 'ROOT', root), patch.object(installer.platform, 'system', return_value='Linux'), \
+                 patch.object(installer.platform, 'machine', return_value='x86_64'), \
+                 patch.object(installer.urllib.request, 'urlopen', side_effect=lambda *a, **k: io.BytesIO(payload)):
+                installer.install('gh', root / 'bin')
+                self.assertEqual((root / 'bin/gh').read_bytes(), b'binary')
+                self.assertEqual((root / 'bin/gh').stat().st_mode & 0o777, 0o755)
+                self.assertFalse((root.parent / 'escaped').exists())
+                asset['sha256'] = '0' * 64
+                (root / 'security/tools.json').write_text(json.dumps(manifest))
+                with self.assertRaisesRegex(ValueError, 'checksum'):
+                    installer.install('gh', root / 'untrusted')
+                self.assertFalse((root / 'untrusted').exists())
+
+    def test_cli_installs_only_requested_tools(self):
+        with patch.object(sys, 'argv', ['installer', 'gh', 'conftest', '--destination', '/tmp/fixture']), \
+             patch.object(installer, 'install') as install:
+            installer.main()
+        self.assertEqual([call.args[0] for call in install.call_args_list], ['gh', 'conftest'])
 
 
 class ImageGateTests(unittest.TestCase):
@@ -99,6 +140,35 @@ class AttestationTests(unittest.TestCase):
 
 
 class ZAPTests(unittest.TestCase):
+    def test_active_scan_uses_fixed_target_and_disposable_data_then_cleans_up(self):
+        project = 'speedtester-security-1-1'
+        container = {'Config': {'Env': ['SPEEDTEST_SECURITY_FIXTURE=true', 'API_ADMIN_TOKEN=security-fixture-admin']},
+                     'Mounts': [{'Destination': '/data', 'Type': 'volume', 'Name': project + '_fixture_data'}]}
+        calls = []
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / 'scan'
+            def execute(args, **kwargs):
+                calls.append(args)
+                if 'zap-api-scan.py' in args:
+                    (output / 'zap.json').write_text(json.dumps({'site': [{'alerts': []}]}))
+                return SimpleNamespace(returncode=0)
+            with patch.dict(os.environ, {'GITHUB_ACTIONS': 'true'}), \
+                 patch.object(zap, 'command', side_effect=[json.dumps([container]), json.dumps([{'Internal': True}]), '', '{}']), \
+                 patch.object(zap.subprocess, 'run', side_effect=execute):
+                self.assertEqual(zap.scan('active', output, project=project)['status'], 'passed')
+            self.assertIn(project + '_isolated', calls[0])
+            self.assertIn('/zap/wrk/openapi.json', calls[0])
+            self.assertEqual(calls[-1][:3], ['docker', 'rm', '-f'])
+
+    def test_failed_execution_cleans_up_and_does_not_accept_a_missing_report(self):
+        with tempfile.TemporaryDirectory() as temporary, \
+             patch.object(zap.subprocess, 'run', return_value=SimpleNamespace(returncode=3)) as execute:
+            with self.assertRaises(RuntimeError):
+                zap.scan('baseline', Path(temporary) / 'scan', target='https://fixture.example.invalid/')
+            self.assertEqual(execute.call_count, 2)
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaises(ValueError):
+                zap.scan('baseline', Path(temporary) / 'scan', target='https://user:secret@fixture.example.invalid/')
     def test_active_scan_rejects_staging_and_non_ci_before_starting_docker(self):
         for environment, project in (({}, 'speedtester-security-1-1'), ({'GITHUB_ACTIONS': 'true'}, 'docker')):
             with patch.dict(os.environ, environment, clear=True), patch.object(zap, 'command') as command:

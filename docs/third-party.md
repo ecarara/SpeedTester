@@ -26,3 +26,7 @@ checksum fixos; atualizações devem revisar o checksum e este inventário.
 
 GPL-3.0-or-later é a licença do SpeedTester, não uma afirmação de que cada
 componente de terceiros use a mesma licença.
+
+O `age` é compilado na versão 1.3.2 com Go 1.27.2 em estágio separado;
+o compilador não é incluído no runtime. Grype, Conftest e ZAP são ferramentas
+de verificação; suas versões estão em `security/tools.json`.

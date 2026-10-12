@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
 [Unit]
-Description=Deploy a SpeedTester revision approved by CI and SonarQube
+Description=Deploy SpeedTester after quality, security and provenance verification
 After=docker.service network-online.target
 Requires=docker.service
 

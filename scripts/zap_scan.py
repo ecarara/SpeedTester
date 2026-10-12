@@ -67,7 +67,7 @@ def scan(mode, output, project=None, target=None):
         os.chown(output, uid, gid)
     base = ['docker', 'run', '--rm', '--name', 'speedtester-zap-' + str(os.getpid()),
             '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
-            '--user', f'{uid}:{gid}', '-e', 'HOME=/zap/wrk/zap-home',
+            '--user', f'{uid}:{gid}', '--workdir', '/zap/wrk', '-e', 'HOME=/zap/wrk/zap-home',
             '--memory', '1g', '--cpus', '1', '--pids-limit', '256',
             '-v', str(output.resolve()) + ':/zap/wrk:Z']
     if mode == 'active':

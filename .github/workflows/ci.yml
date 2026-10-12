@@ -83,11 +83,13 @@ jobs:
           docker compose -f docker/compose.yaml up -d db api --wait --wait-timeout 120
           curl --fail http://127.0.0.1:8000/health
           curl --fail http://127.0.0.1:8000/api/config
+          curl --fail http://127.0.0.1:8000/api/chart.png --output /tmp/speedtester-chart.png
+          test "$(head -c 8 /tmp/speedtester-chart.png | od -An -tx1 | tr -d ' \n')" = 89504e470d0a1a0a
           test "$(docker compose -f docker/compose.yaml exec -T api id -u)" = 10001
           docker compose -f docker/compose.yaml run --rm backup /opt/speedtester-scripts/backup.sh
       - name: Validate encrypted off-host backup and restore
         run: |
-          docker compose -f docker/compose.yaml run --rm --entrypoint bash \
+          docker compose -f docker/compose.yaml run --rm --entrypoint bash -e TMPDIR=/backups \
             -v "${{ github.workspace }}:/workspace:ro" backup /workspace/scripts/test_backup.sh
       - name: Clean up
         if: always()

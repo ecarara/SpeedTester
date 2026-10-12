@@ -26,9 +26,8 @@ deny contains sprintf("%s: memory limit must be positive and <= 1 GiB", [name]) 
 }
 
 valid_memory(limit) if {
-    is_number(limit)
-    limit > 0
-    limit <= 1073741824
+    to_number(limit) > 0
+    to_number(limit) <= 1073741824
 }
 
 deny contains sprintf("%s: PID limit is required", [name]) if {

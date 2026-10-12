@@ -3,7 +3,7 @@
 # CI fixture only: separate project/network/volume; no collector or host data.
 services:
   db:
-    image: python:3.11.17-slim-bookworm@sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89
+    image: python:3.11.17-slim-trixie@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce
     command: ["sh", "-c", "chown -R 10001:10001 /data && sleep infinity"]
     volumes: ["fixture_data:/data"]
     read_only: true

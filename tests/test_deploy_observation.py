@@ -89,7 +89,7 @@ class DeployTests(IntegrationFixture):
 
     def test_healthy_deploy_takes_backup_before_start_and_records_digest(self):
         root,release,images=self.candidate(); calls=[]
-        with patch.object(deployment,'release_source',return_value=release),patch.object(deployment,'image_digests',return_value=images),patch.object(deployment,'run',side_effect=lambda *args:calls.append(args) or ''),patch.object(deployment,'backup_database',side_effect=lambda *args:calls.append(('snapshot',)) or 'snapshot.db'),patch.object(deployment,'validate_service'),patch.object(deployment,'validate_policy'),patch.object(deployment,'staging_baseline',return_value='private-report'):
+        with patch.object(deployment,'release_source',return_value=release),patch.object(deployment,'image_digests',return_value=images),patch.object(deployment,'fresh_image_gate',return_value='private-image-report'),patch.object(deployment,'run',side_effect=lambda *args:calls.append(args) or ''),patch.object(deployment,'backup_database',side_effect=lambda *args:calls.append(('snapshot',)) or 'snapshot.db'),patch.object(deployment,'validate_service'),patch.object(deployment,'validate_policy'),patch.object(deployment,'staging_baseline',return_value='private-report'):
             self.assertEqual(deployment.deploy(root,'a'*40,'example','db','backups'),'deployed')
         snapshot_index=calls.index(('snapshot',))
         start_index=next(i for i,call in enumerate(calls) if 'up' in call)
@@ -103,7 +103,7 @@ class DeployTests(IntegrationFixture):
 
     def test_unhealthy_release_restores_snapshot_and_restarts_previous_images(self):
         root,release,images=self.candidate();calls=[]
-        with patch.object(deployment,'release_source',return_value=release),patch.object(deployment,'image_digests',return_value=images),patch.object(deployment,'run',side_effect=lambda *args:calls.append(args) or ''),patch.object(deployment,'backup_database',return_value='snapshot.db'),patch.object(deployment,'restore_database') as restore,patch.object(deployment,'validate_service',side_effect=RuntimeError('not healthy')),patch.object(deployment,'validate_policy'):
+        with patch.object(deployment,'release_source',return_value=release),patch.object(deployment,'image_digests',return_value=images),patch.object(deployment,'fresh_image_gate',return_value='private-image-report'),patch.object(deployment,'run',side_effect=lambda *args:calls.append(args) or ''),patch.object(deployment,'backup_database',return_value='snapshot.db'),patch.object(deployment,'restore_database') as restore,patch.object(deployment,'validate_service',side_effect=RuntimeError('not healthy')),patch.object(deployment,'validate_policy'):
             with self.assertRaises(RuntimeError):deployment.deploy(root,'a'*40,'example','db','backups')
         restore.assert_called_once()
         self.assertIn(str(root/'deploy-previous.json'),calls[-1])
@@ -114,7 +114,7 @@ class DeployTests(IntegrationFixture):
     def test_policy_failure_does_not_stop_running_services(self):
         root,release,images=self.candidate()
         with patch.object(deployment,'release_source',return_value=release), \
-             patch.object(deployment,'image_digests',return_value=images), \
+             patch.object(deployment,'image_digests',return_value=images),patch.object(deployment,'fresh_image_gate',return_value='private-image-report'), \
              patch.object(deployment,'run') as execute, \
              patch.object(deployment,'validate_policy',side_effect=RuntimeError('policy rejected')):
             with self.assertRaisesRegex(RuntimeError,'policy rejected'):
@@ -128,7 +128,7 @@ class DeployTests(IntegrationFixture):
         state['images']['api']=previous_image
         deployment.save_json(root/'deployment.json',state)
         with patch.object(deployment,'release_source',return_value=release), \
-             patch.object(deployment,'image_digests',return_value=images), \
+             patch.object(deployment,'image_digests',return_value=images),patch.object(deployment,'fresh_image_gate',return_value='private-image-report'), \
              patch.object(deployment,'run') as execute, patch.object(deployment,'validate_policy'), \
              patch.object(deployment,'backup_database',return_value='snapshot.db') as snapshot, \
              patch.object(deployment,'restore_database') as restore, patch.object(deployment,'validate_service'), \

@@ -38,6 +38,7 @@ from fastapi.staticfiles import StaticFiles
 
 from api.store import SampleStore
 from api import auth
+from api.request_limits import RequestSizeLimit, allow_request
 from shared.observation import report as observation_report
 from collector.quadrants import local_date_now
 from shared.settings import Settings, load_settings
@@ -46,6 +47,7 @@ settings = load_settings()
 store = SampleStore(settings.db_path)
 
 API_ERRORS = {401: {"description": "Authentication required"}, 403: {"description": "Forbidden or invalid CSRF"},
+              413: {"description": "Request body too large"},
               404: {"description": "Resource not found"}, 415: {"description": "JSON required"},
               422: {"description": "Invalid input"}, 429: {"description": "Rate limit exceeded"},
               503: {"description": "Administrative credential not configured"}}
@@ -71,27 +73,14 @@ async def api_rate_limit(request: Request, call_next):
         now = time.monotonic()
         client = request.client.host if request.client else "unknown"
         with _rate_limit_lock:
-            # Do not let a large number of short-lived client addresses turn
-            # the in-memory limiter into an unbounded allocation.
-            if client not in _rate_limit_buckets and len(_rate_limit_buckets) >= 10_000:
-                stale_clients = [
-                    key
-                    for key, client_bucket in _rate_limit_buckets.items()
-                    if not client_bucket or now - client_bucket[-1] >= 60
-                ]
-                for stale_client in stale_clients:
-                    _rate_limit_buckets.pop(stale_client, None)
-            bucket = _rate_limit_buckets[client]
-            while bucket and now - bucket[0] >= 60:
-                bucket.popleft()
-            limit = max(1, settings.api_rate_limit_per_minute)
-            if len(bucket) >= limit:
+            if not allow_request(_rate_limit_buckets, client, now,
+                                 settings.api_rate_limit_per_minute,
+                                 settings.api_rate_limit_max_clients):
                 return JSONResponse(
                     {"detail": "rate limit exceeded"},
                     status_code=429,
                     headers={"Retry-After": "60"},
                 )
-            bucket.append(now)
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
@@ -139,13 +128,8 @@ def login(request: Request, payload: dict = Body(...)):
     client = request.client.host if request.client else 'unknown'
     now = time.monotonic()
     with _rate_limit_lock:
-        stale = [key for key, bucket in _login_buckets.items() if not bucket or now-bucket[-1]>=60]
-        for key in stale:
-            del _login_buckets[key]
-        bucket = _login_buckets[client]
-        if len(bucket) >= 5:
+        if not allow_request(_login_buckets, client, now, 5, settings.api_rate_limit_max_clients):
             raise HTTPException(429, 'login rate limit exceeded', headers={'Retry-After': '60'})
-        bucket.append(now)
     username, password = payload.get('username'), payload.get('password')
     if not isinstance(username, str) or not isinstance(password, str) or len(password) > 1024:
         raise HTTPException(401, 'invalid credentials')
@@ -996,3 +980,7 @@ with open(_DASHBOARD_HTML_PATH, "r", encoding="utf-8") as _fh:
 def root():
     """Serve the dashboard HTML document."""
     return _DASHBOARD_HTML
+
+
+# Outermost middleware bounds bytes before authentication or JSON parsing.
+app.add_middleware(RequestSizeLimit, get_limit=lambda: settings.api_max_body_bytes)

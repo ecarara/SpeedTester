@@ -70,3 +70,10 @@ Antes da migração, o deploy para os clientes SQLite e cria snapshot usando a
 imagem anterior. Após subir a candidata, valida o collector e executa Baseline.
 Uma falha restaura o banco e os serviços anteriores; o estado de deploy só é
 atualizado após aprovação. Preserve snapshots, relatórios e imagens anteriores.
+
+## Verificação após publicação
+
+O deploy executa Grype novamente sobre os digests candidatos antes de parar os
+serviços, usando um banco válido de no máximo 24 horas. O timer semanal também
+reavalia os digests em execução. Falhas viram incidentes operacionais sem parar
+serviços existentes. Veja [operational-hardening.md](operational-hardening.md).

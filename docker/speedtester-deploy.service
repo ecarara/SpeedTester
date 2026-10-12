@@ -11,5 +11,5 @@ User=root
 UMask=0077
 EnvironmentFile=/etc/speedtester-deploy.conf
 ExecStart=/usr/bin/python3 /opt/speedtester/scripts/deploy.py --root ${DEPLOY_ROOT} --project ${COMPOSE_PROJECT} --db-volume ${DB_VOLUME} --backup-volume ${BACKUP_VOLUME}
-TimeoutStartSec=900
+TimeoutStartSec=4500
 

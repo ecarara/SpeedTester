@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+[Unit]
+Description=Check SpeedTester operational incidents
+After=docker.service network-online.target
+Requires=docker.service
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+EnvironmentFile=/etc/speedtester-deploy.conf
+EnvironmentFile=-/etc/speedtester-operations.conf
+ExecStart=/usr/bin/python3 /opt/speedtester/scripts/operations.py monitor --root ${DEPLOY_ROOT} --project ${COMPOSE_PROJECT} --backup-volume ${BACKUP_VOLUME} --state-dir ${OPERATIONS_STATE_DIR}
+TimeoutStartSec=900

@@ -47,3 +47,18 @@ fi
 # Retain only the requested backup window. The glob is intentionally scoped to
 # the backup directory and to files created by this script.
 find "$BACKUP_DIR" -type f \( -name 'speedtester-*.db' -o -name 'speedtester-*.db.age' \) -mtime "+$RETENTION_DAYS" -delete
+
+# Publish success only after integrity validation AND any configured transport.
+python3 - "$BACKUP_DIR/.last-success.json" "$(basename "$destination")" <<'PY'
+import json
+import os
+from pathlib import Path
+import sys
+import time
+marker = Path(sys.argv[1])
+temporary = marker.with_suffix('.tmp')
+temporary.write_text(json.dumps({'filename': sys.argv[2], 'completed_at': time.time(),
+                                 'remote_copy': bool(os.environ.get('BACKUP_REMOTE'))}))
+temporary.chmod(0o600)
+os.replace(temporary, marker)
+PY

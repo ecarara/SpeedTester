@@ -351,3 +351,9 @@ expiradas voltam a ser tentadas. O destinatário deve deduplicar pelo header
 falhas, o alerta fica visível como `failed`. Recuperação de conectividade e
 velocidade gera alerta informativo; nunca se envia uma notificação externa sem
 um destino configurado pelo operador.
+
+## Rotinas de segurança e manutenção
+
+Consulte [operational-hardening.md](operational-hardening.md) para HTTPS, limites
+de requisição, reavaliação das imagens implantadas, testes de recuperação,
+monitoramento com e-mail, pasta de backup para OneDrive e retenção de artefatos.

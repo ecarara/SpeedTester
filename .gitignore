@@ -31,3 +31,7 @@ deployment-backups/
 releases/
 security-reports/
 .security-tools/
+.deploy-status.json
+*.conf
+operations-state/
+backup-outbox/

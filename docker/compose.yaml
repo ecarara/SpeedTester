@@ -3,7 +3,10 @@
 
 services:
   db:
-    image: python:3.11.17-slim-trixie@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce
+    # Reuse the scanned runtime; deploy pins this to the verified backup digest.
+    image: ghcr.io/ecarara/speedtester-backup:${IMAGE_TAG:-main}
+    user: "0:0"
+    network_mode: none
     command: ["sh", "-c", "chown -R 10001:10001 /data && while true; do sleep 3600; done"]
     volumes:
       - db_data:/data

@@ -23,7 +23,7 @@ def verify_fixture(project):
         raise ValueError('Active scans require a disposable GitHub Actions fixture')
     containers = json.loads(command('docker', 'inspect', f'{project}-api-1'))
     container = containers[0]
-    env = dict(item.split('=', 1) for item in container['Config']['Env'])
+    env = {item.partition('=')[0]: item.partition('=')[2] for item in container['Config']['Env']}
     if env.get('SPEEDTEST_SECURITY_FIXTURE') != 'true' or env.get('API_ADMIN_TOKEN') != FIXTURE_TOKEN:
         raise ValueError('The target is not the synthetic API')
     mounts = [mount for mount in container['Mounts'] if mount['Destination'] == '/data']
@@ -51,6 +51,20 @@ def check_report(path):
     return result
 
 
+def prepare_target(mode, output, image, project, target):
+    hook = (ROOT / 'security/zap_runtime_hook.py').read_text()
+    if mode == 'active':
+        hook += '\n' + (ROOT / 'security/zap_api_hook.py').read_text()
+    (output / 'hook.py').write_text(hook)
+    if mode == 'active':
+        code = "import json,urllib.request;r=urllib.request.Request('http://127.0.0.1:8000/openapi.json',headers={'X-Admin-Token':'security-fixture-admin'});d=json.load(urllib.request.urlopen(r));d['servers']=[{'url':'http://api:8000'}];print(json.dumps(d))"
+        (output / 'openapi.json').write_text(command('docker', 'exec', f'{project}-api-1', 'python', '-c', code))
+        return ['--network', f'{project}_isolated', image, 'zap-api-scan.py',
+                '-t', '/zap/wrk/openapi.json', '-f', 'openapi']
+    # Only this packaged passive scan is reachable from the staging mode.
+    return ['--network', 'host', image, 'zap-baseline.py', '-t', target, '-m', '1', '--autooff']
+
+
 def scan(mode, output, project=None, target=None):
     image = json.loads((ROOT / 'security/tools.json').read_text())['zap']['image']
     if mode == 'active':
@@ -64,23 +78,12 @@ def scan(mode, output, project=None, target=None):
     uid, gid = (os.getuid(), os.getgid()) if os.getuid() else (1000, 1000)
     if os.geteuid() == 0:
         os.chown(output, uid, gid)
-    hook = (ROOT / 'security/zap_runtime_hook.py').read_text()
-    if mode == 'active':
-        hook += '\n' + (ROOT / 'security/zap_api_hook.py').read_text()
-    (output / 'hook.py').write_text(hook)
+    scan_args = prepare_target(mode, output, image, project, target)
     base = ['docker', 'run', '--rm', '--name', 'speedtester-zap-' + str(os.getpid()),
             '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
             '--user', f'{uid}:{gid}', '--workdir', '/zap/wrk', '-e', 'HOME=/zap/wrk/zap-home',
             '--memory', '1g', '--cpus', '1', '--pids-limit', '256',
             '-v', str(output.resolve()) + ':/zap/wrk:Z']
-    if mode == 'active':
-        code = "import json,urllib.request;r=urllib.request.Request('http://127.0.0.1:8000/openapi.json',headers={'X-Admin-Token':'security-fixture-admin'});d=json.load(urllib.request.urlopen(r));d['servers']=[{'url':'http://api:8000'}];print(json.dumps(d))"
-        (output / 'openapi.json').write_text(command('docker', 'exec', f'{project}-api-1', 'python', '-c', code))
-        scan_args = ['--network', f'{project}_isolated', image, 'zap-api-scan.py',
-                     '-t', '/zap/wrk/openapi.json', '-f', 'openapi']
-    else:
-        # Only this packaged passive scan is reachable from the staging mode.
-        scan_args = ['--network', 'host', image, 'zap-baseline.py', '-t', target, '-m', '1', '--autooff']
     if os.geteuid() == 0:
         for file in output.iterdir():
             os.chown(file, uid, gid)

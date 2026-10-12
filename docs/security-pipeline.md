@@ -38,6 +38,8 @@ repositório oficial, `.github/workflows/images.yml`, `refs/heads/main`, o SHA
 esperado e runner hospedado no GitHub. Bundles públicos permitem verificação
 sem token GitHub no staging. A label de revisão permanece como checagem
 adicional. Releases por tag não sobrescrevem a tag `sha-...` usada pelo deploy.
+O inicializador do volume usa a mesma imagem verificada do backup, sem rede;
+assim não há um runtime auxiliar fora dos scans e da verificação de proveniência.
 
 ## Instalação no host
 

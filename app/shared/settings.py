@@ -61,11 +61,17 @@ class Settings:
     api_session_seconds: int = 28800
     api_cookie_secure: bool = False
     measurement_target_controlled: bool = False
+    api_max_body_bytes: int = 65536
+    api_rate_limit_max_clients: int = 10000
 
     def __post_init__(self) -> None:
         ZoneInfo(self.timezone)
         if not 60 <= self.api_session_seconds <= 86400:
             raise ValueError("api_session_seconds must be between 60 and 86400")
+        if not 1024 <= self.api_max_body_bytes <= 1048576:
+            raise ValueError('api_max_body_bytes must be between 1024 and 1048576')
+        if not 1 <= self.api_rate_limit_max_clients <= 10000:
+            raise ValueError('api_rate_limit_max_clients must be between 1 and 10000')
         positive = ('sample_interval_seconds', 'sample_duration_seconds', 'measurements_per_quadrant',
                     'max_bytes', 'iperf3_duration_seconds', 'iperf3_parallel_streams',
                     'measurement_timeout_seconds', 'api_rate_limit_per_minute',
@@ -199,4 +205,6 @@ def load_settings() -> Settings:
         api_session_seconds=_env_int("API_SESSION_SECONDS", 28800),
         api_cookie_secure=_env_bool("API_COOKIE_SECURE", False),
         measurement_target_controlled=_env_bool("MEASUREMENT_TARGET_CONTROLLED", False),
+        api_max_body_bytes=_env_int('API_MAX_BODY_BYTES', 65536),
+        api_rate_limit_max_clients=_env_int('API_RATE_LIMIT_MAX_CLIENTS', 10000),
     )

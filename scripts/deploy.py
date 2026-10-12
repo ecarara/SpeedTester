@@ -184,6 +184,25 @@ def validate_service(command):
     raise RuntimeError('Collector failed health validation')
 
 
+def fresh_image_gate(root, release, images, sha):
+    parent = Path(os.environ.get('SECURITY_REPORT_ROOT', '/var/lib/speedtester-security'))
+    parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    output = parent / ('recheck-' + stamp + '-' + sha)
+    with tempfile.TemporaryDirectory(prefix='speedtester-image-gate-') as directory:
+        state = Path(directory) / 'candidate.json'
+        save_json(state, {'images': images})
+        run('python3', str(release/'scripts/recheck_images.py'), '--state', str(state), '--output', str(output))
+    return str(output)
+
+
+def deployment_status(root, status):
+    path = root / '.deploy-status.json'
+    previous = json.loads(path.read_text()) if path.exists() else {}
+    since = previous.get('since', time.time()) if previous.get('status') == status else time.time()
+    save_json(path, {'status': status, 'since': since, 'checked_at': time.time()})
+
+
 def deploy(root, sha, project, db_volume, backup_volume):
     if not re.fullmatch(r'[0-9a-f]{40}', sha):
         raise ValueError('Expected full Git commit SHA')
@@ -193,6 +212,7 @@ def deploy(root, sha, project, db_volume, backup_volume):
         return 'unchanged'
     release = release_source(root, sha)
     images = image_digests(sha)
+    image_report = fresh_image_gate(root, release, images, sha)
     if not previous:
         previous = {'release_dir': str(root), 'images': {service: json.loads(run('docker', 'inspect', f'{project}-{service}-1'))[0]['Image'] for service in SERVICES}}
     old = compose_command(root, Path(previous['release_dir']), previous['images'], project, db_volume, backup_volume, 'previous')
@@ -212,7 +232,8 @@ def deploy(root, sha, project, db_volume, backup_volume):
         state = {'revision': sha, 'release_dir': str(release), 'images': images, 'backup': snapshot,
                  'deployed_at': datetime.now(timezone.utc).isoformat(),
                  'security': {'attestation': 'verified', 'policy': 'passed',
-                              'zap_mode': 'baseline', 'baseline_report': baseline_report}}
+                              'zap_mode': 'baseline', 'baseline_report': baseline_report,
+                              'image_report': image_report}}
         save_json(root/'previous-deployment.json', previous)
         save_json(state_file, state)
         return 'deployed'
@@ -234,11 +255,18 @@ def main():
     args.root = args.root.resolve()
     with (args.root/'.deployment.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        sha = eligible_revision()
-        if not sha:
-            print('deploy-waiting-for-checks')
-            return
-        print(deploy(args.root, sha, args.project, args.db_volume, args.backup_volume))
+        try:
+            sha = eligible_revision()
+            if not sha:
+                deployment_status(args.root, 'waiting')
+                print('deploy-waiting-for-checks')
+                return
+            result = deploy(args.root, sha, args.project, args.db_volume, args.backup_volume)
+            deployment_status(args.root, 'passed')
+            print(result)
+        except Exception:
+            deployment_status(args.root, 'failed')
+            raise
 
 
 if __name__ == '__main__':

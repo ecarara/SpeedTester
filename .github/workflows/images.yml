@@ -10,7 +10,7 @@ permissions:
 jobs:
   pull-request:
     name: PR image scan ${{ matrix.service }}
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || (github.repository == 'ecarara/SpeedTester' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/codex/native-dependency-updates')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:

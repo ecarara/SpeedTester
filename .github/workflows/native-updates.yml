@@ -1,0 +1,47 @@
+name: Native dependency updates
+on:
+  schedule:
+    - cron: '23 12 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+concurrency:
+  group: native-dependency-updates
+  cancel-in-progress: false
+jobs:
+  propose:
+    if: github.repository == 'ecarara/SpeedTester'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: python3 scripts/update_native_tools.py
+      - name: Create or update a reviewed dependency PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet; then exit 0; fi
+          gh auth setup-git
+          git config user.name 'SpeedTester maintenance'
+          git config user.email 'maintenance@users.noreply.github.com'
+          git switch -C codex/native-dependency-updates
+          git add docker/backup/Dockerfile docker/collector/Dockerfile docs/third-party.md
+          git commit -m 'Update native tools from stable upstream releases'
+          git push --force-with-lease origin HEAD:codex/native-dependency-updates
+          if ! gh pr view codex/native-dependency-updates --json number >/dev/null 2>&1; then
+          cat > /tmp/native-update-body.md <<'BODY'
+          Updates OpenSSH, iPerf3 or age from stable official upstream releases, with pinned source archive SHA256 checksums. Go modules remain verified through the Go checksum database.
+
+          Merge only after CI, image scans and disposable ZAP tests pass. Deployment additionally requires SonarQube, fresh image scans and build attestations. No automatic merge.
+          BODY
+          gh pr create --base main --head codex/native-dependency-updates --title 'Update native runtime tools' --body-file /tmp/native-update-body.md
+          fi
+          # workflow_dispatch is explicitly allowed to trigger with GITHUB_TOKEN.
+          for workflow in ci.yml images.yml security.yml; do
+            gh workflow run "$workflow" --ref codex/native-dependency-updates
+          done

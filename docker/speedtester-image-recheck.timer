@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+[Unit]
+Description=Recheck deployed SpeedTester images with current vulnerability data
+[Timer]
+OnCalendar=Sun *-*-* 03:10:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=speedtester-image-recheck.service
+[Install]
+WantedBy=timers.target

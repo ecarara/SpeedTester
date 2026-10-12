@@ -33,7 +33,7 @@ COPY --from=age-builder /go/pkg/mod/filippo.io/age@v1.3.2/LICENSE /usr/share/doc
 COPY --from=ssh-builder /tmp/openssh-10.6p1/ssh /tmp/openssh-10.6p1/scp /usr/local/bin/
 COPY --from=ssh-builder /tmp/openssh-10.6p1/LICENCE /usr/share/doc/openssh/LICENCE
 
-COPY scripts/backup.sh /opt/speedtester-scripts/backup.sh
+COPY scripts/backup.sh scripts/restore.py scripts/check_restore.py scripts/export_backup.py /opt/speedtester-scripts/
 RUN chmod 0755 /opt/speedtester-scripts/backup.sh
 
 CMD ["sh", "-c", "set -e; while true; do /opt/speedtester-scripts/backup.sh; sleep \"$BACKUP_INTERVAL_SECONDS\"; done"]

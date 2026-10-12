@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+[Unit]
+Description=Validate SpeedTester backup recovery and export
+After=docker.service network-online.target
+Requires=docker.service
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+EnvironmentFile=/etc/speedtester-deploy.conf
+EnvironmentFile=-/etc/speedtester-operations.conf
+EnvironmentFile=-/opt/speedtester/.env
+ExecStart=/usr/bin/python3 /opt/speedtester/scripts/maintenance.py backup --root ${DEPLOY_ROOT} --backup-volume ${BACKUP_VOLUME} --state-dir ${OPERATIONS_STATE_DIR} --reports ${SECURITY_REPORT_ROOT} --outbox ${BACKUP_OUTBOX}
+TimeoutStartSec=3900

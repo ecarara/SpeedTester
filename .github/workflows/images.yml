@@ -94,6 +94,8 @@ jobs:
           IMAGE: ghcr.io/ecarara/speedtester-backup@${{ steps.image.outputs.digest }}
         run: |
           for platform in linux/amd64 linux/arm64; do
+            docker run --rm --pull always --network none --platform "$platform" --entrypoint python "$IMAGE" \
+              -c 'import pathlib,sys;expected={"amd64":62,"arm64":183}[sys.argv[1]];assert all(int.from_bytes(pathlib.Path("/usr/local/bin/"+name).read_bytes()[18:20],"little")==expected for name in ("age","age-keygen","ssh","scp"))' "${platform#linux/}"
             docker run --rm --network none --platform "$platform" --entrypoint age "$IMAGE" --version
             docker run --rm --network none --platform "$platform" --entrypoint ssh "$IMAGE" -V
           done

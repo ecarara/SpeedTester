@@ -259,7 +259,7 @@ class ZAPTests(unittest.TestCase):
             self.assertEqual(result['status'], 'passed')
             self.assertIn('zap-baseline.py', calls[0])
             self.assertNotIn('zap-api-scan.py', calls[0])
-            self.assertNotIn('--hook', calls[0])
+            self.assertNotIn('security-fixture-admin', (output / 'hook.py').read_text())
 
 
 if __name__ == '__main__':

@@ -7,7 +7,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 from urllib.parse import urlsplit
 
@@ -65,6 +64,10 @@ def scan(mode, output, project=None, target=None):
     uid, gid = (os.getuid(), os.getgid()) if os.getuid() else (1000, 1000)
     if os.geteuid() == 0:
         os.chown(output, uid, gid)
+    hook = (ROOT / 'security/zap_runtime_hook.py').read_text()
+    if mode == 'active':
+        hook += '\n' + (ROOT / 'security/zap_api_hook.py').read_text()
+    (output / 'hook.py').write_text(hook)
     base = ['docker', 'run', '--rm', '--name', 'speedtester-zap-' + str(os.getpid()),
             '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges:true',
             '--user', f'{uid}:{gid}', '--workdir', '/zap/wrk', '-e', 'HOME=/zap/wrk/zap-home',
@@ -73,16 +76,15 @@ def scan(mode, output, project=None, target=None):
     if mode == 'active':
         code = "import json,urllib.request;r=urllib.request.Request('http://127.0.0.1:8000/openapi.json',headers={'X-Admin-Token':'security-fixture-admin'});d=json.load(urllib.request.urlopen(r));d['servers']=[{'url':'http://api:8000'}];print(json.dumps(d))"
         (output / 'openapi.json').write_text(command('docker', 'exec', f'{project}-api-1', 'python', '-c', code))
-        shutil.copyfile(ROOT / 'security/zap_api_hook.py', output / 'hook.py')
         scan_args = ['--network', f'{project}_isolated', image, 'zap-api-scan.py',
-                     '-t', '/zap/wrk/openapi.json', '-f', 'openapi', '--hook', '/zap/wrk/hook.py']
+                     '-t', '/zap/wrk/openapi.json', '-f', 'openapi']
     else:
         # Only this packaged passive scan is reachable from the staging mode.
         scan_args = ['--network', 'host', image, 'zap-baseline.py', '-t', target, '-m', '1', '--autooff']
     if os.geteuid() == 0:
         for file in output.iterdir():
             os.chown(file, uid, gid)
-    args = base + scan_args + ['-I', '-T', '5', '-J', 'zap.json', '-r', 'zap.html', '-s',
+    args = base + scan_args + ['--hook', '/zap/wrk/hook.py', '-I', '-T', '5', '-J', 'zap.json', '-r', 'zap.html', '-s',
                              '-z', '-silent -dir /zap/wrk/zap-home -host 127.0.0.1 '
                              '-config api.addrs.addr.name=127.0.0.1 '
                              '-config api.addrs.addr.regex=false '

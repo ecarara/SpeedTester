@@ -27,7 +27,7 @@ jobs:
         env:
           PYTHONPATH: app
         run: |
-          python -m coverage run --source=app,scripts -m unittest discover -s tests -v
+          python -m coverage run --source=app,scripts,security -m unittest discover -s tests -v
           python -m coverage xml
       - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium

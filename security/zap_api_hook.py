@@ -4,6 +4,8 @@
 
 
 def zap_started(zap, target):
+    # A private -dir starts without the packaged user's API scan policy.
+    zap.ascan.import_scan_policy('/home/zap/.ZAP/policies/API-Minimal.policy')
     zap.replacer.add_rule(description='synthetic API authentication', enabled='true',
         matchtype='REQ_HEADER', matchregex='false', matchstring='X-Admin-Token',
         replacement='security-fixture-admin', initiators='', url=r'^http://api:8000/.*')

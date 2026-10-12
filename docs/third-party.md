@@ -30,3 +30,6 @@ componente de terceiros use a mesma licença.
 O `age` é compilado na versão 1.3.2 com Go 1.27.2 em estágio separado;
 o compilador não é incluído no runtime. Grype, Conftest e ZAP são ferramentas
 de verificação; suas versões estão em `security/tools.json`.
+O cliente OpenSSH 10.6p1 também é compilado em estágio separado, com source
+e checksum fixados, pois a versão da distribuição mantém uma Critical sem
+backport. Somente `ssh` e `scp` são incluídos na imagem de backup.

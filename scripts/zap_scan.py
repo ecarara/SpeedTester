@@ -83,7 +83,7 @@ def scan(mode, output, project=None, target=None):
         for file in output.iterdir():
             os.chown(file, uid, gid)
     args = base + scan_args + ['-I', '-T', '5', '-J', 'zap.json', '-r', 'zap.html', '-s',
-                             '-z', '-dir /zap/wrk/zap-home -host 127.0.0.1 '
+                             '-z', '-silent -dir /zap/wrk/zap-home -host 127.0.0.1 '
                              '-config api.addrs.addr.name=127.0.0.1 '
                              '-config api.addrs.addr.regex=false '
                              '-config ascan.maxScanDurationInMins=10']

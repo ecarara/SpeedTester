@@ -88,6 +88,15 @@ jobs:
           .security-tools/grype "registry:$IMAGE" --platform linux/amd64 -o json > security-reports/grype-amd64.json
           .security-tools/grype "registry:$IMAGE" --platform linux/arm64 -o json > security-reports/grype-arm64.json
           python3 scripts/check_image_report.py security-reports/grype-amd64.json security-reports/grype-arm64.json
+      - name: Verify backup tool executables on both architectures
+        if: matrix.service == 'backup'
+        env:
+          IMAGE: ghcr.io/ecarara/speedtester-backup@${{ steps.image.outputs.digest }}
+        run: |
+          for platform in linux/amd64 linux/arm64; do
+            docker run --rm --network none --platform "$platform" --entrypoint age "$IMAGE" --version
+            docker run --rm --network none --platform "$platform" --entrypoint ssh "$IMAGE" -V
+          done
       - name: Attest the scanned image digest
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:

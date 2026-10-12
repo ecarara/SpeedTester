@@ -29,6 +29,7 @@ zap = module('security_zap', 'scripts/zap_scan.py')
 grype = module('security_grype', 'scripts/check_image_report.py')
 installer = module('security_installer', 'scripts/install_security_tools.py')
 runtime_hook = module('security_runtime_hook', 'security/zap_runtime_hook.py')
+api_hook = module('security_api_hook', 'security/zap_api_hook.py')
 
 
 class InstallerTests(unittest.TestCase):
@@ -186,6 +187,18 @@ class AttestationTests(unittest.TestCase):
 
 
 class ZAPTests(unittest.TestCase):
+    def test_active_hook_selects_imported_policy_and_scopes_dummy_credentials(self):
+        from unittest.mock import Mock
+        client = SimpleNamespace(ascan=Mock(scan_policy_names=['API Minimal']), replacer=Mock())
+        api_hook.zap_started(client, '/zap/wrk/openapi.json')
+        args = client.replacer.add_rule.call_args.kwargs
+        self.assertEqual(args['replacement'], zap.FIXTURE_TOKEN)
+        self.assertEqual(args['url'], r'^http://api:8000/.*')
+        self.assertEqual(api_hook.zap_active_scan(client, 'http://api:8000/', 'API-Minimal'),
+                         (client, 'http://api:8000/', 'API Minimal'))
+        client.ascan.scan_policy_names = []
+        with self.assertRaises(ValueError):
+            api_hook.zap_started(client, '/zap/wrk/openapi.json')
     def test_runtime_hook_keeps_listener_and_client_on_ipv4_loopback(self):
         class Client:
             def __init__(self, **kwargs):

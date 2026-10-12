@@ -1,6 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
 
+FROM python:3.11.17-slim-trixie@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce AS iperf-builder
+RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends build-essential libssl-dev pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+ADD --checksum=sha256:1c0d0fb02c52626111d6e132db80edfbf27bbaff8bd9245df2a371dcb0b35a92 \
+    https://github.com/esnet/iperf/releases/download/3.22/iperf-3.22.tar.gz /tmp/iperf.tar.gz
+RUN tar -xzf /tmp/iperf.tar.gz -C /tmp \
+    && cd /tmp/iperf-3.22 \
+    && ./configure --disable-shared --enable-static --without-sctp --with-openssl \
+    && make -j2
+
 FROM python:3.11.17-slim-trixie@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce
 
 ARG TARGETARCH
@@ -8,15 +19,17 @@ ARG TARGETARCH
 # The collector includes the fast.com runner, official Ookla CLI and iperf3.
 RUN apt-get update \
     && apt-get upgrade -y \
-    && apt-get install -y --no-install-recommends ca-certificates curl iperf3 iproute2 iputils-ping libidn2-0 tar \
+    && apt-get install -y --no-install-recommends ca-certificates iproute2 iputils-ping libidn2-0 tar \
     && if [ "$TARGETARCH" = "amd64" ] || [ -z "$TARGETARCH" ]; then \
-       curl -fsSL https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-linux-x86_64.tgz -o /tmp/ookla-speedtest.tgz \
+       python -c "import urllib.request; urllib.request.urlretrieve('https://install.speedtest.net/app/cli/ookla-speedtest-1.2.0-linux-x86_64.tgz','/tmp/ookla-speedtest.tgz')" \
     && echo "5690596c54ff9bed63fa3732f818a05dbc2db19ad36ed68f21ca5f64d5cfeeb7  /tmp/ookla-speedtest.tgz" | sha256sum -c - \
     && tar -xzf /tmp/ookla-speedtest.tgz -C /tmp \
     && install -m 0755 /tmp/speedtest /usr/local/bin/speedtest \
     && rm -rf /tmp/ookla-speedtest.tgz /tmp/speedtest; \
        elif [ "$TARGETARCH" != "arm64" ]; then exit 1; fi \
     && rm -rf /var/lib/apt/lists/*
+
+COPY --from=iperf-builder /tmp/iperf-3.22/src/iperf3 /usr/local/bin/iperf3
 
 WORKDIR /app
 COPY app/requirements.txt /app/requirements.txt

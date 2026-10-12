@@ -67,6 +67,16 @@ class InstallerTests(unittest.TestCase):
 
 
 class ImageGateTests(unittest.TestCase):
+    def test_cli_blocks_bad_images_and_accepts_complete_clean_evidence(self):
+        for blocking in (0, 1):
+            with patch.object(sys, 'argv', ['gate', '/tmp/fixture.json']), \
+                 patch.object(grype, 'check_report', return_value={'blocking_findings': blocking}):
+                if blocking:
+                    with self.assertRaises(SystemExit) as exit:
+                        grype.main()
+                    self.assertEqual(exit.exception.code, 1)
+                else:
+                    grype.main()
     def test_critical_always_blocks_and_high_requires_an_available_fix(self):
         cases = [('Critical', 'not-fixed', [], 1), ('Critical', 'fixed', ['2'], 1),
                  ('High', 'fixed', ['2'], 1), ('High', 'wont-fix', [], 0),
@@ -92,6 +102,41 @@ class ImageGateTests(unittest.TestCase):
 
 
 class AttestationTests(unittest.TestCase):
+    def test_policy_configuration_is_private_and_removed_after_verification(self):
+        observed = []
+        def execute(*args):
+            if 'config' in args:
+                return '{"private-example": "fixture"}'
+            path = Path(args[2])
+            observed.append(path)
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertIn('--all-namespaces', args)
+            self.assertEqual(json.loads(path.read_text())['private-example'], 'fixture')
+            return ''
+        with patch.object(deploy, 'run', side_effect=execute):
+            deploy.validate_policy(('docker', 'compose'), ROOT)
+        self.assertFalse(observed[0].exists())
+
+    def test_baseline_uses_private_report_root_and_only_baseline_mode(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ,
+                {'STAGING_BASELINE_URL': 'https://fixture.example.invalid/', 'SECURITY_REPORT_ROOT': temporary + '/reports'}), \
+             patch.object(deploy, 'run') as execute:
+            result = deploy.staging_baseline(ROOT, 'a' * 40)
+            self.assertEqual(Path(result).parent.stat().st_mode & 0o777, 0o700)
+            self.assertIn('baseline', execute.call_args.args)
+            self.assertNotIn('active', execute.call_args.args)
+        with patch.dict(os.environ, {'STAGING_BASELINE_URL': ''}):
+            with self.assertRaises(ValueError):
+                deploy.staging_baseline(ROOT, 'a' * 40)
+
+    def test_github_response_is_bounded_and_invalid_digest_is_rejected(self):
+        with patch.object(deploy.urllib.request, 'urlopen', return_value=io.BytesIO(b'{"safe":true}')):
+            self.assertEqual(deploy.fetch_json('https://fixture.example.invalid/'), {'safe': True})
+        with patch.object(deploy.urllib.request, 'urlopen', return_value=io.BytesIO(b'x' * (8 * 1024 * 1024 + 1))):
+            with self.assertRaises(ValueError):
+                deploy.fetch_json('https://fixture.example.invalid/')
+        with self.assertRaises(ValueError):
+            deploy.verify_attestation('image@sha256:invalid', 'a' * 40)
     def test_verifier_binds_digest_repo_source_ref_commit_and_workflow_without_token(self):
         image = 'ghcr.io/ecarara/speedtester-api@sha256:' + 'b' * 64
         with patch.object(deploy, 'fetch_json', return_value={'attestations': [{'bundle': {'example': 'signed-bundle'}}]}), \

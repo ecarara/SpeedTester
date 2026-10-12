@@ -93,12 +93,24 @@ jobs:
         env:
           IMAGE: ghcr.io/ecarara/speedtester-backup@${{ steps.image.outputs.digest }}
         run: |
-          for platform in linux/amd64 linux/arm64; do
-            docker run --rm --pull always --network none --platform "$platform" --entrypoint python "$IMAGE" \
+          docker buildx imagetools inspect --raw "$IMAGE" > /tmp/backup-index.json
+          python3 - <<'PY' > /tmp/backup-platforms.txt
+          import json
+          from pathlib import Path
+          manifests = json.loads(Path('/tmp/backup-index.json').read_text())['manifests']
+          for architecture in ('amd64', 'arm64'):
+              matches = [item for item in manifests if item.get('platform', {}).get('os') == 'linux'
+                         and item['platform'].get('architecture') == architecture]
+              assert len(matches) == 1, 'Expected one manifest for each runtime platform'
+              print('linux/' + architecture, matches[0]['digest'])
+          PY
+          while read -r platform digest; do
+            runtime_image="${IMAGE%@*}@$digest"
+            docker run --rm --pull always --network none --platform "$platform" --entrypoint python "$runtime_image" \
               -c 'import pathlib,sys;expected={"amd64":62,"arm64":183}[sys.argv[1]];assert all(int.from_bytes(pathlib.Path("/usr/local/bin/"+name).read_bytes()[18:20],"little")==expected for name in ("age","age-keygen","ssh","scp"))' "${platform#linux/}"
-            docker run --rm --network none --platform "$platform" --entrypoint age "$IMAGE" --version
-            docker run --rm --network none --platform "$platform" --entrypoint ssh "$IMAGE" -V
-          done
+            docker run --rm --network none --platform "$platform" --entrypoint age "$runtime_image" --version
+            docker run --rm --network none --platform "$platform" --entrypoint ssh "$runtime_image" -V
+          done < /tmp/backup-platforms.txt
       - name: Attest the scanned image digest
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:

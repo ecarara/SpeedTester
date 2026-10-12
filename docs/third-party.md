@@ -26,3 +26,14 @@ checksum fixos; atualizações devem revisar o checksum e este inventário.
 
 GPL-3.0-or-later é a licença do SpeedTester, não uma afirmação de que cada
 componente de terceiros use a mesma licença.
+
+O `age` é compilado na versão 1.3.2 com Go 1.27.2 em estágio separado;
+o compilador não é incluído no runtime. Grype, Conftest e ZAP são ferramentas
+de verificação; suas versões estão em `security/tools.json`.
+O cliente OpenSSH 10.6p1 também é compilado em estágio separado, com source
+e checksum fixados, pois a versão da distribuição mantém uma Critical sem
+backport. Somente `ssh` e `scp` são incluídos na imagem de backup.
+O iPerf3 3.22 é compilado em estágio separado com OpenSSL e checksum oficial,
+para usar as correções upstream ausentes na versão da distribuição. O collector
+não precisa de curl em produção; o download Ookla usa Python e mantém a
+verificação do checksum original.

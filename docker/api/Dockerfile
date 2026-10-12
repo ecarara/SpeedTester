@@ -1,16 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
 
-FROM python:3.11-slim@sha256:be1575ed968de893bd54f4c56315ff7c4736ce522c1bca08fd521731aafc0d76
+FROM python:3.11.17-slim-trixie@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce
 
-# matplotlib (Agg backend) needs a couple of system libs to render the chart.
+# Agg uses the bundled wheel libraries; no OpenGL or X11 runtime is needed.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libglib2.0-0 libgl1 \
+    && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY app/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    && python -m pip uninstall -y setuptools wheel pip
 
 # Application code + the static dashboard HTML.
 COPY app/ /app/

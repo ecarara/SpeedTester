@@ -65,17 +65,19 @@ class DeployTests(IntegrationFixture):
             service=args[-1].split('speedtester-')[1].split(':')[0]
             image={'Config':{'Labels':{'org.opencontainers.image.revision':sha}},'RepoDigests':[f'ghcr.io/ecarara/speedtester-{service}@sha256:'+'b'*64]}
             return json.dumps([image])
-        with patch.object(deployment,'run',side_effect=execute):
+        with patch.object(deployment,'run',side_effect=execute), patch.object(deployment,'verify_attestation') as verify:
             images=deployment.image_digests(sha)
             self.assertEqual(len(images),3)
             self.assertTrue(all('@sha256:' in image for image in images.values()))
+            self.assertEqual(verify.call_count,3)
 
     def test_checks_must_all_pass_on_current_revision_and_latest_run(self):
         sha='a'*40
-        runs=[{'id':i,'head_sha':sha,'name':name,'conclusion':'success'} for i,name in enumerate(deployment.REQUIRED)]
+        runs=[{'id':i,'head_sha':sha,'name':name,'path':path,'event':'push','head_branch':'main',
+               'status':'completed','conclusion':'success'} for i,(name,path) in enumerate(deployment.WORKFLOWS.items())]
         with patch.object(deployment,'fetch_json',side_effect=[{'commit':{'sha':sha}},{'workflow_runs':runs}]):
             self.assertEqual(deployment.eligible_revision(),sha)
-        runs.append({'id':100,'head_sha':sha,'name':'CI','conclusion':'failure'})
+        runs.append({**runs[0],'id':100,'conclusion':'failure'})
         with patch.object(deployment,'fetch_json',side_effect=[{'commit':{'sha':sha}},{'workflow_runs':runs}]):
             self.assertIsNone(deployment.eligible_revision())
 
@@ -87,7 +89,7 @@ class DeployTests(IntegrationFixture):
 
     def test_healthy_deploy_takes_backup_before_start_and_records_digest(self):
         root,release,images=self.candidate(); calls=[]
-        with patch.object(deployment,'release_source',return_value=release),patch.object(deployment,'image_digests',return_value=images),patch.object(deployment,'run',side_effect=lambda *args:calls.append(args) or ''),patch.object(deployment,'backup_database',side_effect=lambda *args:calls.append(('snapshot',)) or 'snapshot.db'),patch.object(deployment,'validate_service'):
+        with patch.object(deployment,'release_source',return_value=release),patch.object(deployment,'image_digests',return_value=images),patch.object(deployment,'run',side_effect=lambda *args:calls.append(args) or ''),patch.object(deployment,'backup_database',side_effect=lambda *args:calls.append(('snapshot',)) or 'snapshot.db'),patch.object(deployment,'validate_service'),patch.object(deployment,'validate_policy'),patch.object(deployment,'staging_baseline',return_value='private-report'):
             self.assertEqual(deployment.deploy(root,'a'*40,'example','db','backups'),'deployed')
         snapshot_index=calls.index(('snapshot',))
         start_index=next(i for i,call in enumerate(calls) if 'up' in call)
@@ -95,18 +97,48 @@ class DeployTests(IntegrationFixture):
         state=json.loads((root/'deployment.json').read_text())
         self.assertEqual(state['images'],images)
         self.assertEqual(state['revision'],'a'*40)
+        self.assertEqual(state['security']['zap_mode'],'baseline')
         self.assertEqual((root/'deployment.json').stat().st_mode & 0o777,0o600)
         self.assertEqual(deployment.deploy(root,'a'*40,'example','db','backups'),'unchanged')
 
     def test_unhealthy_release_restores_snapshot_and_restarts_previous_images(self):
         root,release,images=self.candidate();calls=[]
-        with patch.object(deployment,'release_source',return_value=release),patch.object(deployment,'image_digests',return_value=images),patch.object(deployment,'run',side_effect=lambda *args:calls.append(args) or ''),patch.object(deployment,'backup_database',return_value='snapshot.db'),patch.object(deployment,'restore_database') as restore,patch.object(deployment,'validate_service',side_effect=RuntimeError('not healthy')):
+        with patch.object(deployment,'release_source',return_value=release),patch.object(deployment,'image_digests',return_value=images),patch.object(deployment,'run',side_effect=lambda *args:calls.append(args) or ''),patch.object(deployment,'backup_database',return_value='snapshot.db'),patch.object(deployment,'restore_database') as restore,patch.object(deployment,'validate_service',side_effect=RuntimeError('not healthy')),patch.object(deployment,'validate_policy'):
             with self.assertRaises(RuntimeError):deployment.deploy(root,'a'*40,'example','db','backups')
         restore.assert_called_once()
         self.assertIn(str(root/'deploy-previous.json'),calls[-1])
         self.assertIn('up',calls[-1])
         self.assertEqual(json.loads((root/'deployment.json').read_text())['revision'],'b'*40)
         with self.assertRaises(ValueError):deployment.deploy(root,'main;invalid','example','db','backups')
+
+    def test_policy_failure_does_not_stop_running_services(self):
+        root,release,images=self.candidate()
+        with patch.object(deployment,'release_source',return_value=release), \
+             patch.object(deployment,'image_digests',return_value=images), \
+             patch.object(deployment,'run') as execute, \
+             patch.object(deployment,'validate_policy',side_effect=RuntimeError('policy rejected')):
+            with self.assertRaisesRegex(RuntimeError,'policy rejected'):
+                deployment.deploy(root,'a'*40,'example','db','backups')
+        self.assertFalse(any('stop' in call.args or 'up' in call.args for call in execute.call_args_list))
+
+    def test_baseline_failure_restores_previous_database_and_images(self):
+        root,release,images=self.candidate()
+        previous_image='ghcr.io/ecarara/speedtester-api@sha256:'+'b'*64
+        state=json.loads((root/'deployment.json').read_text())
+        state['images']['api']=previous_image
+        deployment.save_json(root/'deployment.json',state)
+        with patch.object(deployment,'release_source',return_value=release), \
+             patch.object(deployment,'image_digests',return_value=images), \
+             patch.object(deployment,'run') as execute, patch.object(deployment,'validate_policy'), \
+             patch.object(deployment,'backup_database',return_value='snapshot.db') as snapshot, \
+             patch.object(deployment,'restore_database') as restore, patch.object(deployment,'validate_service'), \
+             patch.object(deployment,'staging_baseline',side_effect=RuntimeError('baseline rejected')):
+            with self.assertRaisesRegex(RuntimeError,'baseline rejected'):
+                deployment.deploy(root,'a'*40,'example','db','backups')
+        self.assertEqual(snapshot.call_args.args[1],previous_image)
+        self.assertEqual(restore.call_args.args[1],previous_image)
+        self.assertIn(str(root/'deploy-previous.json'),execute.call_args.args)
+        self.assertEqual(json.loads((root/'deployment.json').read_text())['revision'],'b'*40)
 
     def test_image_revision_mismatch_is_rejected_before_service_stop(self):
         image={'Config':{'Labels':{'org.opencontainers.image.revision':'wrong'}},'RepoDigests':[]}

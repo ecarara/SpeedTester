@@ -83,12 +83,30 @@ jobs:
           docker compose -f docker/compose.yaml up -d db api --wait --wait-timeout 120
           curl --fail http://127.0.0.1:8000/health
           curl --fail http://127.0.0.1:8000/api/config
+          curl --fail http://127.0.0.1:8000/api/chart.png --output /tmp/speedtester-chart.png
+          test "$(head -c 8 /tmp/speedtester-chart.png | od -An -tx1 | tr -d ' \n')" = 89504e470d0a1a0a
           test "$(docker compose -f docker/compose.yaml exec -T api id -u)" = 10001
           docker compose -f docker/compose.yaml run --rm backup /opt/speedtester-scripts/backup.sh
       - name: Validate encrypted off-host backup and restore
         run: |
-          docker compose -f docker/compose.yaml run --rm --entrypoint bash \
+          docker compose -f docker/compose.yaml run --rm --entrypoint bash -e TMPDIR=/backups \
             -v "${{ github.workspace }}:/workspace:ro" backup /workspace/scripts/test_backup.sh
+      - name: Validate compiled tools in runtime images
+        run: |
+          docker compose -f docker/compose.yaml run --rm --no-deps backup sh -c 'ssh -V && age --version'
+          docker compose -f docker/compose.yaml run --rm --no-deps collector python - <<'PY'
+          import json, subprocess, time
+          server = subprocess.Popen(['iperf3', '-s', '-1', '-B', '127.0.0.1', '-p', '15201'], stdout=subprocess.DEVNULL)
+          try:
+              time.sleep(1)
+              result = subprocess.run(['iperf3', '-c', '127.0.0.1', '-p', '15201', '-t', '1', '-P', '2', '-J'], capture_output=True, text=True, check=True, timeout=15)
+              assert json.loads(result.stdout)['end']['sum_received']['bits_per_second'] > 0
+              server.wait(timeout=5)
+          finally:
+              if server.poll() is None:
+                  server.terminate()
+                  server.wait(timeout=5)
+          PY
       - name: Clean up
         if: always()
         run: docker compose -f docker/compose.yaml down --volumes

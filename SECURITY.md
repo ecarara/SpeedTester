@@ -26,6 +26,10 @@ HTTPS e autenticação.
 - destinos de teste, comandos subprocessados e timeouts são definidos pelo
   servidor, não recebidos livremente do navegador.
 
+O [pipeline de segurança](docs/security-pipeline.md) usa Grype, Conftest, ZAP
+e verificação de attestations antes do deploy. Todos os achados permanecem
+nos relatórios; Critical e High com correção disponível bloqueiam as imagens.
+
 ## Configuração mínima segura
 
 1. Gere um token longo e aleatório e salve-o no `.env` com permissões restritas:
@@ -47,11 +51,10 @@ HTTPS e autenticação.
 
 ## Riscos residuais
 
-- As rotas de leitura ainda são deliberadamente simples para o dashboard;
-  proteção de acesso à internet deve ser feita por rede privada ou proxy
-  autenticado.
-- O backup local não é criptografado nem replicado automaticamente para fora
-  do host.
+- O login protege o dashboard e as rotas de leitura por padrão; acesso remoto
+  exige HTTPS ou VPN e configuração adequada dos cookies.
+- O backup local não é criptografado; criptografia e envio remoto precisam ser
+  configurados no overlay de backup.
 - O serviço auxiliar que inicializa o volume do banco precisa executar como
   root para ajustar a propriedade do volume; API e collector não executam como
   root.

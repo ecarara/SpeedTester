@@ -29,3 +29,5 @@ previous-deployment.json
 deploy-*.json
 deployment-backups/
 releases/
+security-reports/
+.security-tools/

@@ -4,7 +4,7 @@
 version = 1
 
 [[annotations]]
-path = ["*.md", "docs/**", ".github/**", "*.cff", "*.example", "env.example", "app/requirements.txt", ".editorconfig", ".gitignore", ".dockerignore"]
+path = ["*.md", "docs/**", "security/**", ".github/**", "*.cff", "*.example", "env.example", "app/requirements.txt", ".editorconfig", ".gitignore", ".dockerignore"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2026 Edson Angelo Carara <https://github.com/ecarara>"
 SPDX-License-Identifier = "GPL-3.0-or-later"

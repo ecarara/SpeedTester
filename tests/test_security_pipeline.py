@@ -184,6 +184,8 @@ class AttestationTests(unittest.TestCase):
             for suffix in ('candidate', 'previous'):
                 args = deploy.compose_command(root, root, images, 'fixture', 'db', 'backups', suffix)
                 self.assertIn(str(root / 'docker/compose.backup-remote.yaml'), args)
+                override = json.loads((root / ('deploy-' + suffix + '.json')).read_text())
+                self.assertEqual(override['services']['db']['image'], images['backup'])
 
 
 class ZAPTests(unittest.TestCase):

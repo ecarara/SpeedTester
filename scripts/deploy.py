@@ -16,6 +16,7 @@ import time
 import urllib.request
 
 REPO = 'ecarara/SpeedTester'
+GITHUB_REPOS = 'https://api.github.com/repos/'
 SERVICES = ('api', 'collector', 'backup')
 WORKFLOWS = {'CI': '.github/workflows/ci.yml', 'Container images': '.github/workflows/images.yml',
              'SonarQube': '.github/workflows/sonarqube.yml', 'Security': '.github/workflows/security.yml'}
@@ -32,7 +33,7 @@ def fetch_json(url):
 
 
 def eligible_revision():
-    base = 'https://api.github.com/repos/' + REPO
+    base = GITHUB_REPOS + REPO
     sha = fetch_json(base+'/branches/main')['commit']['sha']
     runs = fetch_json(base+'/actions/runs?branch=main&event=push&per_page=100')['workflow_runs']
     latest = {}
@@ -69,7 +70,7 @@ def release_source(root, sha):
     release.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=release.parent) as temporary:
         archive = Path(temporary)/'source.tar.gz'
-        with urllib.request.urlopen('https://api.github.com/repos/'+REPO+'/tarball/'+sha, timeout=60) as response:
+        with urllib.request.urlopen(GITHUB_REPOS+REPO+'/tarball/'+sha, timeout=60) as response:
             with archive.open('wb') as output:
                 while block := response.read(1024*1024):
                     output.write(block)
@@ -89,7 +90,7 @@ def verify_attestation(image, sha):
     digest = image.rsplit('@', 1)[1]
     if not re.fullmatch(r'sha256:[0-9a-f]{64}', digest):
         raise ValueError('Expected an immutable image digest')
-    data = fetch_json('https://api.github.com/repos/' + REPO + '/attestations/' + digest)
+    data = fetch_json(GITHUB_REPOS + REPO + '/attestations/' + digest)
     bundles = [item['bundle'] for item in data.get('attestations', []) if item.get('bundle')]
     if not bundles:
         raise ValueError('Image has no build attestation')
@@ -121,7 +122,9 @@ def image_digests(sha):
 
 def compose_command(root, release, images, project, db_volume, backup_volume, suffix):
     override = root/f'deploy-{suffix}.json'
-    save_json(override, {'services': {service: {'image': images[service]} for service in SERVICES},
+    services = {service: {'image': images[service]} for service in SERVICES}
+    services['db'] = {'image': images['backup']}
+    save_json(override, {'services': services,
                        'volumes': {'db_data': {'external': True, 'name': db_volume},
                                    'backup_data': {'external': True, 'name': backup_volume}}})
     command = ['docker', 'compose', '--env-file', str(root/'.env'), '-p', project,

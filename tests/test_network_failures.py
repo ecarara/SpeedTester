@@ -105,7 +105,7 @@ class FastTests(unittest.IsolatedAsyncioTestCase):
             result=await fast._run_async(isp_lookup_enabled=False)
             self.assertEqual(result['download_mbps'],900)
             self.assertEqual(result['packet_loss_pct'],0)
-            with patch.object(fast,'measure_ping',return_value=PingMetrics()),patch.object(fast,'_measure_ping',AsyncMock(return_value=(6,2))),patch.object(fast,'_resolve_isp',AsyncMock(return_value='Example ISP')):
+            with patch.object(fast,'measure_ping',return_value=PingMetrics()),patch.object(fast,'_measure_ping',AsyncMock(return_value=(6,2))),patch.object(fast,'_resolve_isp',AsyncMock(return_value='Example ISP')),patch.object(fast,'resolve_network_identity',return_value={'isp':'Example ISP','country':'Brazil','city':'Curitiba'}):
                 result=await fast._run_async()
                 self.assertEqual(result['ping_ms'],6)
                 self.assertEqual(result['isp'],'Example ISP')

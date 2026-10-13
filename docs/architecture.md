@@ -17,10 +17,11 @@ Componentes confirmados no código:
 | Componente | Responsabilidade atual |
 |---|---|
 | `collector/collector.py` | cria slots, executa os slots devidos, coleta probes, classifica falhas preliminares e grava o resultado |
-| `collector/speedtest_runner.py` | mede download/upload com conexões fast.com, qualidade ICMP e identifica interface/ISP best-effort |
+| `collector/speedtest_runner.py` | mede download/upload com conexões fast.com, qualidade ICMP e integra a identidade da conexão |
 | `collector/ookla_runner.py` | adapta o JSON do cliente oficial Ookla Speedtest e complementa a qualidade da rota |
 | `collector/iperf3_runner.py` | executa upload/download reverso, coleta retransmissões TCP e qualidade ICMP |
 | `collector/network_metrics.py` | probe comum de ping, latência mínima/máxima, jitter e perda de pacotes |
+| `collector/network_identity.py` | enriquece a medição com operadora, ASN, país e cidade usando consulta pública cacheada |
 | `collector/runner_dispatch.py` | seleciona o runner configurado |
 | `api/store.py` | cria/migra tabelas, grava e consulta SQLite por thread |
 | `api/server.py` | expõe health, amostras, resumo, comparação, alertas, gráfico PNG e reset |

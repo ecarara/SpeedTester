@@ -3,7 +3,7 @@
 ## Schema atual
 
 O SQLite atual contém `samples`, `measurement_slots`, `availability_events`,
-`service_heartbeats`, `alerts`, `measurement_attempts` e `schema_meta` (versão 8). A tabela de medições é descrita
+`service_heartbeats`, `alerts`, `measurement_attempts` e `schema_meta` (versão 10). A tabela de medições é descrita
 abaixo; as demais tabelas preservam a obrigação de medir, o contexto de
 indisponibilidade, a saúde operacional e os alertas.
 
@@ -24,9 +24,17 @@ O código atual cria uma única tabela `samples` com os campos abaixo:
 | `packet_loss_pct` | real | perda observada no lote ICMP; pode ser nula quando ICMP é filtrado |
 | `tcp_retransmits` | integer | retransmissões TCP informadas pelo iPerf3, quando disponíveis |
 | `server_id` / `server_name` | integer/text | metadata do destino; no runner atual o nome é `fast.com` e o id é nulo |
-| `server_location` / `country` | text | localização, quando disponível |
+| `server_location` / `country` | text | localização do servidor e país da conexão, quando disponível |
+| `country_code` | text | código ISO-3166-1 alpha-2 da conexão |
+| `city` | text | cidade estimada pelo endereço IP público no momento da medição |
+| `public_ip` | text | endereço IP público observado, quando disponível |
 | `interface` | text | interface local detectada |
 | `isp` | text | operadora identificada best-effort |
+| `isp_organization` | text | organização anunciada pelo ASN |
+| `asn` | text | ASN anunciado pela conexão |
+| `isp_source` | text | fonte da identificação, como `ipwho.is` ou runner |
+| `isp_confidence` | text | confiança declarada pelo enriquecimento |
+| `isp_observed_at` | text | instante UTC em que a identidade foi consultada |
 | `bandwidth_contracted_mbps` | real | banda contratada vigente na coleta |
 | `test_duration_sec` | real | duração observada do teste |
 | `slot_id` | integer | slot esperado associado, quando aplicável |
@@ -60,9 +68,18 @@ Chamadas concorrentes de `add_sample` para o mesmo slot retornam o mesmo ID.
 está dentro da tolerância; slots antigos passam a `MISSED_UNKNOWN`. Um resultado
 já gravado é reconciliado antes de iniciar outra execução.
 
-A migração para versão 8 é aditiva: conserva amostras e classificações antigas,
+A migração para versão 10 é aditiva: conserva amostras e classificações antigas,
 cria a auditoria e índices de data/runner/slot, e pode ser executada novamente.
 Tentativas antigas não são reconstruídas retroativamente.
+
+## Identidade da conexão
+
+Após uma medição bem-sucedida, o collector consulta o `ipwho.is` de forma
+best-effort e persiste operadora, organização, ASN, IP público, país e cidade.
+A consulta usa cache de processo de seis horas e seu timeout não falha nem
+invalida uma medição de banda. Os valores representam a rede de saída naquele
+instante; VPN, CGNAT, proxy e geolocalização imprecisa podem alterar o resultado.
+Registros legados permanecem com esses campos nulos.
 
 ## Limitações e invariantes
 
@@ -180,3 +197,9 @@ a fila permanece após reinício. Migrações são aditivas e serializadas por u
 transação SQLite para API e collector iniciando simultaneamente.
 `schema_meta.observation` guarda início da observação e impressão do destino,
 sem devolver endereço no endpoint de relatórios.
+
+## Schema 10: identidade da conexão
+
+A versão 10 adiciona os campos de identidade de rede descritos acima. A
+migração é aditiva, não reconsulta registros antigos e não substitui valores
+históricos já persistidos.

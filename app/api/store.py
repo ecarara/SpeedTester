@@ -23,8 +23,16 @@ The database lives at ``settings.db_path`` and holds a single table,
     server_name   TEXT
     server_location TEXT
     country       TEXT
+    country_code  TEXT
+    city          TEXT
+    public_ip     TEXT
     interface     TEXT      (e.g. "eth0" or "docker0")
     isp           TEXT      (e.g. "Vivo", "Claro", "TIM")
+    isp_organization TEXT
+    asn           TEXT
+    isp_source    TEXT
+    isp_confidence TEXT
+    isp_observed_at TEXT
     bandwidth_contracted_mbps REAL  (operator-configured, may be NULL)
     test_duration_sec REAL
     runner TEXT  (fast, ookla, iperf3, or NULL for legacy rows)
@@ -43,7 +51,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Iterable, List, Optional
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 WRITE_TRANSACTION = "BEGIN IMMEDIATE"
 
 DB_SCHEMA = """
@@ -76,8 +84,16 @@ CREATE TABLE IF NOT EXISTS samples (
     server_name TEXT,
     server_location TEXT,
     country TEXT,
+    country_code TEXT,
+    city TEXT,
+    public_ip TEXT,
     interface TEXT,
     isp TEXT,
+    isp_organization TEXT,
+    asn TEXT,
+    isp_source TEXT,
+    isp_confidence TEXT,
+    isp_observed_at TEXT,
     bandwidth_contracted_mbps REAL,
     test_duration_sec REAL
 );
@@ -169,8 +185,16 @@ class Sample:
     server_name: Optional[str] = None
     server_location: Optional[str] = None
     country: Optional[str] = None
+    country_code: Optional[str] = None
+    city: Optional[str] = None
+    public_ip: Optional[str] = None
     interface: Optional[str] = None
     isp: Optional[str] = None
+    isp_organization: Optional[str] = None
+    asn: Optional[str] = None
+    isp_source: Optional[str] = None
+    isp_confidence: Optional[str] = None
+    isp_observed_at: Optional[str] = None
     bandwidth_contracted_mbps: Optional[float] = None
     test_duration_sec: Optional[float] = None
     slot_id: Optional[int] = None
@@ -203,8 +227,16 @@ class Sample:
             self.server_name,
             self.server_location,
             self.country,
+            self.country_code,
+            self.city,
+            self.public_ip,
             self.interface,
             self.isp,
+            self.isp_organization,
+            self.asn,
+            self.isp_source,
+            self.isp_confidence,
+            self.isp_observed_at,
             self.bandwidth_contracted_mbps,
             self.test_duration_sec,
             self.slot_id,
@@ -238,8 +270,16 @@ class Sample:
             "server_name": self.server_name,
             "server_location": self.server_location,
             "country": self.country,
+            "country_code": self.country_code,
+            "city": self.city,
+            "public_ip": self.public_ip,
             "interface": self.interface,
             "isp": self.isp,
+            "isp_organization": self.isp_organization,
+            "asn": self.asn,
+            "isp_source": self.isp_source,
+            "isp_confidence": self.isp_confidence,
+            "isp_observed_at": self.isp_observed_at,
             "bandwidth_contracted_mbps": self.bandwidth_contracted_mbps,
             "test_duration_sec": self.test_duration_sec,
             "slot_id": self.slot_id,
@@ -324,6 +364,14 @@ class SampleStore:
             ("latency_max_ms", "REAL"),
             ("packet_loss_pct", "REAL"),
             ("tcp_retransmits", "INTEGER"),
+            ("country_code", "TEXT"),
+            ("city", "TEXT"),
+            ("public_ip", "TEXT"),
+            ("isp_organization", "TEXT"),
+            ("asn", "TEXT"),
+            ("isp_source", "TEXT"),
+            ("isp_confidence", "TEXT"),
+            ("isp_observed_at", "TEXT"),
         ):
             if name not in existing:
                 conn.execute(f"ALTER TABLE samples ADD COLUMN {name} {sql_type}")
@@ -380,8 +428,9 @@ class SampleStore:
                     "(started_at, is_failure, failure_cause, failure_note, "
                     "  download_mbps, upload_mbps, ping_ms, jitter_ms, "
                     "  latency_min_ms, latency_max_ms, packet_loss_pct, tcp_retransmits, "
-                    "  server_id, server_name, server_location, country, "
-                    "  interface, isp, bandwidth_contracted_mbps, test_duration_sec, "
+                    "  server_id, server_name, server_location, country, country_code, city, public_ip, "
+                    "  interface, isp, isp_organization, asn, isp_source, isp_confidence, isp_observed_at, "
+                    "  bandwidth_contracted_mbps, test_duration_sec, "
                     "  slot_id, local_date, quadrant, failure_origin, power_state, "
                     "  gateway_reachable, external_reachable, classification_confidence, "
                     "  evidence_json, runner) VALUES (" + ",".join("?" for _ in row) + ")",

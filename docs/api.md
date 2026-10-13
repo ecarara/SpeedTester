@@ -67,11 +67,17 @@ não prolongam o download. Texto CSV iniciado como fórmula é escapado.
 O gráfico usa `/api/series`, independente da página visível da tabela.
 
 O retorno é uma lista de objetos correspondentes às colunas de `samples`.
+Além das métricas, cada linha pode conter `isp`, `isp_organization`, `asn`,
+`country`, `country_code`, `city`, `public_ip`, `isp_source`,
+`isp_confidence` e `isp_observed_at`. Esses campos são nulos em registros
+legados ou quando o enriquecimento externo não respondeu.
 
 ### `/api/summary`
 
 O retorno atual inclui `count`, `first`, `last`, `latest`, médias e máximos de
-download/upload, ISP, banda contratada, taxa de falhas, `downtime` e
+download/upload, identidade da conexão mais recente (`latest_isp`,
+`latest_isp_organization`, `latest_country`, `latest_country_code` e
+`latest_city`), banda contratada, taxa de falhas, `downtime` e
 `outliers`, além de `coverage` com slots esperados/concluídos por quadrante. As
 médias excluem linhas com `is_failure=1`. O resumo aceita os mesmos filtros de
 período e runner da listagem, sem paginação. Retorna também mediana, p10 e p95

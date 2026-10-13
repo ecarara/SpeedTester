@@ -154,7 +154,7 @@ class IntegrationTests(IntegrationFixture):
             self.assertEqual(store.count(),1)
             self.assertIn('runner',store.all_samples()[0])
             with closing(sqlite3.connect(path)) as conn, conn:
-                self.assertEqual(conn.execute("SELECT value FROM schema_meta WHERE key='version'").fetchone()[0],'9')
+                self.assertEqual(conn.execute("SELECT value FROM schema_meta WHERE key='version'").fetchone()[0],'10')
             store.close()
 
     def test_downtime_clips_to_period_and_merges_same_origin(self):

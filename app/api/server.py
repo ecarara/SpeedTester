@@ -460,6 +460,10 @@ def api_summary(
             "packet_loss_avg_pct": None,
             "tcp_retransmits_avg": None,
             "latest_isp": None,
+            "latest_isp_organization": None,
+            "latest_country": None,
+            "latest_country_code": None,
+            "latest_city": None,
             "bandwidth_contracted_mbps": None,
             "failure_count": 0,
             "failure_rate_pct": None,
@@ -505,6 +509,10 @@ def api_summary(
 
     # Latest ISP and contracted-bandwidth (may be NULL on older / failed rows).
     latest_isp = latest.get("isp")
+    latest_isp_organization = latest.get("isp_organization")
+    latest_country = latest.get("country")
+    latest_country_code = latest.get("country_code")
+    latest_city = latest.get("city")
     latest_contracted = latest.get("bandwidth_contracted_mbps")
 
     summary = {
@@ -513,6 +521,10 @@ def api_summary(
         "last": last,
         "latest": latest,
         "latest_isp": latest_isp,
+        "latest_isp_organization": latest_isp_organization,
+        "latest_country": latest_country,
+        "latest_country_code": latest_country_code,
+        "latest_city": latest_city,
         "bandwidth_contracted_mbps": latest_contracted,
         "download_avg_mbps": download_avg,
         "upload_avg_mbps": upload_avg,

@@ -200,7 +200,7 @@ O flag `--services-stopped` é uma confirmação operacional: o script não pode
 verificar todos os processos em outro container. Não remova WAL/SHM de um
 banco ativo. Confirme o nome do volume com `docker volume ls`.
 
-Ao atualizar para schema 9, o banco migra automaticamente de forma aditiva.
+Ao atualizar para schema 10, o banco migra automaticamente de forma aditiva.
 Slots abandonados em `RUNNING` são recuperados após `SLOT_LEASE_SECONDS`
 (padrão 300s), renovada a cada 20s durante medições. Dentro da tolerância
 retornam a `PENDING`; fora dela ficam `MISSED_UNKNOWN`. Não use `/api/reset`

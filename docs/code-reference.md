@@ -52,13 +52,21 @@ função fornece evidência, não prova jurídica de falha da operadora.
 `measure_ping()` mede RTT mediano, jitter médio das diferenças consecutivas,
 limites de latência e perda. ICMP bloqueado resulta em métricas nulas.
 
+### `app/collector/network_identity.py`
+
+Consulta, de forma best-effort, o IP público e os metadados de rede retornados
+por `ipwho.is` — operadora, organização, ASN, país e cidade. Mantém cache de
+processo por seis horas e nunca transforma falha de enriquecimento em falha de
+medição.
+
 ## Runners
 
 ### `app/collector/iperf3_runner.py`
 
 Executa upload e download reverso contra `IPERF3_SERVER`, converte bits por
 segundo em Mbps, soma retransmissões disponíveis e usa o mesmo destino para o
-probe de qualidade. O timeout é um orçamento total.
+probe de qualidade. O timeout é um orçamento total; após uma medição concluída,
+os metadados de identidade da conexão são anexados sem exceder o orçamento.
 
 ### `app/collector/ookla_runner.py`
 
@@ -68,7 +76,8 @@ Mbps e preserva metadata de servidor, cliente e ISP quando retornada.
 ### `app/collector/speedtest_runner.py`
 
 Implementa o runner assíncrono fast.com e o resultado comum `SpeedTestResult`.
-Também fornece detecção de interface e lookup best-effort da operadora.
+Também fornece detecção de interface e lookup best-effort da identidade da
+conexão.
 
 ### `app/collector/runner_dispatch.py`
 

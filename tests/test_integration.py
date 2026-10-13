@@ -42,6 +42,29 @@ class IntegrationTests(IntegrationFixture):
         self.assertEqual(len(csv.strip().splitlines()), 8)
         self.assertEqual(len(self.client.get('/api/export?format=json&runner=iperf3').json()), 7)
 
+    def test_network_map_aggregates_operator_city_country_without_public_ip(self):
+        self.store.add_samples([
+            Sample('2026-10-01T12:00:00Z', runner='iperf3', download_mbps=900,
+                   upload_mbps=450, isp='Operadora A', isp_organization='Grupo A',
+                   country='Brasil', country_code='BR', city='Curitiba',
+                   public_ip='203.0.113.10', local_date='2026-10-01', quadrant='tarde'),
+            Sample('2026-10-01T13:00:00Z', runner='iperf3', is_failure=True,
+                   failure_origin='OPERATOR', isp='Operadora A', country='Brasil',
+                   country_code='BR', city='Curitiba', public_ip='203.0.113.10',
+                   local_date='2026-10-01', quadrant='tarde'),
+        ])
+        response = self.client.get('/api/network-map?date=2026-10-01&runner=iperf3')
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body['totals'], {'samples': 2, 'operators': 1, 'cities': 1, 'countries': 1, 'unmapped': 0})
+        point = body['points'][0]
+        self.assertEqual(point['operator'], 'Operadora A')
+        self.assertEqual(point['city'], 'Curitiba')
+        self.assertEqual(point['country'], 'Brasil')
+        self.assertEqual(point['coordinate_source'], 'city-centroid')
+        self.assertNotIn('public_ip', point)
+        self.assertEqual(point['failure_count'], 1)
+
     def test_invalid_filters_return_422(self):
         for query in ('date=invalid', 'from=2026-10-02&to=2026-10-01', 'runner=unknown',
                       'since=not-a-timestamp', 'minutes=-1', 'date=2026-10-01&from=2026-10-01',

@@ -37,6 +37,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 
 from api.store import SampleStore
+from api.network_map import build_network_map
 from api import auth
 from api.request_limits import RequestSizeLimit, allow_request
 from shared.observation import report as observation_report
@@ -303,6 +304,24 @@ def api_series(local_date: Optional[str] = Query(None, alias="date"),
                        "is_failure": good.empty, "download_mbps": _metric_median(good, "download_mbps"),
                        "upload_mbps": _metric_median(good, "upload_mbps")})
     return {"rows": series, "count": count, "aggregated": True}
+
+
+@app.get("/api/network-map", responses=API_ERRORS)
+def api_network_map(
+    local_date: Optional[str] = Query(None, alias="date"),
+    from_date: Optional[str] = Query(None, alias="from"),
+    to_date: Optional[str] = Query(None, alias="to"),
+    runner: Optional[str] = None,
+):
+    """Return privacy-preserving operator/city/country aggregates.
+
+    The endpoint deliberately omits public IP addresses. Coordinates are
+    deterministic centroids used only to place the aggregate on the map; the
+    response identifies whether the point represents a known city, a country
+    fallback, or an unmapped location.
+    """
+    rows = store.query_samples(**_query_filters(local_date, from_date, to_date, runner))
+    return build_network_map(rows)
 
 
 @app.get("/api/export", responses=API_ERRORS)

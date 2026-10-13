@@ -75,6 +75,15 @@ Visões de 7, 30 e 90 dias com média/mediana diária, p95 e percentuais de
 entrega do contrato. A janela não deve ficar limitada a 24 horas quando a
 pergunta for histórica.
 
+### 6. Mapa de rede
+
+O dashboard também apresenta um atlas interativo agregando as medições por
+operadora, cidade e país. O usuário pode filtrar cada dimensão e abrir o
+detalhe de quantidade, médias e falhas de cada agrupamento. O mapa não envia
+IP público em sua resposta e não depende de tiles externos. Quando não existe
+coordenada exata no histórico, o ponto usa um centro visual conhecido e
+informa essa aproximação no detalhe.
+
 ## Dashboard atual versus alvo
 
 O dashboard atual mostra download/upload atual, média, pico, um PNG de até 24

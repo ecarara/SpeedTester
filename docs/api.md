@@ -23,6 +23,7 @@ em `/openapi.json` e documentação alternativa em `/redoc`.
 | `POST` | `/api/availability-events` | registra energia/operadora/rede interna e reconcilia slots |
 | `POST` | `/api/slots/{slot_id}/classify` | corrige manualmente o status de um slot com justificativa |
 | `GET` | `/api/summary` | resumo, estatísticas por runner, última amostra, falhas, downtime calculado e outliers |
+| `GET` | `/api/network-map` | agregados de operadora, cidade e país para o mapa interativo, sem IP público |
 | `GET` | `/api/comparison` | comparação diária em um intervalo `from`, `to` e `runner` opcional |
 | `GET` | `/api/chart.png` | PNG de download/upload da janela de até 24 horas; aceita `runner` |
 | `POST` | `/api/reset` | apaga amostras, slots, eventos e alertas |
@@ -99,6 +100,23 @@ O campo `by_runner` contém estatísticas independentes para cada runner
 persistido, incluindo quantidade, sucesso/falha, média/mediana/máximo de
 download/upload e médias de qualidade. `?runner=ookla` restringe as métricas
 principais e o gráfico ao runner escolhido, sem misturar resultados.
+
+### `/api/network-map`
+
+```text
+GET /api/network-map?from=2026-10-01&to=2026-10-31&runner=iperf3
+```
+
+O endpoint agrupa as medições por operadora, cidade, país e código do país.
+Cada ponto retorna quantidade de amostras, sucessos, falhas, médias de
+download/upload, última observação e `coordinate_source`. A resposta nunca
+inclui `public_ip`: o mapa é uma visão agregada apropriada para o dashboard.
+
+As coordenadas são apenas posicionamento visual: o catálogo usa o centro
+conhecido da cidade quando disponível, depois o centro do país e, por fim,
+marca o agrupamento como `unavailable`. O campo `coordinate_source` permite
+que o usuário distinga `city-centroid`, `country-centroid` e `unavailable`; a
+cidade e o país exibidos continuam sendo os valores persistidos pela coleta.
 
 O campo `downtime` é calculado a partir de `availability_events`, unindo
 intervalos sobrepostos no total e por origem, recortados ao período local

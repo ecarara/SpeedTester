@@ -13,6 +13,11 @@ eventos, resumo, comparação, alertas, gráfico PNG e reset. Também concentra 
 autenticação administrativa, rate limit, cabeçalhos HTTP e agregações sem
 transformar ausência em zero.
 
+`GET /api/network-map` usa `app/api/network_map.py` para agrupar amostras por
+operadora, cidade e país, sem retornar IP público. A resposta inclui a origem
+da coordenada (`city-centroid`, `country-centroid` ou `unavailable`) para que o
+dashboard deixe explícito quando o ponto é aproximado.
+
 ### `app/api/store.py`
 
 Define `Sample` e `MeasurementSlot`, inicializa/migra o SQLite, grava amostras,
@@ -58,6 +63,18 @@ Consulta, de forma best-effort, o IP público e os metadados de rede retornados
 por `ipwho.is` — operadora, organização, ASN, país e cidade. Mantém cache de
 processo por seis horas e nunca transforma falha de enriquecimento em falha de
 medição.
+
+### `app/api/network_map.py`
+
+Normaliza nomes para selecionar centroides determinísticos de cidades e países
+e calcula contagens de sucesso/falha e médias de velocidade por agrupamento.
+O módulo não faz chamadas externas nem expõe o endereço IP persistido.
+
+### `app/dashboard/network-map.js`
+
+Renderiza o atlas SVG interativo, com marcadores acessíveis por teclado,
+tooltips, filtros e lista de operadores. O componente é independente de tiles
+ou CDN de mapas para continuar funcional em instalações sem acesso externo.
 
 ## Runners
 

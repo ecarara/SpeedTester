@@ -29,6 +29,32 @@
     return value == null || Number.isNaN(Number(value)) ? '—' : Number(value).toFixed(2) + suffix;
   }
 
+  function selectPoint(point, position, color, detailTitle, detailCopy, detailStats, map) {
+    detailTitle.textContent = point.operator;
+    detailCopy.textContent = `${point.city} · ${point.country} · ${point.coordinate_source === 'city-centroid' ? 'posição aproximada da cidade' : point.coordinate_source === 'country-centroid' ? 'posição aproximada do país' : 'posição indisponível'}`;
+    detailStats.replaceChildren();
+    for (const [label, value] of [['Amostras', point.samples], ['Download médio', format(point.avg_download_mbps, ' Mbps')], ['Upload médio', format(point.avg_upload_mbps, ' Mbps')], ['Falhas', point.failure_count]]) {
+      const stat = document.createElement('div');
+      const caption = document.createElement('span');
+      caption.textContent = label;
+      const valueNode = document.createElement('strong');
+      valueNode.textContent = String(value);
+      stat.append(caption, valueNode);
+      detailStats.append(stat);
+    }
+    if (position) {
+      for (const node of map.querySelectorAll('.map-tooltip')) node.remove();
+      const tooltip = svg('g', { class: 'map-tooltip' });
+      const text = `${point.operator} · ${point.city}`;
+      const width = Math.min(310, Math.max(120, text.length * 6.3));
+      const x = Math.max(18, Math.min(982 - width, position.x + 14));
+      const y = Math.max(68, position.y - 14);
+      tooltip.append(svg('rect', { x, y: y - 22, width, height: 26, rx: 7, fill: '#102223', stroke: color }));
+      tooltip.append(svg('text', { x: x + 10, y: y - 5, class: 'map-tooltip-text' }, text));
+      map.append(tooltip);
+    }
+  }
+
   function render(target, payload, filters = {}) {
     target.replaceChildren();
     const points = Array.isArray(payload?.points) ? payload.points : [];
@@ -52,12 +78,12 @@
       const start = project(latitude, -180), end = project(latitude, 180);
       map.append(svg('line', { x1: start.x, y1: start.y, x2: end.x, y2: end.y, class: 'map-grid-line' }));
     }
-    continentShapes.forEach((path) => map.append(svg('path', { d: path, class: 'map-continent' })));
+    for (const path of continentShapes) map.append(svg('path', { d: path, class: 'map-continent' }));
     map.append(svg('text', { x: 54, y: 46, class: 'map-label' }, 'NETWORK ATLAS / AGGREGATED OBSERVATIONS'));
 
     const visiblePoints = filtered.filter((point) => point.latitude != null && point.longitude != null);
     const coordinateGroups = new Map();
-    visiblePoints.forEach((point) => {
+    for (const point of visiblePoints) {
       const key = `${point.latitude}:${point.longitude}`;
       const index = coordinateGroups.get(key) || 0;
       coordinateGroups.set(key, index + 1);
@@ -71,13 +97,13 @@
       group.setAttribute('tabindex', '0');
       group.setAttribute('role', 'button');
       group.setAttribute('aria-label', `${point.operator}, ${point.city}, ${point.country}`);
-      group.addEventListener('click', () => selectPoint(point, position, color));
-      group.addEventListener('focus', () => selectPoint(point, position, color));
-      group.addEventListener('mouseenter', () => selectPoint(point, position, color));
+      group.addEventListener('click', () => selectPoint(point, position, color, detailTitle, detailCopy, detailStats, map));
+      group.addEventListener('focus', () => selectPoint(point, position, color, detailTitle, detailCopy, detailStats, map));
+      group.addEventListener('mouseenter', () => selectPoint(point, position, color, detailTitle, detailCopy, detailStats, map));
       group.append(svg('circle', { cx: position.x, cy: position.y, r: Math.min(18, 6 + Math.sqrt(point.samples) * 1.8), fill: color, class: 'map-marker-halo' }));
       group.append(svg('circle', { cx: position.x, cy: position.y, r: 4, fill: '#071114', stroke: color, 'stroke-width': 2 }));
       map.append(group);
-    });
+    }
     const detail = document.createElement('aside');
     detail.className = 'network-map-detail';
     const detailEyebrow = document.createElement('div');
@@ -98,13 +124,13 @@
     detail.append(listTitle);
     const list = document.createElement('div');
     list.className = 'network-map-list';
-    filtered.slice(0, 12).forEach((point, index) => {
+    for (const [index, point] of filtered.slice(0, 12).entries()) {
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'network-map-list-item';
       item.addEventListener('click', () => {
         const base = point.latitude == null ? null : project(point.latitude, point.longitude);
-        selectPoint(point, base, COLORS[points.indexOf(point) % COLORS.length]);
+        selectPoint(point, base, COLORS[points.indexOf(point) % COLORS.length], detailTitle, detailCopy, detailStats, map);
       });
       const swatch = document.createElement('span');
       swatch.className = 'network-map-swatch';
@@ -119,7 +145,7 @@
       count.textContent = String(point.samples);
       item.append(swatch, copy, count);
       list.append(item);
-    });
+    }
     if (!filtered.length) {
       const empty = document.createElement('div');
       empty.className = 'empty';
@@ -129,32 +155,6 @@
     detail.append(list);
     layout.append(mapWrap, detail);
     target.append(layout);
-
-    function selectPoint(point, position, color) {
-      detailTitle.textContent = point.operator;
-      detailCopy.textContent = `${point.city} · ${point.country} · ${point.coordinate_source === 'city-centroid' ? 'posição aproximada da cidade' : point.coordinate_source === 'country-centroid' ? 'posição aproximada do país' : 'posição indisponível'}`;
-      detailStats.replaceChildren();
-      [['Amostras', point.samples], ['Download médio', format(point.avg_download_mbps, ' Mbps')], ['Upload médio', format(point.avg_upload_mbps, ' Mbps')], ['Falhas', point.failure_count]].forEach(([label, value]) => {
-        const stat = document.createElement('div');
-        const caption = document.createElement('span');
-        caption.textContent = label;
-        const valueNode = document.createElement('strong');
-        valueNode.textContent = String(value);
-        stat.append(caption, valueNode);
-        detailStats.append(stat);
-      });
-      if (position) {
-        map.querySelectorAll('.map-tooltip').forEach((node) => node.remove());
-        const tooltip = svg('g', { class: 'map-tooltip' });
-        const text = `${point.operator} · ${point.city}`;
-        const width = Math.min(310, Math.max(120, text.length * 6.3));
-        const x = Math.max(18, Math.min(982 - width, position.x + 14));
-        const y = Math.max(68, position.y - 14);
-        tooltip.append(svg('rect', { x, y: y - 22, width, height: 26, rx: 7, fill: '#102223', stroke: color }));
-        tooltip.append(svg('text', { x: x + 10, y: y - 5, class: 'map-tooltip-text' }, text));
-        map.append(tooltip);
-      }
-    }
   }
 
   window.SpeedTesterNetworkMap = { render };

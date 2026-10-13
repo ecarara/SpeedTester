@@ -31,7 +31,10 @@
 
   function selectPoint(point, position, color, detailTitle, detailCopy, detailStats, map) {
     detailTitle.textContent = point.operator;
-    detailCopy.textContent = `${point.city} · ${point.country} · ${point.coordinate_source === 'city-centroid' ? 'posição aproximada da cidade' : point.coordinate_source === 'country-centroid' ? 'posição aproximada do país' : 'posição indisponível'}`;
+    let coordinateLabel = 'posição indisponível';
+    if (point.coordinate_source === 'city-centroid') coordinateLabel = 'posição aproximada da cidade';
+    else if (point.coordinate_source === 'country-centroid') coordinateLabel = 'posição aproximada do país';
+    detailCopy.textContent = `${point.city} · ${point.country} · ${coordinateLabel}`;
     detailStats.replaceChildren();
     for (const [label, value] of [['Amostras', point.samples], ['Download médio', format(point.avg_download_mbps, ' Mbps')], ['Upload médio', format(point.avg_upload_mbps, ' Mbps')], ['Falhas', point.failure_count]]) {
       const stat = document.createElement('div');

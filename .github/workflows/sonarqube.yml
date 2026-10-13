@@ -42,3 +42,19 @@ jobs:
           args: >-
             -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY || 'speedtester' }}
             -Dsonar.qualitygate.wait=true
+      - name: Report quality gate conditions
+        if: always()
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY || 'speedtester' }}
+        run: |
+          set +e
+          response=$(curl --silent --show-error --fail --user "${SONAR_TOKEN}:" \
+            "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}")
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "quality-gate-details-unavailable"
+            exit 0
+          fi
+          python -c 'import json,sys; data=json.loads(sys.stdin.read()); project=data.get("projectStatus", {}); print("quality-gate-status="+str(project.get("status"))); [print(f"{c.get(\"metricKey\")}: status={c.get(\"status\")} actual={c.get(\"actualValue\")} threshold={c.get(\"errorThreshold\")}") for c in project.get("conditions", [])]' <<< "$response"

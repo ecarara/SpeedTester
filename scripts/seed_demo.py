@@ -41,6 +41,8 @@ def main() -> None:
                 latency_min_ms=4.8, latency_max_ms=7.5, packet_loss_pct=0,
                 tcp_retransmits=index % 3, bandwidth_contracted_mbps=1000,
                 server_name="iperf3.example.com", isp="Operadora de demonstração",
+                isp_organization="Operadora de demonstração S.A.", country="Brasil",
+                country_code="BR", city="São Paulo",
                 interface="eth0", test_duration_sec=20,
             ))
             store.finish_slot(slot["id"], "SUCCESS")

@@ -67,6 +67,14 @@ const reports = require('istanbul-reports');
     assert.match(await page.locator('#chart').textContent(),/Sem medições/);
     await page.locator('#runnerFilter').selectOption('iperf3');
     await page.waitForFunction(()=>document.querySelector('#coverageTitle').textContent==='56 concluídos'&&document.querySelectorAll('#chart circle').length===112);
+    await page.waitForSelector('#networkMap .map-marker');
+    assert.equal(await page.locator('#networkMap .map-marker').count(),1);
+    await page.locator('#networkMap .map-marker').first().focus();
+    assert.match(await page.locator('.network-map-detail h4').textContent(),/Operadora de demonstração/);
+    await page.locator('#mapOperatorFilter').selectOption({index:1});
+    await page.waitForSelector('#networkMap .network-map-list-item');
+    await page.locator('#networkMap .network-map-list-item').first().click();
+    await page.locator('#mapResetBtn').click();
     if(process.env.DASHBOARD_SCREENSHOT){await page.locator('#periodFilter').selectOption('7');await page.waitForFunction(()=>document.querySelector('#coveragePeriod').textContent==='7 dias');await page.screenshot({path:path.join(root,'docs/images/dashboard.png')});}
     await page.setViewportSize({width:390,height:844});
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth), 'Mobile page overflows horizontally');
@@ -82,10 +90,12 @@ const reports = require('istanbul-reports');
     assert.equal((await request.get(base+'/api/export')).status(),200);
     assert.deepEqual(errors,[]);
     const coverage = await page.coverage.stopJSCoverage(), map=createCoverageMap({});
-    const chartCoverage=coverage.filter(entry=>/\/dashboard\/(charts|auth)\.js$/.test(entry.url));
-    assert(chartCoverage.some(entry=>entry.url.endsWith('/charts.js')),'Chart coverage was not captured');
-    for(const entry of chartCoverage){
-      const converter=v8toIstanbul(path.join(root,'app/dashboard',entry.url.endsWith('/charts.js')?'charts.js':'auth.js'),0,{source:entry.source});
+    const dashboardCoverage=coverage.filter(entry=>/\/dashboard\/(charts|auth|network-map)\.js$/.test(entry.url));
+    assert(dashboardCoverage.some(entry=>entry.url.endsWith('/charts.js')),'Chart coverage was not captured');
+    assert(dashboardCoverage.some(entry=>entry.url.endsWith('/network-map.js')),'Network map coverage was not captured');
+    for(const entry of dashboardCoverage){
+      const filename=entry.url.endsWith('/charts.js')?'charts.js':entry.url.endsWith('/auth.js')?'auth.js':'network-map.js';
+      const converter=v8toIstanbul(path.join(root,'app/dashboard',filename),0,{source:entry.source});
       await converter.load();converter.applyCoverage(entry.functions);map.merge(converter.toIstanbul());
     }
     reports.create('lcovonly').execute(createContext({dir:path.join(root,'coverage-js'),coverageMap:map}));

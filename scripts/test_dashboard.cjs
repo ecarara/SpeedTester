@@ -75,6 +75,19 @@ const reports = require('istanbul-reports');
     await page.waitForSelector('#networkMap .network-map-list-item');
     await page.locator('#networkMap .network-map-list-item').first().click();
     await page.locator('#mapResetBtn').click();
+    await page.evaluate(() => {
+      const target = document.querySelector('#networkMap');
+      window.SpeedTesterNetworkMap.render(target, { points: [
+        { operator: 'Operadora A', city: 'São Paulo', country: 'Brasil', coordinate_source: 'city-centroid', latitude: -23.55, longitude: -46.63, samples: 4, avg_download_mbps: 900, avg_upload_mbps: 450, failure_count: 0 },
+        { operator: 'Operadora B', city: 'São Paulo', country: 'Brasil', coordinate_source: 'country-centroid', latitude: -23.55, longitude: -46.63, samples: 2, avg_download_mbps: null, avg_upload_mbps: Number.NaN, failure_count: 1 },
+        { operator: 'Operadora C', city: 'Local desconhecido', country: 'País desconhecido', coordinate_source: 'unavailable', latitude: null, longitude: null, samples: 1, avg_download_mbps: null, avg_upload_mbps: null, failure_count: 1 },
+      ] }, {});
+    });
+    assert.equal(await page.locator('#networkMap .map-marker').count(),2);
+    await page.locator('#networkMap .network-map-list-item').nth(2).click();
+    assert.match(await page.locator('.network-map-detail-copy').textContent(),/posição indisponível/);
+    await page.evaluate(() => window.SpeedTesterNetworkMap.render(document.querySelector('#networkMap'), { points: [] }, {}));
+    assert.match(await page.locator('#networkMap').textContent(),/Nenhum grupo encontrado/);
     if(process.env.DASHBOARD_SCREENSHOT){await page.locator('#periodFilter').selectOption('7');await page.waitForFunction(()=>document.querySelector('#coveragePeriod').textContent==='7 dias');await page.screenshot({path:path.join(root,'docs/images/dashboard.png')});}
     await page.setViewportSize({width:390,height:844});
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth), 'Mobile page overflows horizontally');

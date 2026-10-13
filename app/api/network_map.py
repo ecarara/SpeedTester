@@ -74,6 +74,60 @@ def _coordinates(row: dict) -> tuple[float | None, float | None, str]:
     return None, None, "unavailable"
 
 
+def _row_identity(row: dict) -> tuple[str, str, str, str]:
+    operator = row.get("isp") or row.get("isp_organization") or "Operadora não identificada"
+    country = row.get("country") or "País não identificado"
+    city = row.get("city") or "Cidade não identificada"
+    code = str(row.get("country_code") or "").upper()
+    return str(operator), str(country), str(city), code
+
+
+def _add_metric(group: dict, row: dict, field: str, total_field: str, count_field: str) -> None:
+    value = row.get(field)
+    if value is not None:
+        group[total_field] += float(value)
+        group[count_field] += 1
+
+
+def _accumulate_row(group: dict, row: dict) -> None:
+    group["samples"] += 1
+    if row.get("is_failure"):
+        group["failure_count"] += 1
+    else:
+        group["success_count"] += 1
+        _add_metric(group, row, "download_mbps", "download_total", "download_count")
+        _add_metric(group, row, "upload_mbps", "upload_total", "upload_count")
+    started_at = row.get("started_at", "")
+    if not group["latest_at"] or started_at > group["latest_at"]:
+        group["latest_at"] = started_at
+
+
+def _new_group(row: dict) -> dict:
+    operator, country, city, code = _row_identity(row)
+    return {
+        "operator": operator, "organization": row.get("isp_organization"),
+        "country": country, "country_code": code or None, "city": city,
+        "samples": 0, "success_count": 0, "failure_count": 0,
+        "download_total": 0.0, "download_count": 0,
+        "upload_total": 0.0, "upload_count": 0, "latest_at": None,
+    }
+
+
+def _point(index: int, group: dict) -> dict:
+    latitude, longitude, precision = _coordinates(group)
+    return {
+        "id": f"network-{index}", "operator": group["operator"],
+        "organization": group.get("organization"), "city": group["city"],
+        "country": group["country"], "country_code": group.get("country_code"),
+        "latitude": latitude, "longitude": longitude,
+        "coordinate_source": precision, "samples": group["samples"],
+        "success_count": group["success_count"], "failure_count": group["failure_count"],
+        "avg_download_mbps": round(group["download_total"] / group["download_count"], 2) if group["download_count"] else None,
+        "avg_upload_mbps": round(group["upload_total"] / group["upload_count"], 2) if group["upload_count"] else None,
+        "latest_at": group["latest_at"],
+    }
+
+
 def build_network_map(rows: list[dict]) -> dict:
     """Aggregate samples into operator/city/country points for the UI."""
     groups: dict[tuple[str, str, str, str], dict] = defaultdict(lambda: {
@@ -82,47 +136,13 @@ def build_network_map(rows: list[dict]) -> dict:
         "upload_total": 0.0, "upload_count": 0, "latest_at": None,
     })
     for row in rows:
-        operator = row.get("isp") or row.get("isp_organization") or "Operadora não identificada"
-        country = row.get("country") or "País não identificado"
-        city = row.get("city") or "Cidade não identificada"
-        code = str(row.get("country_code") or "").upper()
-        group = groups[(str(operator), str(country), str(city), code)]
-        group.update({"operator": str(operator), "organization": row.get("isp_organization"),
-                      "country": str(country), "country_code": code or None, "city": str(city)})
-        group["samples"] += 1
-        if row.get("is_failure"):
-            group["failure_count"] += 1
-        else:
-            group["success_count"] += 1
-            if row.get("download_mbps") is not None:
-                group["download_total"] += float(row["download_mbps"])
-                group["download_count"] += 1
-            if row.get("upload_mbps") is not None:
-                group["upload_total"] += float(row["upload_mbps"])
-                group["upload_count"] += 1
-        if not group["latest_at"] or row.get("started_at", "") > group["latest_at"]:
-            group["latest_at"] = row.get("started_at")
+        identity = _row_identity(row)
+        group = groups[identity]
+        if not group.get("operator"):
+            groups[identity] = group = _new_group(row)
+        _accumulate_row(group, row)
 
-    points = []
-    for index, group in enumerate(groups.values(), start=1):
-        latitude, longitude, precision = _coordinates(group)
-        points.append({
-            "id": f"network-{index}",
-            "operator": group["operator"],
-            "organization": group.get("organization"),
-            "city": group["city"],
-            "country": group["country"],
-            "country_code": group.get("country_code"),
-            "latitude": latitude,
-            "longitude": longitude,
-            "coordinate_source": precision,
-            "samples": group["samples"],
-            "success_count": group["success_count"],
-            "failure_count": group["failure_count"],
-            "avg_download_mbps": round(group["download_total"] / group["download_count"], 2) if group["download_count"] else None,
-            "avg_upload_mbps": round(group["upload_total"] / group["upload_count"], 2) if group["upload_count"] else None,
-            "latest_at": group["latest_at"],
-        })
+    points = [_point(index, group) for index, group in enumerate(groups.values(), start=1)]
     points.sort(key=lambda item: (-item["samples"], item["operator"], item["city"]))
     return {
         "points": points,

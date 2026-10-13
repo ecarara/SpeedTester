@@ -52,6 +52,7 @@ const reports = require('istanbul-reports');
     await page.waitForFunction(()=>document.querySelector('#coverageTitle').textContent==='8 concluídos');
     assert.equal(await page.locator('#chart circle').count(),16);
     await page.locator('#chart circle').first().focus();
+    await page.waitForFunction(()=>/download:.*Mbps/.test(document.querySelector('#chartDetail').textContent));
     assert.match(await page.locator('#chartDetail').textContent(),/download:.*Mbps/);
     for(const [period,count] of [['7',56],['30',56],['90',56]]) {
       await page.locator('#periodFilter').selectOption(period);

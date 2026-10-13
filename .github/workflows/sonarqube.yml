@@ -57,4 +57,5 @@ jobs:
             echo "quality-gate-details-unavailable"
             exit 0
           fi
-          python -c 'import json,sys; data=json.loads(sys.stdin.read()); project=data.get("projectStatus", {}); print("quality-gate-status="+str(project.get("status"))); [print(f"{c.get(\"metricKey\")}: status={c.get(\"status\")} actual={c.get(\"actualValue\")} threshold={c.get(\"errorThreshold\")}") for c in project.get("conditions", [])]' <<< "$response"
+          printf '%s\n' "$response" | python -c 'import json,sys; project=json.load(sys.stdin).get("projectStatus", {}); print("quality-gate-status="+str(project.get("status"))); [print("{}: status={} actual={} threshold={}".format(c.get("metricKey"), c.get("status"), c.get("actualValue"), c.get("errorThreshold"))) for c in project.get("conditions", [])]'
+          exit 0

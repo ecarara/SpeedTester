@@ -64,9 +64,40 @@ class EncryptedQueue:
                 conn.execute("INSERT OR REPLACE INTO state VALUES(?,?)",(key,self.seal(value,key)))
 
     def pending(self, destination):
+        return self.records(destination, "pending")
+
+    def quarantined(self, destination):
+        return self.records(destination, "quarantined")
+
+    def records(self, destination, status):
         with self.connection() as conn:
-            rows = conn.execute("SELECT id,ciphertext FROM entries WHERE status='pending' AND destination=? ORDER BY rowid", (destination,)).fetchall()
+            rows = conn.execute("SELECT id,ciphertext FROM entries WHERE status=? AND destination=? ORDER BY rowid", (status,destination)).fetchall()
         return [self.open(row[1], row[0]+":"+destination) for row in rows]
+
+    def quarantine_attempt(self,destination,attempt_id,code,*,grant=None,request_id=None):
+        """Preserve terminal evidence; never manufacture an acceptance receipt."""
+        active_key=destination+":active_attempt"
+        request_key=destination+":grant_request"
+        with self.connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if attempt_id is not None:
+                rows=conn.execute("SELECT id,ciphertext FROM entries WHERE destination=? AND status='pending'",(destination,)).fetchall()
+                for identifier,ciphertext in rows:
+                    record=self.open(ciphertext,identifier+":"+destination)
+                    if record["envelope"]["payload"]["attempt_id"]==attempt_id:
+                        conn.execute("UPDATE entries SET status='quarantined' WHERE id=? AND status='pending'",(identifier,))
+            evidence_key=destination+":quarantine:"+(attempt_id or request_id)
+            evidence={"attempt_id":attempt_id,"request_id":request_id,"code":code,"grant":grant}
+            conn.execute("INSERT OR REPLACE INTO state VALUES(?,?)",(evidence_key,self.seal(evidence,evidence_key)))
+            row=conn.execute("SELECT value FROM state WHERE key=?",(active_key,)).fetchone()
+            active=self.open(row[0],active_key) if row else None
+            request_row=conn.execute("SELECT value FROM state WHERE key=?",(request_key,)).fetchone()
+            current_request=self.open(request_row[0],request_key) if request_row else None
+            # A terminal older attempt cannot clear a different live attempt.
+            if (active and active["attempt_id"]==attempt_id) or (not active and (request_id is None or request_id==current_request)):
+                from uuid import uuid4
+                for key,value in ((active_key,None),(request_key,str(uuid4()))):
+                    conn.execute("INSERT OR REPLACE INTO state VALUES(?,?)",(key,self.seal(value,key)))
 
     def acknowledge(self, identifier, receipt,*,previous_receipt_key="previous_receipt"):
         # Caller must verify the server signature AND record binding first.

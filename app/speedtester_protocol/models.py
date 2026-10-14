@@ -65,6 +65,7 @@ class Grant(StrictModel):
     submit_before: int = Field(ge=0)
     max_duration_ms: int = Field(ge=1, le=300000)
     max_bytes: int = Field(ge=1, le=10**12)
+    previous_receipt: Digest | None = None
 
 
 class Observation(StrictModel):

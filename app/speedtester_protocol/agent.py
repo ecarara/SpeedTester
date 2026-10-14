@@ -10,6 +10,9 @@ from .models import Observation,Manifest,METRICS
 from .client import ProtocolError
 
 
+TERMINAL_ATTEMPT_CODES=frozenset({"start_expired","grant_expired","attempt_expired","legal_context_changed"})
+
+
 class CommunityAgent:
     def __init__(self,client,queue,measurement_key,profile,runner):
         self.client,self.queue,self.key,self.profile,self.runner=client,queue,measurement_key,profile,runner
@@ -19,13 +22,25 @@ class CommunityAgent:
         return self.queue.state(self.destination+":"+key,value)
 
     def sync(self):
-        completed=0
+        completed=0;quarantined=set()
         for record in self.queue.pending(self.destination):
-            if record["kind"]=="observation":receipt=self.client.observation(record["envelope"])
-            else:receipt=self.client.finalize(record["envelope"])
+            attempt_id=record["envelope"]["payload"]["attempt_id"]
+            if attempt_id in quarantined:continue
+            try:
+                if record["kind"]=="observation":receipt=self.client.observation(record["envelope"])
+                else:receipt=self.client.finalize(record["envelope"])
+            except ProtocolError as exc:
+                if exc.code not in TERMINAL_ATTEMPT_CODES:raise
+                self.queue.quarantine_attempt(self.destination,attempt_id,exc.code)
+                quarantined.add(attempt_id)
+                continue
             self.queue.acknowledge(record["id"],receipt,previous_receipt_key=self.destination+":previous_receipt")
             completed+=1
         return completed
+
+    def _quarantine(self,code,grant=None,request_id=None):
+        self.queue.quarantine_attempt(self.destination,grant.attempt_id if grant else None,code,
+            grant=grant.model_dump() if grant else None,request_id=request_id)
 
     @staticmethod
     def value(result,attribute,multiplier):
@@ -37,21 +52,38 @@ class CommunityAgent:
 
     def run_once(self,execute):
         self.sync()
-        active=self.state("active_attempt")
-        if active:
-            from .models import Grant
-            grant=Grant.model_validate(active)
-            # Start is idempotent. A restarted process never runs the same grant again.
-            self.client.start(grant)
-            return self._complete(grant,{metric:None for metric in METRICS},True,int(time.time()))
-        request_id=self.state("grant_request")
-        if request_id is None:
-            request_id=str(uuid4());self.state("grant_request",request_id)
-        request={"request_id":request_id,"profile":self.profile.model_dump(),"runner":self.runner}
-        grant=self.client.grant(request)
-        if grant.start_before<int(time.time()):raise ProtocolError("grant_expired")
-        self.state("active_attempt",grant.model_dump())
-        self.client.start(grant)
+        # At most one fresh retry after terminal recovery, never an unbounded loop.
+        for _ in range(2):
+            active=self.state("active_attempt")
+            if active:
+                from .models import Grant
+                grant=Grant.model_validate(active)
+                try:
+                    # A restarted process never executes a previously active grant.
+                    self.client.start(grant)
+                except ProtocolError as exc:
+                    if exc.code not in TERMINAL_ATTEMPT_CODES:raise
+                    self._quarantine(exc.code,grant)
+                    continue
+                return self._complete(grant,{metric:None for metric in METRICS},True,int(time.time()))
+            request_id=self.state("grant_request")
+            if request_id is None:
+                request_id=str(uuid4());self.state("grant_request",request_id)
+            request={"request_id":request_id,"profile":self.profile.model_dump(),"runner":self.runner}
+            grant=None
+            try:
+                grant=self.client.grant(request)
+                if grant.start_before<int(time.time()):raise ProtocolError("grant_expired")
+                self.state("active_attempt",grant.model_dump())
+                self.client.start(grant)
+            except ProtocolError as exc:
+                if exc.code not in TERMINAL_ATTEMPT_CODES:raise
+                self._quarantine(exc.code,grant,request_id)
+                continue
+            return self._measure(grant,execute)
+        raise ProtocolError("terminal_attempt_recovery_pending")
+
+    def _measure(self,grant,execute):
         measured_at=int(time.time())
         failure=False
         try:
@@ -80,7 +112,8 @@ class CommunityAgent:
                 measured_at=measured_at,nonce=grant.nonce,profile_digest=grant.profile_digest,legal_digest=grant.legal_digest)
             payload=observation.model_dump();checksums[metric]=digest(payload)
             records.append({"id":observation.observation_id,"kind":"observation","envelope":sign(payload,self.key,"observation-v1")})
-        previous=self.state("previous_receipt")
+        # The signed grant carries the Server chain head, including lost receipts.
+        previous=grant.previous_receipt
         manifest=Manifest(attempt_id=grant.attempt_id,nonce=grant.nonce,profile_digest=grant.profile_digest,
                           legal_digest=grant.legal_digest,previous_receipt=previous,observations=checksums)
         records.append({"id":grant.attempt_id,"kind":"manifest","envelope":sign(manifest.model_dump(),self.key,"manifest-v1")})

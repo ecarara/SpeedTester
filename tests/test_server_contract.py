@@ -157,6 +157,121 @@ class ContractTests(unittest.TestCase):
         self.assertIsNone(agent.state("active_attempt"))
 
 
+    def test_manifest_uses_signed_grant_chain_head_instead_of_stale_queue_state(self):
+        agent,result,state=self.agent_fixture();transport=agent.client.transport;chain="c"*64;manifests=[]
+        agent.state("previous_receipt","d"*64)
+        def recovered_chain(method,path,headers,payload):
+            response=transport(method,path,headers,payload)
+            if path=="/api/v1/measurement-grants" and response[0]==200:
+                grant=state["grant"].model_copy(update={"previous_receipt":chain})
+                state["grant"]=grant;state["grants"][payload["request_id"]]=grant
+                return 200,{},sign(grant.model_dump(),self.server,"grant-v1")
+            if path.endswith("/finalize"):manifests.append(payload["payload"])
+            return response
+        agent.client.transport=recovered_chain
+        agent.run_once(lambda grant:result)
+        self.assertEqual(len(manifests),1)
+        self.assertEqual(manifests[0]["previous_receipt"],chain)
+        self.assertNotEqual(agent.state("previous_receipt"),chain)
+
+    def test_expired_grant_request_recovers_once_without_executing_old_grant(self):
+        agent,result,state=self.agent_fixture();transport=agent.client.transport;expired=[None];executed=[]
+        def lose_window(method,path,headers,payload):
+            response=transport(method,path,headers,payload)
+            if path=="/api/v1/measurement-grants" and response[0]==200 and expired[0] is None:
+                grant=state["grant"].model_copy(update={"start_before":int(time.time())-1})
+                state["grants"][payload["request_id"]]=grant;expired[0]=grant
+                return 200,{},sign(grant.model_dump(),self.server,"grant-v1")
+            return response
+        agent.client.transport=lose_window
+        agent.run_once(lambda grant:executed.append(grant.attempt_id) or result)
+        self.assertEqual(len(state["grants"]),2);self.assertEqual(len(executed),1)
+        self.assertNotEqual(executed[0],expired[0].attempt_id)
+        evidence=agent.state("quarantine:"+expired[0].attempt_id)
+        self.assertEqual(evidence["code"],"grant_expired");self.assertEqual(evidence["grant"],expired[0].model_dump())
+        self.assertIsNone(agent.state("active_attempt"))
+
+    def test_expired_active_restart_preserves_evidence_and_never_reexecutes(self):
+        agent,result,state=self.agent_fixture()
+        with self.assertRaises(SystemExit):agent.run_once(lambda grant:(_ for _ in ()).throw(SystemExit()))
+        old=agent.state("active_attempt");transport=agent.client.transport;executed=[]
+        def expire_old(method,path,headers,payload):
+            if path=="/api/v1/attempts/"+old["attempt_id"]+"/start":return 409,{}, {"code":"start_expired"}
+            return transport(method,path,headers,payload)
+        agent.client.transport=expire_old
+        agent.run_once(lambda grant:executed.append(grant.attempt_id) or result)
+        self.assertEqual(len(executed),1);self.assertNotEqual(executed[0],old["attempt_id"])
+        self.assertEqual(agent.state("quarantine:"+old["attempt_id"])["grant"],old)
+        self.assertIsNone(agent.state("active_attempt"))
+
+    def test_terminal_pending_attempt_is_quarantined_without_false_acceptance(self):
+        agent,result,state=self.agent_fixture();transport=agent.client.transport;observations=[0]
+        def fail_after_first(method,path,headers,payload):
+            if path=="/api/v1/metric-observations":
+                observations[0]+=1
+                if observations[0]>1:return 503,{}, {"code":"temporarily_unavailable"}
+            return transport(method,path,headers,payload)
+        agent.client.transport=fail_after_first
+        with self.assertRaises(ProtocolError):agent.run_once(lambda grant:result)
+        pending=agent.queue.pending(agent.destination);self.assertEqual(len(pending),8)
+        old_attempt=pending[0]["envelope"]["payload"]["attempt_id"]
+        def expire_old(method,path,headers,payload):
+            if payload and payload.get("payload",{}).get("attempt_id")==old_attempt:return 409,{}, {"code":"attempt_expired"}
+            return transport(method,path,headers,payload)
+        agent.client.transport=expire_old
+        new_attempt=agent.run_once(lambda grant:result)
+        self.assertNotEqual(new_attempt,old_attempt)
+        self.assertEqual(agent.queue.quarantined(agent.destination),pending)
+        self.assertEqual(agent.queue.pending(agent.destination),[])
+        with agent.queue.connection() as conn:
+            statuses=conn.execute("SELECT status,COUNT(*) FROM entries GROUP BY status").fetchall()
+            self.assertEqual(dict(statuses),{"accepted":10,"quarantined":8})
+            for record in pending:
+                self.assertIsNone(conn.execute("SELECT receipt FROM entries WHERE id=?",(record["id"],)).fetchone()[0])
+        self.assertEqual(agent.state("quarantine:"+old_attempt)["code"],"attempt_expired")
+
+    def test_authentication_signature_and_consent_errors_leave_queue_pending(self):
+        for code in ("client_revoked","terms_acceptance_required","invalid_receipt","invalid_signature","invalid_proof"):
+            agent,result,state=self.agent_fixture();transport=agent.client.transport
+            def blocked(method,path,headers,payload):
+                if path=="/api/v1/metric-observations":return 403,{}, {"code":code}
+                return transport(method,path,headers,payload)
+            agent.client.transport=blocked
+            with self.assertRaises(ProtocolError):agent.run_once(lambda grant:result)
+            self.assertEqual(len(agent.queue.pending(agent.destination)),9)
+            self.assertEqual(agent.queue.quarantined(agent.destination),[])
+
+    def test_legal_context_request_recovery_is_bounded(self):
+        agent,result,state=self.agent_fixture();requests=[]
+        def changed(method,path,headers,payload):
+            requests.append(payload["request_id"])
+            return 409,{}, {"code":"legal_context_changed"}
+        agent.client.transport=changed
+        with self.assertRaises(ProtocolError) as error:agent.run_once(lambda grant:self.fail("terminal grant must not execute"))
+        self.assertEqual(error.exception.code,"terminal_attempt_recovery_pending")
+        self.assertEqual(len(requests),2);self.assertNotEqual(requests[0],requests[1])
+        self.assertNotIn(agent.state("grant_request"),requests)
+        self.assertEqual(agent.state("quarantine:"+requests[0])["request_id"],requests[0])
+
+    def test_quarantine_is_atomic_when_an_encrypted_entry_is_corrupted(self):
+        agent,result,state=self.agent_fixture();attempt=str(uuid4());request=str(uuid4())
+        agent.state("active_attempt",{"attempt_id":attempt});agent.state("grant_request",request)
+        records=[{"id":str(uuid4()),"kind":"observation","envelope":{"payload":{"attempt_id":attempt}}} for _ in range(2)]
+        agent.queue.put_batch(records,agent.destination)
+        with agent.queue.connection() as conn:conn.execute("UPDATE entries SET ciphertext=? WHERE id=?",(b"corrupted",records[1]["id"]))
+        with self.assertRaises(Exception):agent.queue.quarantine_attempt(agent.destination,attempt,"attempt_expired")
+        with agent.queue.connection() as conn:self.assertEqual(conn.execute("SELECT DISTINCT status FROM entries").fetchall(),[("pending",)])
+        self.assertEqual(agent.state("active_attempt"),{"attempt_id":attempt})
+        self.assertEqual(agent.state("grant_request"),request)
+        self.assertIsNone(agent.state("quarantine:"+attempt))
+
+    def test_quarantine_older_attempt_cannot_clear_a_different_live_attempt(self):
+        agent,result,state=self.agent_fixture();older=str(uuid4());live=str(uuid4());request=str(uuid4())
+        agent.state("active_attempt",{"attempt_id":live});agent.state("grant_request",request)
+        agent.queue.quarantine_attempt(agent.destination,older,"attempt_expired")
+        self.assertEqual(agent.state("active_attempt"),{"attempt_id":live})
+        self.assertEqual(agent.state("grant_request"),request)
+
     def test_queue_state_does_not_cross_server_or_installation_identity(self):
         from speedtester_protocol.agent import CommunityAgent
         agent,result,state=self.agent_fixture();agent.state("active_attempt",{"synthetic":"first-installation"})

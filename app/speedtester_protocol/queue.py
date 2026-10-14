@@ -68,13 +68,13 @@ class EncryptedQueue:
             rows = conn.execute("SELECT id,ciphertext FROM entries WHERE status='pending' AND destination=? ORDER BY rowid", (destination,)).fetchall()
         return [self.open(row[1], row[0]+":"+destination) for row in rows]
 
-    def acknowledge(self, identifier, receipt):
+    def acknowledge(self, identifier, receipt,*,previous_receipt_key="previous_receipt"):
         # Caller must verify the server signature AND record binding first.
         with self.connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute("UPDATE entries SET status='accepted',receipt=? WHERE id=?",(self.seal(receipt,identifier+":receipt"),identifier))
             if receipt["payload"]["kind"]=="manifest":
-                conn.execute("INSERT OR REPLACE INTO state VALUES(?,?)",("previous_receipt",self.seal(digest(receipt),"previous_receipt")))
+                conn.execute("INSERT OR REPLACE INTO state VALUES(?,?)",(previous_receipt_key,self.seal(digest(receipt),previous_receipt_key)))
 
     def state(self, key, value=None):
         with self.connection() as conn:

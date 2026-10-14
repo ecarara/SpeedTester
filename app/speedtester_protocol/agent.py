@@ -15,12 +15,15 @@ class CommunityAgent:
         self.client,self.queue,self.key,self.profile,self.runner=client,queue,measurement_key,profile,runner
         self.destination=digest({"origin":client.origin,"server_key":client.server_key.public_bytes_raw().hex(),"possession_key":client.possession_key.public_key().public_bytes_raw().hex()})
 
+    def state(self,key,value=None):
+        return self.queue.state(self.destination+":"+key,value)
+
     def sync(self):
         completed=0
         for record in self.queue.pending(self.destination):
             if record["kind"]=="observation":receipt=self.client.observation(record["envelope"])
             else:receipt=self.client.finalize(record["envelope"])
-            self.queue.acknowledge(record["id"],receipt)
+            self.queue.acknowledge(record["id"],receipt,previous_receipt_key=self.destination+":previous_receipt")
             completed+=1
         return completed
 
@@ -34,20 +37,20 @@ class CommunityAgent:
 
     def run_once(self,execute):
         self.sync()
-        active=self.queue.state("active_attempt")
+        active=self.state("active_attempt")
         if active:
             from .models import Grant
             grant=Grant.model_validate(active)
             # Start is idempotent. A restarted process never runs the same grant again.
             self.client.start(grant)
             return self._complete(grant,{metric:None for metric in METRICS},True,int(time.time()))
-        request_id=self.queue.state("grant_request")
+        request_id=self.state("grant_request")
         if request_id is None:
-            request_id=str(uuid4());self.queue.state("grant_request",request_id)
+            request_id=str(uuid4());self.state("grant_request",request_id)
         request={"request_id":request_id,"profile":self.profile.model_dump(),"runner":self.runner}
         grant=self.client.grant(request)
         if grant.start_before<int(time.time()):raise ProtocolError("grant_expired")
-        self.queue.state("active_attempt",grant.model_dump())
+        self.state("active_attempt",grant.model_dump())
         self.client.start(grant)
         measured_at=int(time.time())
         failure=False
@@ -77,11 +80,11 @@ class CommunityAgent:
                 measured_at=measured_at,nonce=grant.nonce,profile_digest=grant.profile_digest,legal_digest=grant.legal_digest)
             payload=observation.model_dump();checksums[metric]=digest(payload)
             records.append({"id":observation.observation_id,"kind":"observation","envelope":sign(payload,self.key,"observation-v1")})
-        previous=self.queue.state("previous_receipt")
+        previous=self.state("previous_receipt")
         manifest=Manifest(attempt_id=grant.attempt_id,nonce=grant.nonce,profile_digest=grant.profile_digest,
                           legal_digest=grant.legal_digest,previous_receipt=previous,observations=checksums)
         records.append({"id":grant.attempt_id,"kind":"manifest","envelope":sign(manifest.model_dump(),self.key,"manifest-v1")})
         # All captured metrics and their manifest enter the encrypted queue atomically.
-        self.queue.put_batch(records,self.destination,state_updates={"grant_request":str(uuid4()),"active_attempt":None})
+        self.queue.put_batch(records,self.destination,state_updates={self.destination+":grant_request":str(uuid4()),self.destination+":active_attempt":None})
         self.sync()
         return grant.attempt_id

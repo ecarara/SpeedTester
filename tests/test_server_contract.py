@@ -139,7 +139,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(metrics["download"].value,100000000)
         self.assertIsNone(metrics["jitter"].value);self.assertEqual(metrics["jitter"].status,"not-supported")
         self.assertEqual(agent.queue.pending(agent.destination),[])
-        self.assertIsNotNone(agent.queue.state("previous_receipt"))
+        self.assertIsNotNone(agent.state("previous_receipt"))
 
     def test_agent_no_valid_grant_means_no_runner_execution(self):
         agent,result,state=self.agent_fixture();calls=[]
@@ -154,6 +154,15 @@ class ContractTests(unittest.TestCase):
         agent.run_once(lambda grant:self.fail("A started grant must not run twice"))
         self.assertEqual(len(state["grants"]),1)
         self.assertEqual({record.status for record in state["observations"]},{"error"})
-        self.assertIsNone(agent.queue.state("active_attempt"))
+        self.assertIsNone(agent.state("active_attempt"))
+
+
+    def test_queue_state_does_not_cross_server_or_installation_identity(self):
+        from speedtester_protocol.agent import CommunityAgent
+        agent,result,state=self.agent_fixture();agent.state("active_attempt",{"synthetic":"first-installation"})
+        other=ServerClient(agent.client.origin,secrets.token_urlsafe(32),Ed25519PrivateKey.generate(),self.server.public_key(),transport=agent.client.transport)
+        second=CommunityAgent(other,agent.queue,agent.key,profile(),"iperf3")
+        self.assertIsNone(second.state("active_attempt"));self.assertNotEqual(second.destination,agent.destination)
+        self.assertEqual(agent.state("active_attempt"),{"synthetic":"first-installation"})
 
 if __name__=="__main__":unittest.main()

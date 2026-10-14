@@ -1,0 +1,56 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Protocol Version",
+      "type": "string"
+    },
+    "attempt_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "observation_id": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Observation Id"
+    },
+    "kind": {
+      "enum": [
+        "observation",
+        "manifest",
+        "started"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Digest",
+      "type": "string"
+    },
+    "accepted_at": {
+      "minimum": 0,
+      "title": "Accepted At",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "attempt_id",
+    "kind",
+    "digest",
+    "accepted_at"
+  ],
+  "title": "Receipt",
+  "type": "object"
+}

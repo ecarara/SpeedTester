@@ -1,4 +1,4 @@
-# SpeedTester
+# SpeedTester Client
 
 [![CI](https://github.com/ecarara/SpeedTester/actions/workflows/ci.yml/badge.svg)](https://github.com/ecarara/SpeedTester/actions/workflows/ci.yml)
 [![License: GPL v3 or later](https://img.shields.io/badge/License-GPL_v3_or_later-blue.svg)](LICENSE)
@@ -264,3 +264,10 @@ expiração de sessões e deploy automático. `API_REQUIRE_LOGIN=false` é reser
 para demonstração local com dados fictícios.
 
 ![Tela de login, sem credenciais preenchidas](docs/images/login.png)
+
+
+## Community integration foundation
+
+The public `speedtester-client-protocol` package provides typed metric observations, signed grants/receipts, DPoP proofs and an encrypted authoritative queue. [Protocol v1](contracts/server-v1/README.md) is exercised by public consumer tests without access to private Server sources.
+
+`CommunityAgent` obtains and starts an authorized attempt before invoking its runner callback, sends metric observations separately and verifies every receipt before acknowledging the queue. Missing measurements remain explicit states. This first delivery is an SDK foundation; headless pairing, automatic renewal and the guided installer are still pending. It is not enabled in the standalone collector or staging by default.

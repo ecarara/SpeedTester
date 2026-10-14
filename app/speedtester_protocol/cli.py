@@ -57,23 +57,41 @@ def prompt_profile(input_fn=input):
     return Profile(version=1,operator=operator,country_code=country,region=region,city=city,access_type=access,link_type=link)
 
 
-def setup(queue,origin,*,transport=None,input_fn=input,sleep=time.sleep,repair=False):
-    origin=HTTPS(origin).origin
-    server=discover(origin,transport)
+def installation_config(queue,origin,server,input_fn):
     config=queue.state("installation")
     if config:
         if config["origin"]!=origin or config["server_key"]!=b64(public_bytes(server)):
             raise ProtocolError("installation_server_changed")
-    else:
-        profile=prompt_profile(input_fn)
-        host=input_fn("Destino iPerf3 (o teste é exploratório se não for controlado): ").strip()
-        port=int(input_fn("Porta iPerf3 [5201]: ").strip() or "5201")
-        IperfRunner(host,port) # Reject malformed destinations before persisting.
-        hours=int(input_fn("Intervalo em horas [1, entre 1 e 24]: ").strip() or "1")
-        if not 1<=hours<=24:raise ValueError("invalid_schedule")
-        config={"origin":origin,"server_key":b64(public_bytes(server)),"possession_private":Ed25519PrivateKey.generate().private_bytes_raw().hex(),
-            "measurement_private":Ed25519PrivateKey.generate().private_bytes_raw().hex(),"profile":profile.model_dump(),"host":host,"port":port,"interval":hours*3600}
-        queue.state("installation",config)
+        return config
+    profile=prompt_profile(input_fn)
+    host=input_fn("Destino iPerf3 (o teste é exploratório se não for controlado): ").strip()
+    port=int(input_fn("Porta iPerf3 [5201]: ").strip() or "5201")
+    IperfRunner(host,port) # Reject malformed destinations before persisting.
+    hours=int(input_fn("Intervalo em horas [1, entre 1 e 24]: ").strip() or "1")
+    if not 1<=hours<=24:raise ValueError("invalid_schedule")
+    config={"origin":origin,"server_key":b64(public_bytes(server)),"possession_private":Ed25519PrivateKey.generate().private_bytes_raw().hex(),
+        "measurement_private":Ed25519PrivateKey.generate().private_bytes_raw().hex(),"profile":profile.model_dump(),"host":host,"port":port,"interval":hours*3600}
+    queue.state("installation",config)
+    return config
+
+
+def await_pairing(pairing_client,pairing,sleep):
+    delay=pairing.interval
+    while int(time.time())<pairing.expires_at:
+        try:
+            pairing_client.poll(pairing)
+            return
+        except ProtocolError as exc:
+            if exc.code not in {"authorization_pending","slow_down"}:raise
+            if exc.code=="slow_down":delay=min(60,delay+5)
+        sleep(delay)
+    raise ProtocolError("pairing_expired")
+
+
+def setup(queue,origin,*,transport=None,input_fn=input,sleep=time.sleep,repair=False):
+    origin=HTTPS(origin).origin
+    server=discover(origin,transport)
+    config=installation_config(queue,origin,server,input_fn)
     credentials,measurement=context(queue,config,transport)
     if credentials.bundle and not repair:
         credentials.ensure_current();print("Client já pareado; credenciais verificadas.");return config
@@ -82,18 +100,10 @@ def setup(queue,origin,*,transport=None,input_fn=input,sleep=time.sleep,repair=F
     print("Código: "+pairing.user_code)
     print("Impressão digital: "+digest(credentials.identity))
     print("Revise os termos e confirme apenas esta instalação. Aguardando aprovação…",flush=True)
-    delay=pairing.interval
-    while int(time.time())<pairing.expires_at:
-        try:
-            pairing_client.poll(pairing)
-            queue.state("next_due",int(time.time())+config["interval"])
-            print("Pareamento concluído. Tokens guardados na fila cifrada; nenhum token precisa ser copiado.")
-            return config
-        except ProtocolError as exc:
-            if exc.code not in {"authorization_pending","slow_down"}:raise
-            if exc.code=="slow_down":delay=min(60,delay+5)
-        sleep(delay)
-    raise ProtocolError("pairing_expired")
+    await_pairing(pairing_client,pairing,sleep)
+    queue.state("next_due",int(time.time())+config["interval"])
+    print("Pareamento concluído. Tokens guardados na fila cifrada; nenhum token precisa ser copiado.")
+    return config
 
 
 def cycle(queue,*,transport=None,runner=None,now=None):
@@ -112,7 +122,7 @@ def cycle(queue,*,transport=None,runner=None,now=None):
     return "synchronized" if sent else "waiting"
 
 
-def main(argv=None):
+def arguments(argv):
     parser=argparse.ArgumentParser(description="SpeedTester Client comunitário")
     commands=parser.add_subparsers(dest="command",required=True)
     for command in ("setup","run","status","service-file"):
@@ -120,31 +130,49 @@ def main(argv=None):
         if command=="setup":sub.add_argument("--server",required=True);sub.add_argument("--repair",action="store_true")
         if command=="run":sub.add_argument("--once",action="store_true")
         if command=="service-file":sub.add_argument("--executable",type=Path,required=True)
-    args=parser.parse_args(argv)
+    return parser.parse_args(argv)
+
+
+def report_blocked(exc):
+    # Codes only: never serialize credentials, bodies or operational records.
+    code=exc.code if isinstance(exc,ProtocolError) else "local_or_network_failure"
+    print("client_blocked: "+code,file=sys.stderr,flush=True)
+
+
+def run_loop(queue,once):
+    while True:
+        try:print(cycle(queue),flush=True)
+        except (ProtocolError,OSError,ValueError) as exc:
+            report_blocked(exc)
+            if once:return 1
+        if once:return 0
+        time.sleep(60)
+
+
+def show_status(queue):
+    config=queue.state("installation")
+    if not config:raise ProtocolError("setup_required")
+    credentials,_=context(queue,config)
+    print(json.dumps({"paired":bool(credentials.bundle),"access_expires_at":credentials.bundle.expires_at if credentials.bundle else None,"next_due":queue.state("next_due")},sort_keys=True))
+
+
+def dispatch(args,queue):
+    if args.command=="setup":
+        if not shutil.which("iperf3"):raise ProtocolError("iperf3_required")
+        setup(queue,args.server,repair=args.repair)
+    elif args.command=="service-file":print(systemd_unit(args.executable,args.state),end="")
+    elif args.command=="status":show_status(queue)
+    else:return run_loop(queue,args.once)
+    return 0
+
+
+def main(argv=None):
+    args=arguments(argv)
     try:
         queue=protected_queue(args.state)
-        with exclusive(queue):
-            if args.command=="setup":
-                if not shutil.which("iperf3"):raise ProtocolError("iperf3_required")
-                setup(queue,args.server,repair=args.repair)
-            elif args.command=="service-file":print(systemd_unit(args.executable,args.state),end="")
-            elif args.command=="status":
-                config=queue.state("installation")
-                if not config:raise ProtocolError("setup_required")
-                credentials,_=context(queue,config)
-                print(json.dumps({"paired":bool(credentials.bundle),"access_expires_at":credentials.bundle.expires_at if credentials.bundle else None,"next_due":queue.state("next_due")},sort_keys=True))
-            else:
-                while True:
-                    try:print(cycle(queue),flush=True)
-                    except (ProtocolError,OSError,ValueError) as exc:
-                        # Codes only: never serialize credentials, bodies or operational records.
-                        print("client_blocked: "+(exc.code if isinstance(exc,ProtocolError) else "local_or_network_failure"),file=sys.stderr,flush=True)
-                        if args.once:return 1
-                    if args.once:break
-                    time.sleep(60)
-        return 0
+        with exclusive(queue):return dispatch(args,queue)
     except (ProtocolError,OSError,ValueError) as exc:
-        print("client_blocked: "+(exc.code if isinstance(exc,ProtocolError) else "local_or_network_failure"),file=sys.stderr)
+        report_blocked(exc)
         return 1
     except KeyboardInterrupt:
         print("Operação interrompida.",file=sys.stderr);return 130

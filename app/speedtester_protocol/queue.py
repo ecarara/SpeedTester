@@ -12,6 +12,9 @@ from nacl.bindings import crypto_aead_xchacha20poly1305_ietf_encrypt, crypto_aea
 from .crypto import canonical, digest
 
 
+BEGIN_IMMEDIATE="BEGIN IMMEDIATE"
+
+
 class EncryptedQueue:
     def __init__(self, directory, key):
         self.directory = Path(directory)
@@ -49,7 +52,7 @@ class EncryptedQueue:
 
     def put_batch(self,records,destination,*,state_updates=None):
         with self.connection() as conn:
-            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(BEGIN_IMMEDIATE)
             for record in records:
                 identifier=record["id"]
                 context=identifier+":"+destination
@@ -61,7 +64,7 @@ class EncryptedQueue:
                 conn.execute("INSERT INTO entries(id,ciphertext,destination) VALUES(?,?,?)",(identifier,self.seal(record,context),destination))
 
             for key,value in (state_updates or {}).items():
-                conn.execute("INSERT OR REPLACE INTO state VALUES(?,?)",(key,self.seal(value,key)))
+                self._write_state(conn,key,value)
 
     def pending(self, destination):
         return self.records(destination, "pending")
@@ -74,42 +77,54 @@ class EncryptedQueue:
             rows = conn.execute("SELECT id,ciphertext FROM entries WHERE status=? AND destination=? ORDER BY rowid", (status,destination)).fetchall()
         return [self.open(row[1], row[0]+":"+destination) for row in rows]
 
-    def quarantine_attempt(self,destination,attempt_id,code,*,grant=None,request_id=None):
-        """Preserve terminal evidence; never manufacture an acceptance receipt."""
+    def _write_state(self,conn,key,value):
+        conn.execute("INSERT OR REPLACE INTO state VALUES(?,?)",(key,self.seal(value,key)))
+
+    def _read_state(self,conn,key):
+        row=conn.execute("SELECT value FROM state WHERE key=?",(key,)).fetchone()
+        return self.open(row[0],key) if row else None
+
+    def _quarantine_records(self,conn,destination,attempt_id):
+        if attempt_id is None:return
+        rows=conn.execute("SELECT id,ciphertext FROM entries WHERE destination=? AND status='pending'",(destination,)).fetchall()
+        for identifier,ciphertext in rows:
+            record=self.open(ciphertext,identifier+":"+destination)
+            if record["envelope"]["payload"]["attempt_id"]==attempt_id:
+                conn.execute("UPDATE entries SET status='quarantined' WHERE id=? AND status='pending'",(identifier,))
+
+    def _advance_terminal_state(self,conn,destination,attempt_id,request_id):
+        from uuid import uuid4
         active_key=destination+":active_attempt"
         request_key=destination+":grant_request"
+        active=self._read_state(conn,active_key)
+        current_request=self._read_state(conn,request_key)
+        if active:
+            if active["attempt_id"]!=attempt_id:return
+        elif request_id is not None and request_id!=current_request:return
+        # A terminal older attempt cannot clear a different live attempt.
+        self._write_state(conn,active_key,None)
+        self._write_state(conn,request_key,str(uuid4()))
+
+    def quarantine_attempt(self,destination,attempt_id,code,*,grant=None,request_id=None):
+        """Preserve terminal evidence; never manufacture an acceptance receipt."""
         with self.connection() as conn:
-            conn.execute("BEGIN IMMEDIATE")
-            if attempt_id is not None:
-                rows=conn.execute("SELECT id,ciphertext FROM entries WHERE destination=? AND status='pending'",(destination,)).fetchall()
-                for identifier,ciphertext in rows:
-                    record=self.open(ciphertext,identifier+":"+destination)
-                    if record["envelope"]["payload"]["attempt_id"]==attempt_id:
-                        conn.execute("UPDATE entries SET status='quarantined' WHERE id=? AND status='pending'",(identifier,))
+            conn.execute(BEGIN_IMMEDIATE)
+            self._quarantine_records(conn,destination,attempt_id)
             evidence_key=destination+":quarantine:"+(attempt_id or request_id)
             evidence={"attempt_id":attempt_id,"request_id":request_id,"code":code,"grant":grant}
-            conn.execute("INSERT OR REPLACE INTO state VALUES(?,?)",(evidence_key,self.seal(evidence,evidence_key)))
-            row=conn.execute("SELECT value FROM state WHERE key=?",(active_key,)).fetchone()
-            active=self.open(row[0],active_key) if row else None
-            request_row=conn.execute("SELECT value FROM state WHERE key=?",(request_key,)).fetchone()
-            current_request=self.open(request_row[0],request_key) if request_row else None
-            # A terminal older attempt cannot clear a different live attempt.
-            if (active and active["attempt_id"]==attempt_id) or (not active and (request_id is None or request_id==current_request)):
-                from uuid import uuid4
-                for key,value in ((active_key,None),(request_key,str(uuid4()))):
-                    conn.execute("INSERT OR REPLACE INTO state VALUES(?,?)",(key,self.seal(value,key)))
+            self._write_state(conn,evidence_key,evidence)
+            self._advance_terminal_state(conn,destination,attempt_id,request_id)
 
     def acknowledge(self, identifier, receipt,*,previous_receipt_key="previous_receipt"):
         # Caller must verify the server signature AND record binding first.
         with self.connection() as conn:
-            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(BEGIN_IMMEDIATE)
             conn.execute("UPDATE entries SET status='accepted',receipt=? WHERE id=?",(self.seal(receipt,identifier+":receipt"),identifier))
             if receipt["payload"]["kind"]=="manifest":
-                conn.execute("INSERT OR REPLACE INTO state VALUES(?,?)",(previous_receipt_key,self.seal(digest(receipt),previous_receipt_key)))
+                self._write_state(conn,previous_receipt_key,digest(receipt))
 
     def state(self, key, value=None):
         with self.connection() as conn:
             if value is not None:
-                conn.execute("INSERT OR REPLACE INTO state VALUES(?,?)", (key, self.seal(value, key)))
-            row = conn.execute("SELECT value FROM state WHERE key=?", (key,)).fetchone()
-        return self.open(row[0], key) if row else None
+                self._write_state(conn,key,value)
+            return self._read_state(conn,key)

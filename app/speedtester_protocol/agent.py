@@ -50,37 +50,36 @@ class CommunityAgent:
             raise ValueError("invalid runner metric")
         return round(value*multiplier)
 
+    def _authorize(self):
+        request_id=self.state("grant_request")
+        if request_id is None:
+            request_id=str(uuid4());self.state("grant_request",request_id)
+        request={"request_id":request_id,"profile":self.profile.model_dump(),"runner":self.runner}
+        grant=self.client.grant(request)
+        # Persist verified evidence before checking the start window.
+        self.state("active_attempt",grant.model_dump())
+        if grant.start_before<int(time.time()):raise ProtocolError("grant_expired")
+        self.client.start(grant)
+        return grant
+
     def run_once(self,execute):
+        from .models import Grant
         self.sync()
         # At most one fresh retry after terminal recovery, never an unbounded loop.
         for _ in range(2):
-            active=self.state("active_attempt")
-            if active:
-                from .models import Grant
-                grant=Grant.model_validate(active)
-                try:
+            try:
+                active=self.state("active_attempt")
+                if active:
+                    grant=Grant.model_validate(active)
                     # A restarted process never executes a previously active grant.
                     self.client.start(grant)
-                except ProtocolError as exc:
-                    if exc.code not in TERMINAL_ATTEMPT_CODES:raise
-                    self._quarantine(exc.code,grant)
-                    continue
-                return self._complete(grant,{metric:None for metric in METRICS},True,int(time.time()))
-            request_id=self.state("grant_request")
-            if request_id is None:
-                request_id=str(uuid4());self.state("grant_request",request_id)
-            request={"request_id":request_id,"profile":self.profile.model_dump(),"runner":self.runner}
-            grant=None
-            try:
-                grant=self.client.grant(request)
-                if grant.start_before<int(time.time()):raise ProtocolError("grant_expired")
-                self.state("active_attempt",grant.model_dump())
-                self.client.start(grant)
+                    return self._complete(grant,dict.fromkeys(METRICS),True,int(time.time()))
+                return self._measure(self._authorize(),execute)
             except ProtocolError as exc:
                 if exc.code not in TERMINAL_ATTEMPT_CODES:raise
-                self._quarantine(exc.code,grant,request_id)
-                continue
-            return self._measure(grant,execute)
+                active=self.state("active_attempt")
+                grant=Grant.model_validate(active) if active else None
+                self._quarantine(exc.code,grant,self.state("grant_request"))
         raise ProtocolError("terminal_attempt_recovery_pending")
 
     def _measure(self,grant,execute):
@@ -99,16 +98,21 @@ class CommunityAgent:
                 "tcp_retransmits":self.value(result,"tcp_retransmits",1),
             }
         except Exception:
-            failure=True;values={metric:None for metric in METRICS}
+            failure=True;values=dict.fromkeys(METRICS)
         return self._complete(grant,values,failure,measured_at)
+
+    @staticmethod
+    def _value_status(value):
+        return "valid" if value is not None else "not-supported"
 
     def _complete(self,grant,values,failure,measured_at):
         records=[];checksums={}
         for metric,(unit,_,_) in METRICS.items():
             value=values[metric]
             method=self.runner+":throughput" if metric in {"download","upload","duration","transfer","tcp_retransmits"} else self.runner+":reported-"+metric
+            status="error" if failure else self._value_status(value)
             observation=Observation(observation_id=str(uuid4()),attempt_id=grant.attempt_id,metric=metric,unit=unit,value=value,
-                status="error" if failure else "valid" if value is not None else "not-supported",method=method,
+                status=status,method=method,
                 measured_at=measured_at,nonce=grant.nonce,profile_digest=grant.profile_digest,legal_digest=grant.legal_digest)
             payload=observation.model_dump();checksums[metric]=digest(payload)
             records.append({"id":observation.observation_id,"kind":"observation","envelope":sign(payload,self.key,"observation-v1")})

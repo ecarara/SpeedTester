@@ -61,10 +61,25 @@ def make_dpop(key, method, uri, token, nonce, *, now=None):
                       "jwk": {"kty": "OKP", "crv": "Ed25519", "x": b64(public_bytes(key))}})
 
 
+def proof_header(proof):
+    """Parse only the untrusted header; authentication remains in jwt.decode."""
+    parts=proof.split(".")
+    if len(parts)!=3 or not all(parts):raise ValueError("invalid proof encoding")
+    def unique_object(pairs):
+        result={}
+        for name,value in pairs:
+            if name in result:raise ValueError("duplicate proof header member")
+            result[name]=value
+        return result
+    header=json.loads(unb64(parts[0]).decode("utf-8"),object_pairs_hook=unique_object)
+    if not isinstance(header,dict):raise ValueError("invalid proof header")
+    return header
+
+
 def check_dpop(proof, public_key, method, uri, token, nonce, *, now=None):
     if not isinstance(proof, str) or len(proof) > 2048:
         raise ValueError("invalid proof")
-    header = jwt.get_unverified_header(proof)
+    header = proof_header(proof)
     expected = {"kty": "OKP", "crv": "Ed25519", "x": b64(public_bytes(public_key))}
     if set(header) != {"alg", "typ", "jwk"} or header["alg"] != "EdDSA" or header["typ"] != "dpop+jwt" or header["jwk"] != expected:
         raise ValueError("invalid proof header")

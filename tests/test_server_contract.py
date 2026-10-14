@@ -7,6 +7,8 @@ from pathlib import Path
 from uuid import uuid4
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import ValidationError
+from cryptography.exceptions import InvalidSignature
+from nacl.exceptions import CryptoError, TypeError as InvalidNonce
 from speedtester_protocol.crypto import canonical,digest,sign,verify,make_dpop,check_dpop,public_bytes
 from speedtester_protocol.models import Profile,Observation,Manifest,Grant,Receipt,Acceptance,METRICS
 from speedtester_protocol.client import ServerClient,HTTPS,ProtocolError
@@ -30,9 +32,11 @@ class ContractTests(unittest.TestCase):
     def test_metric_units_ranges_missing_values_and_unknown_fields(self):
         for changes in ({"unit":"ms"},{"value":-1},{"value":float("nan")},{"value":True},{"value":None},{"status":"not-supported"},{"public_ip":"192.0.2.9"},{"protocol_version":"2"}):
             with self.subTest(changes=list(changes)):
-                with self.assertRaises(ValidationError):Observation.model_validate(self.observation(**changes))
+                payload=self.observation(**changes)
+                with self.assertRaises(ValidationError):Observation.model_validate(payload)
         self.assertIsNone(Observation.model_validate(self.observation(value=None,status="not-supported")).value)
-        with self.assertRaises(ValidationError):profile().model_copy().model_validate({**profile().model_dump(),"link_type":"unknown"})
+        invalid_profile={**profile().model_dump(),"link_type":"unknown"}
+        with self.assertRaises(ValidationError):Profile.model_validate(invalid_profile)
         with self.assertRaises(ValidationError):Manifest(attempt_id=self.attempt,nonce=self.nonce,profile_digest="a"*64,legal_digest="a"*64,observations={"jitter":"a"*64})
 
     def test_canonical_hash_signature_detect_mutation_wrong_key_and_domain(self):
@@ -40,10 +44,11 @@ class ContractTests(unittest.TestCase):
         envelope=sign(payload,self.device,"observation-v1")
         self.assertEqual(verify(envelope,self.device.public_key(),"observation-v1"),payload)
         self.assertEqual(digest({"b":2,"a":1}),digest({"a":1,"b":2}))
-        with self.assertRaises(Exception):verify(envelope,self.server.public_key(),"observation-v1")
-        with self.assertRaises(Exception):verify(envelope,self.device.public_key(),"manifest-v1")
+        wrong_key=self.server.public_key();correct_key=self.device.public_key()
+        with self.assertRaisesRegex(ValueError,"untrusted signing key"):verify(envelope,wrong_key,"observation-v1")
+        with self.assertRaises(InvalidSignature):verify(envelope,correct_key,"manifest-v1")
         envelope["payload"]["value"]+=1
-        with self.assertRaises(Exception):verify(envelope,self.device.public_key(),"observation-v1")
+        with self.assertRaises(InvalidSignature):verify(envelope,correct_key,"observation-v1")
 
     def test_dpop_binding_and_replay_identifier_are_real_signed_values(self):
         token=secrets.token_urlsafe(32);uri="https://server.example/api/v1/metric-observations";now=int(time.time())
@@ -52,7 +57,7 @@ class ContractTests(unittest.TestCase):
         second=check_dpop(make_dpop(self.device,"POST",uri,token,self.nonce,now=now),self.device.public_key(),"POST",uri,token,self.nonce,now=now)
         self.assertNotEqual(first,second)
         for key,method,url,credential,nonce,timestamp in ((self.server.public_key(),"POST",uri,token,self.nonce,now),(self.device.public_key(),"GET",uri,token,self.nonce,now),(self.device.public_key(),"POST",uri+"/other",token,self.nonce,now),(self.device.public_key(),"POST",uri,token+"x",self.nonce,now),(self.device.public_key(),"POST",uri,token,self.nonce,now+31)):
-            with self.assertRaises(Exception):check_dpop(proof,key,method,url,credential,nonce,now=timestamp)
+            with self.assertRaises(ValueError):check_dpop(proof,key,method,url,credential,nonce,now=timestamp)
 
     def test_real_consumer_sends_proof_and_refuses_wrong_or_unsigned_receipt(self):
         payload=Observation.model_validate(self.observation()).model_dump();envelope=sign(payload,self.device,"observation-v1");calls=[]
@@ -67,8 +72,9 @@ class ContractTests(unittest.TestCase):
         client=ServerClient("https://server.example",token,self.device,self.server.public_key(),transport=transport)
         self.assertEqual(client.observation(envelope)["payload"]["digest"],digest(payload));self.assertEqual(len(calls),2)
         bad=Receipt(attempt_id=self.attempt,observation_id=payload["observation_id"],kind="observation",digest="b"*64,accepted_at=int(time.time()))
-        with self.assertRaises(ProtocolError):client.receipt(sign(bad.model_dump(),self.server,"receipt-v1"),"observation",self.attempt,digest(payload),payload["observation_id"])
-        with self.assertRaises(ProtocolError):client.receipt({"payload":payload},"observation",self.attempt,digest(payload))
+        bad_envelope=sign(bad.model_dump(),self.server,"receipt-v1");expected_digest=digest(payload)
+        with self.assertRaises(ProtocolError):client.receipt(bad_envelope,"observation",self.attempt,expected_digest,payload["observation_id"])
+        with self.assertRaises(ProtocolError):client.receipt({"payload":payload},"observation",self.attempt,expected_digest)
 
     def test_published_schemas_match_consumer_models(self):
         from speedtester_protocol import models
@@ -93,8 +99,9 @@ class ContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):queue.put_batch([new,{**first,"value":1}],"destination-a")
             self.assertEqual(len(queue.pending("destination-a")),1)
             with queue.connection() as conn:conn.execute("UPDATE entries SET destination='destination-b'")
-            with self.assertRaises(Exception):queue.pending("destination-b")
-            with self.assertRaises(Exception):EncryptedQueue(directory,secrets.token_bytes(32)).pending("destination-b")
+            with self.assertRaises(CryptoError):queue.pending("destination-b")
+            wrong_queue=EncryptedQueue(directory,secrets.token_bytes(32))
+            with self.assertRaises(CryptoError):wrong_queue.pending("destination-b")
 
 
     def agent_fixture(self):
@@ -259,7 +266,7 @@ class ContractTests(unittest.TestCase):
         records=[{"id":str(uuid4()),"kind":"observation","envelope":{"payload":{"attempt_id":attempt}}} for _ in range(2)]
         agent.queue.put_batch(records,agent.destination)
         with agent.queue.connection() as conn:conn.execute("UPDATE entries SET ciphertext=? WHERE id=?",(b"corrupted",records[1]["id"]))
-        with self.assertRaises(Exception):agent.queue.quarantine_attempt(agent.destination,attempt,"attempt_expired")
+        with self.assertRaisesRegex(InvalidNonce,"Nonce must be a 24 bytes long bytes sequence"):agent.queue.quarantine_attempt(agent.destination,attempt,"attempt_expired")
         with agent.queue.connection() as conn:self.assertEqual(conn.execute("SELECT DISTINCT status FROM entries").fetchall(),[("pending",)])
         self.assertEqual(agent.state("active_attempt"),{"attempt_id":attempt})
         self.assertEqual(agent.state("grant_request"),request)

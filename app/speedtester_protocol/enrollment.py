@@ -9,6 +9,10 @@ from .crypto import sign, verify, b64, public_bytes, make_dpop, digest
 from .models import PairingRequest, Pairing, CredentialBundle
 
 
+ROTATION_SUFFIX=":rotation"
+JSON_CONTENT_TYPE="application/json"
+
+
 class Credentials:
     def __init__(self, origin, possession_key, server_key, queue, *, transport=None):
         self.origin = HTTPS(origin).origin
@@ -31,24 +35,24 @@ class Credentials:
         except Exception as exc:
             raise ProtocolError("invalid_credentials") from exc
         # Replacing the tokens and clearing the pending rotation must be atomic.
-        self.queue.put_batch([], self.scope, state_updates={self.scope + ":credentials": bundle.model_dump(), self.scope + ":rotation": None})
+        self.queue.put_batch([], self.scope, state_updates={self.scope + ":credentials": bundle.model_dump(), self.scope + ROTATION_SUFFIX: None})
         self.bundle = bundle
         return bundle
 
     def ensure_current(self, *, force=False):
         if self.bundle is None:
             raise ProtocolError("pairing_required")
-        pending = self.queue.state(self.scope + ":rotation")
+        pending = self.queue.state(self.scope + ROTATION_SUFFIX)
         if not pending and not force and self.bundle.expires_at > int(time.time()) + 60:
             return
         if self.bundle.refresh_expires_at <= int(time.time()):
             raise ProtocolError("pairing_required")
         if not pending:
             pending = {"request_id": str(uuid4()), "refresh_token": self.bundle.refresh_token, "nonce": self.bundle.nonce}
-            self.queue.state(self.scope + ":rotation", pending)
+            self.queue.state(self.scope + ROTATION_SUFFIX, pending)
         path = "/api/v1/credentials/rotate"
         proof = make_dpop(self.possession_key, "POST", self.origin + path, pending["refresh_token"], pending["nonce"])
-        status, _, body = self.transport("POST", path, {"Authorization": "DPoP " + pending["refresh_token"], "DPoP": proof, "Content-Type": "application/json"}, {"request_id": pending["request_id"]})
+        status, _, body = self.transport("POST", path, {"Authorization": "DPoP " + pending["refresh_token"], "DPoP": proof, "Content-Type": JSON_CONTENT_TYPE}, {"request_id": pending["request_id"]})
         if status >= 400:
             raise ProtocolError(body.get("code", "renewal_rejected"))
         self.accept(body, pending["request_id"], self.bundle.client_id)
@@ -73,7 +77,7 @@ class PairingClient:
                 possession_key=self.credentials.identity, measurement_key=b64(public_bytes(self.measurement_key))).model_dump()
         self.credentials.queue.state(self.scope, {"request": request})
         envelope = sign(request, self.credentials.possession_key, "pairing-request-v1")
-        status, _, body = self.credentials.transport("POST", "/api/v1/pairings", {"Content-Type": "application/json"}, envelope)
+        status, _, body = self.credentials.transport("POST", "/api/v1/pairings", {"Content-Type": JSON_CONTENT_TYPE}, envelope)
         if status >= 400:
             raise ProtocolError(body.get("code", "pairing_rejected"))
         try:
@@ -91,7 +95,7 @@ class PairingClient:
         path = "/api/v1/pairings/token"
         proof = make_dpop(self.credentials.possession_key, "POST", self.credentials.origin + path, pairing.device_code, pairing.nonce)
         status, _, body = self.credentials.transport("POST", path,
-            {"Authorization": "DPoP " + pairing.device_code, "DPoP": proof, "Content-Type": "application/json"}, {})
+            {"Authorization": "DPoP " + pairing.device_code, "DPoP": proof, "Content-Type": JSON_CONTENT_TYPE}, {})
         if status >= 400:
             raise ProtocolError(body.get("code", "pairing_rejected"))
         return self.credentials.accept(body, pairing.request_id)

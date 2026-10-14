@@ -1,0 +1,43 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "possession_key": {
+      "maxLength": 43,
+      "minLength": 43,
+      "title": "Possession Key",
+      "type": "string"
+    },
+    "measurement_key": {
+      "maxLength": 43,
+      "minLength": 43,
+      "title": "Measurement Key",
+      "type": "string"
+    },
+    "request_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "issued_at": {
+      "minimum": 0,
+      "title": "Issued At",
+      "type": "integer"
+    },
+    "label": {
+      "maxLength": 60,
+      "minLength": 1,
+      "pattern": "^[a-zA-Z0-9 _.-]+$",
+      "title": "Label",
+      "type": "string"
+    }
+  },
+  "required": [
+    "possession_key",
+    "measurement_key",
+    "request_id",
+    "issued_at",
+    "label"
+  ],
+  "title": "PairingRequest",
+  "type": "object"
+}

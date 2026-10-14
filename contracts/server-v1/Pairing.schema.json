@@ -1,0 +1,59 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "request_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "device_code": {
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "title": "Device Code",
+      "type": "string"
+    },
+    "user_code": {
+      "pattern": "^[A-Z2-9]{5}-[A-Z2-9]{5}$",
+      "title": "User Code",
+      "type": "string"
+    },
+    "verification_uri": {
+      "maxLength": 200,
+      "title": "Verification Uri",
+      "type": "string"
+    },
+    "expires_at": {
+      "minimum": 0,
+      "title": "Expires At",
+      "type": "integer"
+    },
+    "interval": {
+      "maximum": 60,
+      "minimum": 5,
+      "title": "Interval",
+      "type": "integer"
+    },
+    "nonce": {
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "title": "Nonce",
+      "type": "string"
+    },
+    "possession_key": {
+      "maxLength": 43,
+      "minLength": 43,
+      "title": "Possession Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id",
+    "device_code",
+    "user_code",
+    "verification_uri",
+    "expires_at",
+    "interval",
+    "nonce",
+    "possession_key"
+  ],
+  "title": "Pairing",
+  "type": "object"
+}

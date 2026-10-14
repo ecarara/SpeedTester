@@ -138,3 +138,51 @@ class Acceptance(StrictModel):
     def actual_checkbox(cls,value):
         if type(value) is not bool or not value:raise ValueError("explicit true boolean required")
         return value
+
+
+Secret = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{43}$")]
+
+
+class PairingRequest(Enrollment):
+    request_id: Identifier
+    issued_at: int = Field(ge=0)
+    label: str = Field(min_length=1, max_length=60, pattern=r"^[a-zA-Z0-9 _.-]+$")
+
+
+class Pairing(StrictModel):
+    request_id: Identifier
+    device_code: Secret
+    user_code: str = Field(pattern=r"^[A-Z2-9]{5}-[A-Z2-9]{5}$")
+    verification_uri: str = Field(max_length=200)
+    expires_at: int = Field(ge=0)
+    interval: int = Field(ge=5, le=60)
+    nonce: Secret
+    possession_key: str = Field(min_length=43, max_length=43)
+
+
+class CredentialBundle(StrictModel):
+    client_id: Identifier
+    access_token: Secret
+    refresh_token: Secret
+    expires_at: int = Field(ge=0)
+    refresh_expires_at: int = Field(ge=0)
+    nonce: Secret
+    possession_key: str = Field(min_length=43, max_length=43)
+    request_id: Identifier
+
+
+class RotationRequest(StrictModel):
+    request_id: Identifier
+
+
+class PairingApproval(StrictModel):
+    user_code: str = Field(pattern=r"^[A-Z2-9]{5}-[A-Z2-9]{5}$")
+    possession_fingerprint: Digest
+    confirm: Literal[True]
+
+    @field_validator("confirm", mode="before")
+    @classmethod
+    def actual_confirmation(cls, value):
+        if type(value) is not bool or not value:
+            raise ValueError("explicit confirmation required")
+        return value

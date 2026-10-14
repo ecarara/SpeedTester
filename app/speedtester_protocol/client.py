@@ -49,13 +49,19 @@ class HTTPS:
 
 
 class ServerClient:
-    def __init__(self, origin, token, possession_key, server_key, *, transport=None):
+    def __init__(self, origin, token, possession_key, server_key, *, transport=None, credentials=None):
         self.transport = transport or HTTPS(origin)
         self.origin, self.token, self.possession_key, self.server_key = origin.rstrip("/"), token, possession_key, server_key
         self.nonce = None
+        self.credentials = credentials
 
     def request(self, method, path, payload=None):
-        for _ in range(2):
+        if self.credentials:
+            self.credentials.ensure_current()
+            self.token = self.credentials.bundle.access_token
+            self.nonce = self.credentials.bundle.nonce
+        renewed = False
+        for _ in range(3):
             headers = {"Authorization": "DPoP " + self.token, "Content-Type": "application/json"}
             if self.nonce:
                 headers["DPoP"] = make_dpop(self.possession_key, method, self.origin + path, self.token, self.nonce)
@@ -64,6 +70,11 @@ class ServerClient:
             nonce = next((value for name, value in response_headers.items() if name.lower() == "dpop-nonce"), None)
             if status == 401 and body.get("code") == "use_dpop_nonce" and nonce:
                 self.nonce = nonce
+                continue
+            if status == 401 and body.get("code") == "token_expired" and self.credentials and not renewed:
+                self.credentials.ensure_current(force=True)
+                self.token, self.nonce = self.credentials.bundle.access_token, self.credentials.bundle.nonce
+                renewed = True
                 continue
             if status >= 400:
                 raise ProtocolError(body.get("code", "server_rejected"))

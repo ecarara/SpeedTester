@@ -12,4 +12,12 @@ Public consumer contract. The private Server implementation is not required to r
 
 Schemas are generated from `speedtester_protocol.models` and checked by the public unit suite. The private Server runs provider and real integration tests against this contract. Consumers verify signatures, exact IDs/digests, version and HTTPS origin.
 
-This is the first integration foundation. Headless pairing, automatic renewal, the end-user installer and public comparison are subsequent deliveries. The existing standalone collector is unaffected.
+## Pairing and rotating credentials
+
+`POST /api/v1/pairings` accepts a signed `PairingRequest` (`pairing-request-v1`) and returns a signed `Pairing` (`pairing-v1`). The user follows the exact HTTPS verification URI and explicitly confirms the code and installation fingerprint in the authenticated portal. `POST /api/v1/pairings/token` uses the device secret in an Authorization header plus a DPoP proof bound to the installation key, URI and nonce. `authorization_pending`, `slow_down` and expiry enforce bounded polling. No token appears in a URL.
+
+`CredentialBundle` envelopes (`credentials-v1`) bind client identity, possession key, request ID and expirations. `POST /api/v1/credentials/rotate` takes a `RotationRequest`, with the refresh token in the Authorization header and its bound DPoP proof. The client durably saves the pending request before transmission and only replaces tokens after signature/binding verification. Same-request recovery is bounded; different-request reuse revokes the family.
+
+This is the SpeedTester application protocol, inspired by [device authorization](https://www.rfc-editor.org/rfc/rfc8628), [OAuth security guidance](https://www.rfc-editor.org/rfc/rfc9700) and [DPoP](https://www.rfc-editor.org/rfc/rfc9449). The pairing/renewal JSON routes are not generic OAuth token endpoints and do not claim full OAuth wire compatibility.
+
+See the [installation guide](../../docs/community-client.md). Public aggregate queries and operator awards remain subsequent work. The existing standalone collector is unaffected.

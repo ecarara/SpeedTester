@@ -4,6 +4,7 @@
 """Public unit contract, protected installation and actual subprocess adapter."""
 import contextlib,io,json,os,secrets,subprocess,sys,tempfile,time,unittest
 from pathlib import Path
+from pydantic import ValidationError
 from types import SimpleNamespace
 from uuid import uuid4
 from unittest.mock import patch
@@ -46,7 +47,8 @@ class CommunityInstallationTests(unittest.TestCase):
         result=consumer.poll(pair);self.assertEqual(result.request_id,request_id[0])
         self.assertNotIn(result.access_token.encode(),self.queue.path.read_bytes())
         self.assertNotIn(result.refresh_token.encode(),self.queue.path.read_bytes())
-        with self.assertRaises(Exception):PairingApproval(user_code=pair.user_code,possession_fingerprint=digest(credentials.identity),confirm=1)
+        fingerprint=digest(credentials.identity)
+        with self.assertRaises(ValidationError):PairingApproval(user_code=pair.user_code,possession_fingerprint=fingerprint,confirm=1)
 
     def test_renewal_preserves_pending_request_on_network_failure_and_restart(self):
         credentials=Credentials(self.origin,self.possession,self.server.public_key(),self.queue,transport=lambda *args:(_ for _ in ()).throw(OSError('offline')))
@@ -67,8 +69,10 @@ class CommunityInstallationTests(unittest.TestCase):
         request=str(uuid4());bundle=self.bundle(request)
         variants=[bundle.model_copy(update={'possession_key':b64(public_bytes(self.measurement))}),bundle.model_copy(update={'request_id':str(uuid4())}),bundle.model_copy(update={'expires_at':1})]
         for item in variants:
-            with self.assertRaises(ProtocolError):credentials.accept(sign(item.model_dump(),self.server,'credentials-v1'),request)
-        with self.assertRaises(ProtocolError):credentials.accept(sign(bundle.model_dump(),self.measurement,'credentials-v1'),request)
+            envelope=sign(item.model_dump(),self.server,'credentials-v1')
+            with self.assertRaises(ProtocolError):credentials.accept(envelope,request)
+        wrong_envelope=sign(bundle.model_dump(),self.measurement,'credentials-v1')
+        with self.assertRaises(ProtocolError):credentials.accept(wrong_envelope,request)
         self.assertIsNone(credentials.bundle)
 
     def test_discovery_is_https_and_origin_bound(self):
@@ -125,12 +129,16 @@ print(json.dumps({'end':end}))
 
     def test_runner_deadline_output_limits_payload_overrun_and_target_policy(self):
         runner=IperfRunner('target.example',binary=self.executable('import time;time.sleep(2)'))
-        with self.assertRaises(subprocess.TimeoutExpired):runner(self.grant(max_duration_ms=1000))
+        short_grant=self.grant(max_duration_ms=1000)
+        with self.assertRaises(subprocess.TimeoutExpired):runner(short_grant)
         oversized=self.executable("print('x'*70000)")
-        with self.assertRaises(RuntimeError):IperfRunner('target.example',binary=oversized)(self.grant())
+        oversized_runner=IperfRunner('target.example',binary=oversized);grant=self.grant()
+        with self.assertRaises(RuntimeError):oversized_runner(grant)
         overrun=self.executable("import json;print(json.dumps({'end':{'sum_sent':{'bits_per_second':10,'bytes':999999}}}))")
-        with self.assertRaises(RuntimeError):IperfRunner('target.example',binary=overrun)(self.grant())
-        with self.assertRaises(ValueError):runner(self.grant(target_id='another-target'))
+        overrun_runner=IperfRunner('target.example',binary=overrun)
+        with self.assertRaises(RuntimeError):overrun_runner(grant)
+        foreign_grant=self.grant(target_id='another-target')
+        with self.assertRaises(ValueError):runner(foreign_grant)
         with self.assertRaises(ValueError):IperfRunner('-invalid')
 
 

@@ -1,0 +1,118 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Protocol Version",
+      "type": "string"
+    },
+    "attempt_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "client_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Client Id",
+      "type": "string"
+    },
+    "profile_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Profile Digest",
+      "type": "string"
+    },
+    "legal_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Legal Digest",
+      "type": "string"
+    },
+    "runner": {
+      "enum": [
+        "iperf3",
+        "ookla",
+        "fast"
+      ],
+      "title": "Runner",
+      "type": "string"
+    },
+    "target_id": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Target Id",
+      "type": "string"
+    },
+    "target_scope": {
+      "enum": [
+        "unconfirmed",
+        "lan",
+        "external-controlled"
+      ],
+      "title": "Target Scope",
+      "type": "string"
+    },
+    "nonce": {
+      "maxLength": 64,
+      "minLength": 32,
+      "title": "Nonce",
+      "type": "string"
+    },
+    "issued_at": {
+      "minimum": 0,
+      "title": "Issued At",
+      "type": "integer"
+    },
+    "start_before": {
+      "minimum": 0,
+      "title": "Start Before",
+      "type": "integer"
+    },
+    "submit_before": {
+      "minimum": 0,
+      "title": "Submit Before",
+      "type": "integer"
+    },
+    "max_duration_ms": {
+      "maximum": 300000,
+      "minimum": 1,
+      "title": "Max Duration Ms",
+      "type": "integer"
+    },
+    "max_bytes": {
+      "maximum": 1000000000000,
+      "minimum": 1,
+      "title": "Max Bytes",
+      "type": "integer"
+    },
+    "previous_receipt": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Previous Receipt"
+    }
+  },
+  "required": [
+    "attempt_id",
+    "client_id",
+    "profile_digest",
+    "legal_digest",
+    "runner",
+    "target_id",
+    "target_scope",
+    "nonce",
+    "issued_at",
+    "start_before",
+    "submit_before",
+    "max_duration_ms",
+    "max_bytes"
+  ],
+  "title": "Grant",
+  "type": "object"
+}

@@ -1,0 +1,27 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "user_code": {
+      "pattern": "^[A-Z2-9]{5}-[A-Z2-9]{5}$",
+      "title": "User Code",
+      "type": "string"
+    },
+    "possession_fingerprint": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Possession Fingerprint",
+      "type": "string"
+    },
+    "confirm": {
+      "const": true,
+      "title": "Confirm",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "user_code",
+    "possession_fingerprint",
+    "confirm"
+  ],
+  "title": "PairingApproval",
+  "type": "object"
+}

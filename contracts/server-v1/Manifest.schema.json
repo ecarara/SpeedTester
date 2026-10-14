@@ -1,0 +1,62 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Protocol Version",
+      "type": "string"
+    },
+    "attempt_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "nonce": {
+      "maxLength": 64,
+      "minLength": 32,
+      "title": "Nonce",
+      "type": "string"
+    },
+    "profile_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Profile Digest",
+      "type": "string"
+    },
+    "legal_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Legal Digest",
+      "type": "string"
+    },
+    "previous_receipt": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Previous Receipt"
+    },
+    "observations": {
+      "additionalProperties": {
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "title": "Observations",
+      "type": "object"
+    }
+  },
+  "required": [
+    "attempt_id",
+    "nonce",
+    "profile_digest",
+    "legal_digest",
+    "observations"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}

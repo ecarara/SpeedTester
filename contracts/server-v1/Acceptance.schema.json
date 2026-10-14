@@ -1,0 +1,36 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "documents": {
+      "additionalProperties": {
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "title": "Documents",
+      "type": "object"
+    },
+    "accept_terms": {
+      "const": true,
+      "title": "Accept Terms",
+      "type": "boolean"
+    },
+    "privacy_read": {
+      "const": true,
+      "title": "Privacy Read",
+      "type": "boolean"
+    },
+    "contribute": {
+      "const": true,
+      "title": "Contribute",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "documents",
+    "accept_terms",
+    "privacy_read",
+    "contribute"
+  ],
+  "title": "Acceptance",
+  "type": "object"
+}

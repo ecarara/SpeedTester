@@ -38,6 +38,20 @@ jobs:
           python -m coverage run --source=app,scripts,security -m unittest discover -s tests -v
           python -m coverage xml
 
+      - name: Community installer and packaged entry point
+        env:
+          PYTHONPATH: app
+        run: |
+          bash -n install-community.sh
+          python -m pip install --no-deps .
+          speedtester-client --help
+          python - <<'PY'
+          from pathlib import Path
+          from speedtester_protocol.installation import systemd_unit
+          Path('/tmp/speedtester-client-check.service').write_text(systemd_unit('/usr/bin/true','/tmp'))
+          PY
+          systemd-analyze verify /tmp/speedtester-client-check.service
+
       - name: Compile Python
         run: python -m compileall -q app
 
@@ -136,3 +150,4 @@ jobs:
           python-version: '3.13'
       - run: python -m pip install pip-audit==2.10.1
       - run: python -m pip_audit -r app/requirements.txt
+      - run: python -m pip_audit -r app/requirements-community.txt

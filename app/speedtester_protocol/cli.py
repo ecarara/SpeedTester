@@ -94,15 +94,16 @@ def setup(queue,origin,*,transport=None,input_fn=input,sleep=time.sleep,repair=F
     config=installation_config(queue,origin,server,input_fn)
     credentials,measurement=context(queue,config,transport)
     if credentials.bundle and not repair:
-        credentials.ensure_current();print("Client já pareado; credenciais verificadas.");return config
-    pairing_client=PairingClient(credentials,measurement);pairing=pairing_client.begin(reset=repair)
-    print("Abra "+pairing.verification_uri+" e entre com seu provedor de login.")
-    print("Código: "+pairing.user_code)
-    print("Impressão digital: "+digest(credentials.identity))
-    print("Revise os termos e confirme apenas esta instalação. Aguardando aprovação…",flush=True)
-    await_pairing(pairing_client,pairing,sleep)
-    queue.state("next_due",int(time.time())+config["interval"])
-    print("Pareamento concluído. Tokens guardados na fila cifrada; nenhum token precisa ser copiado.")
+        credentials.ensure_current();print("Client já pareado; credenciais verificadas.")
+    else:
+        pairing_client=PairingClient(credentials,measurement);pairing=pairing_client.begin(reset=repair)
+        print("Abra "+pairing.verification_uri+" e entre com seu provedor de login.")
+        print("Código: "+pairing.user_code)
+        print("Impressão digital: "+digest(credentials.identity))
+        print("Revise os termos e confirme apenas esta instalação. Aguardando aprovação…",flush=True)
+        await_pairing(pairing_client,pairing,sleep)
+        queue.state("next_due",int(time.time())+config["interval"])
+        print("Pareamento concluído. Tokens guardados na fila cifrada; nenhum token precisa ser copiado.")
     return config
 
 

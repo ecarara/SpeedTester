@@ -4,7 +4,7 @@ Este fluxo está implementado no branch de integração. O serviço central prec
 
 ## Instalação Linux
 
-Suporte inicial: Linux amd64/arm64, Python 3.11 ou superior com módulo `venv`, iPerf3 e uma sessão systemd do usuário. Instale os pré-requisitos pelo gerenciador de pacotes da distribuição. Execute o instalador a partir de uma revisão verificada do repositório, como usuário normal:
+Suporte inicial: Linux amd64/arm64, Python 3.11, 3.12 ou 3.13 com módulo `venv`, iPerf3 e uma sessão systemd do usuário. Instale os pré-requisitos pelo gerenciador de pacotes da distribuição. Execute o instalador a partir de uma revisão verificada do repositório, como usuário normal:
 
 ```bash
 ./install-community.sh --server https://speedtester.cararalab.com.br
@@ -56,3 +56,5 @@ Um alvo na LAN mede a rede local. Um destino externo sem controle confirmado pro
 Fila, chaves privadas, perfil, tokens e estado de renovação ficam cifrados com autenticação. O diretório é `0700` e a chave local é `0600`. A chave de cifragem precisa permanecer acessível ao processo; root ou comprometimento do usuário pode acessá-la. Criptografia detecta alteração dos dados e protege uma cópia isolada do banco, mas não garante veracidade física de um participante hostil.
 
 Os unitários públicos exercitam pareamento, assinatura, DPoP, rotação, persistência, concorrência de processos, serviço e runner usando dados sintéticos. A suíte privada testa o client real contra o Server e PostgreSQL descartável, incluindo o assistente, reinício, revogação e resposta perdida. Nenhum teste usa medições externas ou credenciais de participantes.
+
+O instalador seleciona automaticamente uma versão Python suportada disponível. Se o Python padrão da distribuição for mais novo, instale também Python 3.13; não é necessário mudar o Python do sistema.

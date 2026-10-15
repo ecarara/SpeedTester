@@ -32,6 +32,9 @@ class DesktopController:
     def __init__(self, directory=None):
         self.directory = private_directory(directory or control_directory())
         self.control = self.directory / "control.json"
+        self.initialize_control()
+
+    def initialize_control(self):
         try:
             descriptor = private_open(self.control, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:
@@ -52,6 +55,8 @@ class DesktopController:
     def native(self, operation, purge=False):
         if not getattr(sys, "frozen", False):
             raise ValueError("packaged_installer_required")
+        if self.key is None:
+            self.initialize_control()
         request = {"operation": operation, "control_key": self.key.hex(), "purge": purge}
         # Paths only on the command line; never a token or control secret.
         with tempfile.TemporaryDirectory(prefix="maintenance-", dir=self.directory) as temporary:
@@ -84,6 +89,7 @@ class DesktopController:
                 raise RuntimeError("native_operation_failed")
         if operation == "uninstall" and purge:
             self.control.unlink(missing_ok=True)
+            self.key, self.client = None, None
         return {"ok": True, "reboot_required": code == 10, "data_preserved": not purge}
 
 

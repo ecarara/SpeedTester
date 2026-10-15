@@ -306,6 +306,18 @@ class DesktopTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             controller.native("install")
 
+    def test_purge_then_reinstall_in_same_window_creates_a_new_persistent_control_identity(self):
+        controller=DesktopController(self.root/'control')
+        original=controller.key
+        with patch('sys.frozen',True,create=True), patch('platform.system',return_value='Darwin'), \
+                patch('subprocess.run',return_value=Mock(returncode=0)):
+            controller.native('uninstall',True)
+            self.assertFalse(controller.control.exists())
+            self.assertIsNone(controller.key)
+            controller.native('install')
+        self.assertNotEqual(controller.key,original)
+        self.assertEqual(DesktopController(self.root/'control').key,controller.key)
+
 
 class LocalControlTests(unittest.TestCase):
     def setUp(self):

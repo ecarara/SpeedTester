@@ -83,6 +83,16 @@ def main(argv=None):
         import ssl
         assert ssl.create_default_context().cert_store_stats()["x509_ca"] > 0
         window.smoke_test()
+        probe = os.environ.get("SPEEDTESTER_BROWSER_PROBE", "")
+        if probe:
+            import re
+            if (os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"
+                    or not re.fullmatch(r"[0-9]{1,5}/[0-9a-f]{32}", probe)
+                    or not 1 <= int(probe.split("/")[0]) <= 65535):
+                raise ValueError("invalid_ci_browser_probe")
+            from .desktop_links import request_browser
+            # The external test server independently observes the browser GET.
+            request_browser("http://127.0.0.1:" + probe)
     else:
         window.mainloop()
     return 0

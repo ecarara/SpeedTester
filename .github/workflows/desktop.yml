@@ -13,7 +13,7 @@ jobs:
   native:
     name: Desktop ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 40
     strategy:
       fail-fast: false
       matrix:
@@ -51,6 +51,38 @@ jobs:
         env:
           SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
         run: python scripts/build_desktop.py
+      - name: Graphical workflow acceptance with authenticated local IPC (Linux)
+        if: runner.os == 'Linux'
+        env:
+          PYTHONPATH: app
+          SPEEDTESTER_GUI_TESTS: '1'
+        run: xvfb-run -a python -m unittest discover -s tests -p 'test_desktop_gui.py' -v
+      - name: Graphical workflow acceptance with authenticated local IPC (Windows/macOS)
+        if: runner.os != 'Linux'
+        env:
+          PYTHONPATH: app
+          SPEEDTESTER_GUI_TESTS: '1'
+        run: python -m unittest discover -s tests -p 'test_desktop_gui.py' -v
+      - name: Frozen app opens an actual browser page (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python scripts/test_frozen_browser.py
+      - name: Frozen app opens an actual browser page (Windows/macOS)
+        if: runner.os != 'Linux'
+        run: python scripts/test_frozen_browser.py
+      - name: Real system service installation, repair and removal (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted "$(command -v python)" scripts/test_native_lifecycle.py
+      - name: Real system service installation, repair and removal (Windows)
+        if: runner.os == 'Windows'
+        run: python scripts/test_native_lifecycle.py
+      - name: Preserve acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: desktop-acceptance-${{ runner.os }}-${{ runner.arch }}
+          path: dist/desktop/acceptance-*.json
+          if-no-files-found: warn
+          retention-days: 30
       - name: Preserve experimental bundles and checksums
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:

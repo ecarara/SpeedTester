@@ -150,3 +150,10 @@ for _code, _values in {
         "invalid_portal":"Indique una dirección HTTPS válida del Server para abrir el portal. La lista local de datos sigue disponible."},
 }.items():
     TEXT[_code].update(_values)
+
+for _code, _message in {
+    "pt-BR": "Abrindo no navegador padrão. Se a página não aparecer, copie este link e abra no seu navegador.",
+    "en": "Opening in your default browser. If the page does not appear, copy this link into your browser.",
+    "es": "Abriendo en el navegador predeterminado. Si no aparece la página, copie este enlace en su navegador.",
+}.items():
+    TEXT[_code]["browser_opening"] = _message

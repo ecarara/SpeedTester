@@ -14,7 +14,7 @@ from .version import CLIENT_VERSION, build_label, diagnostic_text
 from .input_methods import bind_dead_keys
 from .schedule import local_timezone
 from .disclosure import DISCLOSURE_CATALOG
-from .desktop_links import portal_url, request_browser
+from .desktop_links import portal_url, pairing_url, request_browser
 
 BACKGROUND, PAPER, INK, MUTED, ACCENT = "#f2f1e9", "#ffffff", "#112b2a", "#49615c", "#c1ef55"
 
@@ -24,9 +24,11 @@ class Installer(tk.Tk):
         super().__init__()
         self.controller = controller
         self.locale, self.page, self.operation = "pt-BR", "welcome", "install"
+        self.form_locale = self.locale
         self.snapshot, self.pairing = {}, None
         self.events = queue.Queue()
         self.busy = False
+        self.browser_events = queue.Queue()
         self.geometry("1040x820")
         self.minsize(960, 780)
         self.configure(bg=BACKGROUND)
@@ -91,8 +93,13 @@ class Installer(tk.Tk):
 
     def change_language(self, _event=None):
         self.locale = LANGUAGES[self.languages.get()]
-        self.access.set("")
-        self.link.set("")
+        # Translate selected labels instead of silently discarding form choices.
+        previous = getattr(self, "form_locale", "pt-BR")
+        for variable, choices in ((self.access, ("fiber", "coaxial", "radio", "satellite", "cellular", "dsl", "other", "unknown")),
+                (self.link, ("ethernet", "wifi"))):
+            selected = next((key for key in choices if TEXT[previous][key] == variable.get()), None)
+            variable.set(self.t(selected) if selected else "")
+        self.form_locale = self.locale
         self.render()
 
     def heading(self, title, detail):
@@ -189,7 +196,7 @@ class Installer(tk.Tk):
                     time.sleep(.5)
             if configuration:
                 status = self.controller.call("configure", configuration)
-            elif action == "configure":
+            else:
                 # Explicit opt-out also pauses the schedule and all contribution.
                 status = self.controller.call("disconnect")
             return status
@@ -238,7 +245,10 @@ class Installer(tk.Tk):
         self.work(lambda: self.controller.call("status"), completed)
 
     def finish_pairing(self):
-        self.work(lambda: self.controller.call("cancel_pairing"), lambda result: self.received_status(result))
+        def completed(result):
+            self.pairing = None
+            self.received_status(result)
+        self.work(lambda: self.controller.call("cancel_pairing"), completed)
 
     def show_disclosure(self):
         previous = getattr(self, "disclosure_window", None)
@@ -288,7 +298,12 @@ class Installer(tk.Tk):
 
     def open_pair(self):
         if self.pairing:
-            self.open_external(self.pairing["verification_uri"] + "?locale=" + self.locale)
+            try:
+                url = pairing_url(self.pairing["verification_uri"], self.locale)
+            except ValueError:
+                messagebox.showerror(self.t("title"), self.t("invalid_portal"), parent=self)
+                return
+            self.open_external(url)
 
     def open_url(self, origin, path):
         try:
@@ -298,13 +313,17 @@ class Installer(tk.Tk):
             return
         self.open_external(url)
 
+    def account_origin(self):
+        return (self.snapshot.get("configuration") or {}).get("origin", self.fields["origin"].get())
+
     def open_external(self, url):
-        def completed(result):
-            if result["opened"]:
-                self.feedback.configure(text=self.t("browser_requested"))
-            else:
-                self.show_portal_link(url)
-        self.work(lambda: request_browser(url, preview=self.controller.preview), completed)
+        # Show the address immediately, even if the OS reports success but its
+        # default browser never appears. Browser launches cannot block maintenance.
+        note = self.show_portal_link(url)
+        def worker():
+            result = request_browser(url, preview=self.controller.preview)
+            self.browser_events.put((note, result["opened"]))
+        threading.Thread(target=worker, daemon=True).start()
 
     def show_portal_link(self, url):
         window = tk.Toplevel(self, bg=BACKGROUND)
@@ -314,7 +333,7 @@ class Installer(tk.Tk):
         window.minsize(440, 240)
         content = tk.Frame(window, bg=BACKGROUND, padx=22, pady=18)
         content.pack(fill="both", expand=True)
-        note = self.label(content, self.t("browser_unavailable"), size=12)
+        note = self.label(content, self.t("browser_opening"), size=12)
         note.pack(fill="x", pady=(0, 14))
         note.bind("<Configure>", lambda event: note.configure(wraplength=max(100, event.width)))
         entry = ttk.Entry(content, width=65)
@@ -332,6 +351,8 @@ class Installer(tk.Tk):
         window.bind("<Escape>", lambda _event: window.destroy())
         entry.focus_set()
         entry.selection_range(0, "end")
+        self.portal_window, self.portal_entry = window, entry
+        return note
 
     def received_status(self, result):
         self.snapshot = result
@@ -358,7 +379,7 @@ class Installer(tk.Tk):
         self.button(self.content, "manage", self.configure_existing).pack(anchor="w", pady=6)
         account_actions=tk.Frame(self.content,bg=BACKGROUND)
         account_actions.pack(fill="x",pady=6)
-        self.button(account_actions,"account",lambda: self.open_url(self.fields["origin"].get(),"/account")).pack(side="left")
+        self.button(account_actions,"account",lambda: self.open_url(self.account_origin(),"/account")).pack(side="left")
         self.button(account_actions,"copy_info",self.copy_information).pack(side="left",padx=8)
         self.button(self.content, "home", lambda: self.show("welcome")).pack(anchor="w", pady=12)
 
@@ -378,6 +399,7 @@ class Installer(tk.Tk):
             self.schedule_timezone = stored.get("timezone", self.schedule_timezone)
             for key, variable in self.fields.items():
                 variable.set(values[key])
+            self.form_locale = self.locale
             self.access.set(self.t(profile["access_type"]))
             self.link.set(self.t(profile["link_type"]))
             self.contribute.set(stored["contribute"])
@@ -395,7 +417,7 @@ class Installer(tk.Tk):
             fg=INK, activebackground=BACKGROUND, wraplength=650, justify="left",
             font=("Helvetica", 12), anchor="w").pack(fill="x", pady=(8, 24))
         self.label(self.content, self.t("revoke_notice"), color=MUTED).pack(fill="x", pady=(0, 20))
-        self.button(self.content, "account", lambda: self.open_url(self.fields["origin"].get(), "/account")).pack(anchor="w", pady=(0, 24))
+        self.button(self.content, "account", lambda: self.open_url(self.account_origin(), "/account")).pack(anchor="w", pady=(0, 24))
         self.button(self.content, "uninstall", self.uninstall, primary=True).pack(anchor="w", pady=10)
         self.button(self.content, "back", lambda: self.show("welcome")).pack(anchor="w", pady=10)
 
@@ -431,12 +453,23 @@ class Installer(tk.Tk):
         else:
             self.busy = False
             self.feedback.configure(text="")
-            if success and result.get("ok"):
-                completed(result)
+            if success and isinstance(result, dict) and result.get("ok"):
+                try:
+                    completed(result)
+                except Exception:
+                    # A failed UI callback must not kill the event pump forever.
+                    messagebox.showerror(self.t("title"), self.t("error"), parent=self)
             else:
                 code = result.get("code") if result else None
                 key = "no_target" if code in {"test_target_unavailable", "invalid_test_target", "test_target_changed"} else "no_runner" if code == "iperf3_required" else "blocked" if code else "error"
                 messagebox.showerror(self.t("title"), self.t(key), parent=self)
+        try:
+            while True:
+                note, opened = self.browser_events.get_nowait()
+                if note.winfo_exists():
+                    note.configure(text=self.t("browser_requested" if opened else "browser_unavailable"))
+        except queue.Empty:
+            pass
         self.after(100, self.drain)
 
     def close(self):

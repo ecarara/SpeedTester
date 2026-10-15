@@ -2,8 +2,8 @@
 # Copyright (C) 2026 Edson Angelo Carara
 """No browser, network, service changes or measurements in link regressions."""
 import unittest
-from unittest.mock import Mock
-from speedtester_protocol.desktop_links import portal_url, request_browser
+from unittest.mock import Mock, patch
+from speedtester_protocol.desktop_links import portal_url, pairing_url, request_browser, system_environment, open_system_browser
 from speedtester_protocol.disclosure import DISCLOSURE_CATALOG
 from speedtester_protocol.desktop_text import TEXT
 
@@ -33,7 +33,7 @@ class PortalLinksTests(unittest.TestCase):
                 Mock(side_effect=RuntimeError('desktop unavailable'))):
             self.assertEqual(request_browser('https://server.example/data?locale=en',opener=opener),
                 {'ok':True,'opened':False})
-            opener.assert_called_once_with('https://server.example/data?locale=en',new=2)
+            opener.assert_called_once_with('https://server.example/data?locale=en')
 
     def test_success_is_only_a_browser_request_not_an_installation_or_consent(self):
         opener=Mock(return_value=True)
@@ -51,3 +51,28 @@ class PortalLinksTests(unittest.TestCase):
                     'browser_requested','browser_unavailable','invalid_portal'):
                 self.assertTrue(TEXT[locale][key])
             self.assertTrue(all(catalog['publication'].values()))
+
+    def test_pairing_url_preserves_query_without_duplicate_locale(self):
+        self.assertEqual(pairing_url('https://server.example/pair?locale=en&flow=device','es'),
+            'https://server.example/pair?flow=device&locale=es')
+        for url in ('http://server.example/pair','https://server.example/logout','https://x.example/pair#fragment'):
+            with self.assertRaises(ValueError): pairing_url(url,'pt-BR')
+
+    def test_external_launch_restores_loader_environment_without_mutating_client(self):
+        import os
+        with patch.dict(os.environ, {'LD_LIBRARY_PATH':'/bundle/lib','LD_LIBRARY_PATH_ORIG':'/system/lib',
+                'DYLD_LIBRARY_PATH':'/bundle/lib'},clear=True):
+            env=system_environment()
+            self.assertEqual(env, {'LD_LIBRARY_PATH':'/system/lib'})
+            self.assertEqual(os.environ['LD_LIBRARY_PATH'],'/bundle/lib')
+
+    def test_os_dispatch_has_no_shell_inherits_sanitized_environment_and_is_bounded(self):
+        import subprocess
+        for system,expected in (('Darwin','/usr/bin/open'),('Linux','/usr/bin/xdg-open')):
+            with patch('platform.system',return_value=system), patch('subprocess.run',return_value=Mock(returncode=0)) as run:
+                self.assertTrue(open_system_browser('https://server.example/account?locale=pt-BR'))
+                self.assertEqual(run.call_args.args[0],[expected,'https://server.example/account?locale=pt-BR'])
+                self.assertEqual(run.call_args.kwargs['timeout'],8)
+                self.assertNotIn('shell',run.call_args.kwargs)
+                run.side_effect=subprocess.TimeoutExpired('opener',8)
+                self.assertFalse(request_browser('https://server.example/account')['opened'])

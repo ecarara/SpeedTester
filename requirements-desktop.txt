@@ -3,3 +3,4 @@
 -r app/requirements-community.txt
 pyinstaller==6.22.3
 pywin32==312; sys_platform == 'win32'
+ruff==0.17.0

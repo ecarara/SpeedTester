@@ -44,7 +44,7 @@ def notices(bundle):
             destination = bundle / "THIRD-PARTY-LICENSES" / name / (hashlib.sha256(str(item).encode()).hexdigest()[:8] + "-" + item.name)
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source, destination)
-    (bundle / "runtime-components.json").write_text(json.dumps({"python": platform.python_version(),
+    (bundle / "runtime-components.json").write_text(json.dumps({"scope": "build-environment; not a resolved runtime SBOM", "python": platform.python_version(),
         "components": sorted(packages, key=lambda item: item["name"].lower())}, indent=2) + "\n")
     shutil.copyfile(ROOT / "LICENSE", bundle / "LICENSE")
     python_license = Path(sys.base_prefix) / "LICENSE.txt"

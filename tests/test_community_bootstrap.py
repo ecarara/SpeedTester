@@ -69,8 +69,9 @@ class BootstrapTests(unittest.TestCase):
             extra = tarfile.TarInfo(name)
             extra.type = kind
             extra.linkname = '/etc/passwd'
+            archive = self.archive(extra)
             with self.assertRaises(installer.InstallationError):
-                installer.extract_archive(self.archive(extra), self.root / 'source')
+                installer.extract_archive(archive, self.root / 'source')
             self.assertFalse((self.root / 'source').exists())
         with patch.object(installer, 'MAX_UNPACKED_BYTES', 1):
             with self.assertRaises(installer.InstallationError):

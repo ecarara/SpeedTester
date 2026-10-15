@@ -1,7 +1,7 @@
 # Core
 fastapi==0.143.0
 uvicorn==0.34.0
-pydantic==2.10.4
+pydantic==2.14.0
 matplotlib==3.9.2
 pandas==2.2.3
 aiohttp==3.14.4

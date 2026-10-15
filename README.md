@@ -16,6 +16,29 @@ SQLite e disponibiliza uma API e um dashboard web.
 > os dados como evidência de SLA, valide o ambiente e mantenha uma cópia
 > externa do banco.
 
+## Client comunitário: baixar e instalar
+
+A consulta ao [SpeedTester Server](https://speedtester.cararalab.com.br/) é pública.
+Para contribuir com seu servidor Linux, baixe o
+[instalador autônomo](https://speedtester.cararalab.com.br/downloads/install-speedtester-client.py)
+e execute no diretório em que salvou o arquivo:
+
+```bash
+python3 install-speedtester-client.py
+```
+
+O instalador baixa uma revisão fixa deste repositório público, verifica o
+SHA-256 e abre o assistente. Não é necessário clonar o projeto nem copiar tokens.
+Entre no portal, aceite os documentos de produção e confirme o código e a
+impressão digital da instalação. Depois do pareamento, o client mantém suas
+credenciais protegidas e as renova automaticamente enquanto autorizado.
+
+Requisitos: Linux amd64/arm64, usuário normal com sessão systemd, Python
+3.11–3.13 com venv e iPerf3. O assistente pede o perfil da conexão, o destino e
+a agenda antes de habilitar o serviço. O download sozinho não inicia medições.
+Para um Server próprio, use `python3 install-speedtester-client.py --server https://seu-server`.
+O código do instalador está em [install-speedtester-client.py](install-speedtester-client.py).
+
 ## Dashboard
 
 ![Dashboard do SpeedTester com métricas, gráfico e cobertura da agenda](docs/images/dashboard.png)

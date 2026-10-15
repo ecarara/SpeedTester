@@ -7,6 +7,8 @@ from .models import SystemEnvironment,EnvironmentReport
 from .crypto import b64,public_bytes,digest,sign
 from .client import ProtocolError
 
+PENDING_SUFFIX = ":pending"
+
 
 def collect_environment():
     system={"Linux":"linux","Windows":"windows","Darwin":"macos","FreeBSD":"freebsd"}.get(platform.system(),"other")
@@ -33,12 +35,12 @@ def sync_environment(credentials,measurement_key):
     environment=collect_environment();checksum=digest(environment.model_dump())
     scope=credentials.scope+":environment"
     if credentials.queue.state(scope+":sent")==checksum:return False
-    pending=credentials.queue.state(scope+":pending")
+    pending=credentials.queue.state(scope+PENDING_SUFFIX)
     if not pending:
         report=EnvironmentReport(environment_id=str(uuid4()),client_id=credentials.bundle.client_id,reported_at=int(time.time()),environment=environment)
         pending={"report":report.model_dump(),"checksum":checksum}
-        credentials.queue.state(scope+":pending",pending)
+        credentials.queue.state(scope+PENDING_SUFFIX,pending)
     envelope=sign(pending["report"],measurement_key,"client-environment-v1")
     credentials.client().environment(envelope)
-    credentials.queue.put_batch([],scope,state_updates={scope+":sent":pending["checksum"],scope+":pending":None})
+    credentials.queue.put_batch([],scope,state_updates={scope+":sent":pending["checksum"],scope+PENDING_SUFFIX:None})
     return True

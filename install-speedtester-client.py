@@ -15,8 +15,8 @@ import tempfile
 import urllib.parse
 import urllib.request
 
-CLIENT_REVISION = '315d35c756c8ec125b6b04027ffb7a3ff581b363'
-ARCHIVE_SHA256 = '05220fd88c4060cbeeb53f624f8ddd9fe99e392696dee80ca4ff0afd5ce5c0c6'
+CLIENT_REVISION = 'c91f3968a2c8b57d4ab6383eadbff9d72d56cb36'
+ARCHIVE_SHA256 = '3c5a1d195acdfa5297129f395925d54f2919bab9c45f8b220d9d52f4adfa1645'
 ARCHIVE_URL = 'https://codeload.github.com/ecarara/SpeedTester/tar.gz/' + CLIENT_REVISION
 DEFAULT_SERVER = 'https://speedtester.cararalab.com.br'
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024

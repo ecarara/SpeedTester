@@ -21,7 +21,6 @@ def reject_links(path):
 def windows_identity():
     import win32api
     import win32con
-    import ntsecuritycon as rights
     import win32security
     token = win32security.OpenProcessToken(win32api.GetCurrentProcess(), win32con.TOKEN_QUERY)
     try:
@@ -31,6 +30,7 @@ def windows_identity():
 
 
 def windows_acl(path, *, principal=None, apply=False, directory=False, read_only=False):
+    import ntsecuritycon as rights
     import win32con
     import win32security as security
     principal = principal or windows_identity()

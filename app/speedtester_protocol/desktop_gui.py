@@ -7,13 +7,14 @@ import time
 import unicodedata
 import tkinter as tk
 from tkinter import messagebox, ttk
-import webbrowser
 from .desktop_controller import DEFAULT_SERVER
 from .desktop_service import DesktopConfiguration
 from .desktop_text import TEXT, LANGUAGES
 from .version import CLIENT_VERSION, build_label, diagnostic_text
 from .input_methods import bind_dead_keys
 from .schedule import local_timezone
+from .disclosure import DISCLOSURE_CATALOG
+from .desktop_links import portal_url, request_browser
 
 BACKGROUND, PAPER, INK, MUTED, ACCENT = "#f2f1e9", "#ffffff", "#112b2a", "#49615c", "#c1ef55"
 
@@ -148,7 +149,8 @@ class Installer(tk.Tk):
             self.label(cell, self.t(key), size=10, color=MUTED).pack(anchor="w", pady=(0, 4))
             ttk.Combobox(cell, values=[self.t(choice) for choice in choices], textvariable=variable, state="readonly", width=25).pack(fill="x")
         self.label(self.content, self.t("schedule_notice").format(timezone=self.schedule_timezone)+"\n"+self.t("target_notice"), color=MUTED, size=10).pack(fill="x", pady=(6, 10))
-        self.button(self.content, "data", lambda: self.open_url(self.fields["origin"].get(), "/data")).pack(anchor="w")
+        self.data_button = self.button(self.content, "data", self.show_disclosure)
+        self.data_button.pack(anchor="w")
         actions = tk.Frame(self.content, bg=BACKGROUND)
         actions.pack(fill="x", pady=(18, 0))
         self.button(actions, "back", lambda: self.show("welcome")).pack(side="left")
@@ -238,18 +240,98 @@ class Installer(tk.Tk):
     def finish_pairing(self):
         self.work(lambda: self.controller.call("cancel_pairing"), lambda result: self.received_status(result))
 
+    def show_disclosure(self):
+        previous = getattr(self, "disclosure_window", None)
+        if previous is not None and previous.winfo_exists():
+            previous.lift()
+            previous.focus_set()
+            return
+        window = tk.Toplevel(self, bg=BACKGROUND)
+        self.disclosure_window = window
+        window.title(self.t("data"))
+        window.geometry("780x680")
+        window.minsize(540, 420)
+        window.transient(self)
+        content = tk.Frame(window, bg=BACKGROUND, padx=22, pady=18)
+        content.pack(fill="both", expand=True)
+        self.label(content, self.t("data"), bold=True, size=19).pack(fill="x", pady=(0, 12))
+        body = tk.Frame(content, bg=PAPER)
+        body.pack(fill="both", expand=True)
+        scrollbar = ttk.Scrollbar(body, orient="vertical")
+        scrollbar.pack(side="right", fill="y")
+        text = tk.Text(body, wrap="word", relief="flat", bg=PAPER, fg=INK, padx=16, pady=14,
+            font=("Helvetica", 12), width=60, height=18, yscrollcommand=scrollbar.set)
+        text.pack(side="left", fill="both", expand=True)
+        scrollbar.configure(command=text.yview)
+        text.tag_configure("heading", font=("Helvetica", 12, "bold"), spacing1=12, spacing3=6)
+        text.tag_configure("body", spacing3=10)
+        catalog = DISCLOSURE_CATALOG[self.locale]
+        text.insert("end", catalog["intro"]+"\n\n", "body")
+        for title, description in catalog["sections"]:
+            text.insert("end", title+"\n", "heading")
+            text.insert("end", description+"\n\n", "body")
+        publication = catalog["publication"]
+        text.insert("end", publication["title"]+"\n", "heading")
+        for key in ("text", "example", "protection", "status"):
+            text.insert("end", publication[key]+"\n\n", "body")
+        text.configure(state="disabled")
+        self.disclosure_text = text
+        note = self.label(content, self.t("data_offline"), color=MUTED, size=10)
+        note.pack(fill="x", pady=(12, 8))
+        note.bind("<Configure>", lambda event: note.configure(wraplength=max(100, event.width)))
+        actions = tk.Frame(content, bg=BACKGROUND)
+        actions.pack(fill="x")
+        self.button(actions, "data_portal", lambda: self.open_url(self.fields["origin"].get(), "/data")).pack(side="left")
+        self.button(actions, "close", window.destroy).pack(side="right")
+        window.bind("<Escape>", lambda _event: window.destroy())
+        text.focus_set()
+
     def open_pair(self):
-        if self.pairing and not self.controller.preview:
-            webbrowser.open(self.pairing["verification_uri"] + "?locale=" + self.locale)
+        if self.pairing:
+            self.open_external(self.pairing["verification_uri"] + "?locale=" + self.locale)
 
     def open_url(self, origin, path):
-        from .client import HTTPS
         try:
-            origin = HTTPS(origin).origin
+            url = portal_url(origin, path, self.locale)
         except ValueError:
+            messagebox.showerror(self.t("title"), self.t("invalid_portal"), parent=self)
             return
-        if not self.controller.preview:
-            webbrowser.open(origin + path + "?locale=" + self.locale)
+        self.open_external(url)
+
+    def open_external(self, url):
+        def completed(result):
+            if result["opened"]:
+                self.feedback.configure(text=self.t("browser_requested"))
+            else:
+                self.show_portal_link(url)
+        self.work(lambda: request_browser(url, preview=self.controller.preview), completed)
+
+    def show_portal_link(self, url):
+        window = tk.Toplevel(self, bg=BACKGROUND)
+        window.title(self.t("portal_link"))
+        window.transient(self)
+        window.geometry("660x260")
+        window.minsize(440, 240)
+        content = tk.Frame(window, bg=BACKGROUND, padx=22, pady=18)
+        content.pack(fill="both", expand=True)
+        note = self.label(content, self.t("browser_unavailable"), size=12)
+        note.pack(fill="x", pady=(0, 14))
+        note.bind("<Configure>", lambda event: note.configure(wraplength=max(100, event.width)))
+        entry = ttk.Entry(content, width=65)
+        entry.insert(0, url)
+        entry.configure(state="readonly")
+        entry.pack(fill="x", pady=(0, 14))
+        actions = tk.Frame(content, bg=BACKGROUND)
+        actions.pack(fill="x")
+        def copy():
+            self.clipboard_clear()
+            self.clipboard_append(url)
+            self.feedback.configure(text=self.t("link_copied"))
+        self.button(actions, "copy_link", copy).pack(side="left")
+        self.button(actions, "close", window.destroy).pack(side="right")
+        window.bind("<Escape>", lambda _event: window.destroy())
+        entry.focus_set()
+        entry.selection_range(0, "end")
 
     def received_status(self, result):
         self.snapshot = result
@@ -373,6 +455,30 @@ class Installer(tk.Tk):
                 if page=="configure":
                     assert not {"host", "port", "hours"}.intersection(self.fields)
                     assert self.t("schedule_short").format(timezone=self.schedule_timezone)
+                    before = {key: value.get() for key, value in self.fields.items()}
+                    self.fields["origin"].set("not a valid server address")
+                    before["origin"] = self.fields["origin"].get()
+                    self.data_button.invoke()
+                    self.update()
+                    assert self.disclosure_window.winfo_exists()
+                    assert self.disclosure_window.title() == self.t("data")
+                    original_window = self.disclosure_window
+                    self.data_button.invoke()
+                    assert self.disclosure_window is original_window
+                    body = self.disclosure_text.get("1.0", "end")
+                    for title, description in DISCLOSURE_CATALOG[locale]["sections"]:
+                        assert title in body and description in body
+                    assert self.disclosure_text.cget("state") == "disabled"
+                    self.disclosure_text.yview_moveto(1)
+                    self.update()
+                    assert self.disclosure_text.yview()[1] == 1.0
+                    self.disclosure_window.destroy()
+                    assert {key: value.get() for key, value in self.fields.items()} == before
+                    self.show_portal_link("https://server.example/data?locale="+locale)
+                    self.update()
+                    for window in self.winfo_children():
+                        if isinstance(window, tk.Toplevel):
+                            window.destroy()
         from zoneinfo import ZoneInfo, reset_tzpath, TZPATH
         paths=TZPATH
         try:

@@ -131,3 +131,22 @@ for _code,_short,_periods in (
     ("en","Automatic schedule: 2 tests per period — 8 per day. Time zone: {timezone}.","Overnight 00–06 · Morning 06–12 · Afternoon 12–18 · Evening 18–24."),
     ("es","Agenda automática: 2 pruebas por período — 8 al día. Zona horaria: {timezone}.","Madrugada 00–06 · Mañana 06–12 · Tarde 12–18 · Noche 18–24.")):
     TEXT[_code].update(schedule_short=_short,schedule_notice=_short+"\n"+_periods)
+
+for _code, _values in {
+    "pt-BR": {"data_offline":"Esta lista está incluída no Client e pode ser lida sem internet. Consultá-la não envia dados, registra aceite ou inicia medições.",
+        "data_portal":"Consultar no Server", "portal_link":"Link do portal", "copy_link":"Copiar link", "link_copied":"Link copiado.",
+        "browser_requested":"A abertura foi solicitada ao navegador padrão.",
+        "browser_unavailable":"Não foi possível abrir o navegador automaticamente. Copie este link e abra-o no navegador de sua preferência.",
+        "invalid_portal":"Informe um endereço HTTPS válido do Server para abrir o portal. A lista local de dados continua disponível."},
+    "en": {"data_offline":"This list is included in the Client and works offline. Reading it sends no data, records no acceptance and starts no measurements.",
+        "data_portal":"Read on the Server", "portal_link":"Portal link", "copy_link":"Copy link", "link_copied":"Link copied.",
+        "browser_requested":"An open request was sent to your default browser.",
+        "browser_unavailable":"The browser could not be opened automatically. Copy this link and open it in your preferred browser.",
+        "invalid_portal":"Enter a valid HTTPS Server address to open the portal. The local data list remains available."},
+    "es": {"data_offline":"Esta lista está incluida en el Client y puede consultarse sin internet. Leerla no envía datos, registra aceptación ni inicia mediciones.",
+        "data_portal":"Consultar en el Server", "portal_link":"Enlace del portal", "copy_link":"Copiar enlace", "link_copied":"Enlace copiado.",
+        "browser_requested":"Se solicitó la apertura al navegador predeterminado.",
+        "browser_unavailable":"No se pudo abrir el navegador automáticamente. Copie este enlace y ábralo en el navegador de su preferencia.",
+        "invalid_portal":"Indique una dirección HTTPS válida del Server para abrir el portal. La lista local de datos sigue disponible."},
+}.items():
+    TEXT[_code].update(_values)

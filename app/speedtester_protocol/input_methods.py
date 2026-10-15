@@ -114,7 +114,7 @@ def smoke_dead_keys(window):
                 return
             time.sleep(.01)
         if expected is not None:
-            raise AssertionError("ABNT2 composition failed: " + repr(entry.get()))
+            raise AssertionError("ABNT2 expected " + repr(expected) + "; got " + repr(entry.get()))
 
     keys = ["S", "dead_tilde", "a", "o"]
     if fallback:
@@ -134,7 +134,7 @@ def smoke_dead_keys(window):
         ("España", ["E", "s", "p", "a", "dead_tilde", "n", "a"]),
         ("Â à ü Ç", ["dead_circumflex", "A", "space", "dead_grave", "a", "space", "dead_diaeresis", "u", "space", "Ccedilla"]),
         ("~", ["dead_tilde", "space"]),
-        ("S~ao", ["S", "asciitilde", "a", "o"]),
+        ("S~ao", ["S", "dead_tilde", "space", "a", "o"]),
     ]:
         type_keys(entry, keys, expected)
     # Pasting must never repair or reinterpret literal text.

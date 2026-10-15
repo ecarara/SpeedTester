@@ -39,6 +39,8 @@ a agenda antes de habilitar o serviço. O download sozinho não inicia mediçõe
 Para um Server próprio, use `python3 install-speedtester-client.py --server https://seu-server`.
 O código do instalador está em [install-speedtester-client.py](install-speedtester-client.py).
 
+Antes de autorizar, consulte o [inventário de dados enviados](https://speedtester.cararalab.com.br/data). Depois do aceite e do pareamento, Servers que anunciam `client-environment-v1` podem receber sistema operacional, distribuição, versão e arquitetura. Hostname, nome do usuário, número de série e conteúdo de arquivos pessoais não fazem parte desse registro. As métricas e o perfil da conexão continuam separados; os detalhes estão em [docs/client-environment.md](docs/client-environment.md).
+
 ## Dashboard
 
 ![Dashboard do SpeedTester com métricas, gráfico e cobertura da agenda](docs/images/dashboard.png)

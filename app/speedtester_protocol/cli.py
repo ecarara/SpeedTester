@@ -13,6 +13,7 @@ from .installation import protected_queue,systemd_unit
 from .models import Profile
 from .agent import CommunityAgent
 from .runner import IperfRunner
+from .environment import sync_environment
 
 DEFAULT_STATE=Path.home()/".local/share/speedtester-client"
 
@@ -91,6 +92,7 @@ def await_pairing(pairing_client,pairing,sleep):
 def setup(queue,origin,*,transport=None,input_fn=input,sleep=time.sleep,repair=False):
     origin=HTTPS(origin).origin
     server=discover(origin,transport)
+    print("Dados enviados após aceite e pareamento: perfil da conexão, métricas separadas e sistema operacional/distribuição/versão/arquitetura. Detalhes: "+origin+"/data")
     config=installation_config(queue,origin,server,input_fn)
     credentials,measurement=context(queue,config,transport)
     if credentials.bundle and not repair:
@@ -104,6 +106,7 @@ def setup(queue,origin,*,transport=None,input_fn=input,sleep=time.sleep,repair=F
         await_pairing(pairing_client,pairing,sleep)
         queue.state("next_due",int(time.time())+config["interval"])
         print("Pareamento concluído. Tokens guardados na fila cifrada; nenhum token precisa ser copiado.")
+    sync_environment(credentials,measurement)
     return config
 
 
@@ -112,6 +115,7 @@ def cycle(queue,*,transport=None,runner=None,now=None):
     if not config:raise ProtocolError("setup_required")
     credentials,measurement=context(queue,config,transport)
     client=credentials.client()
+    sync_environment(credentials,measurement)
     agent=CommunityAgent(client,queue,measurement,Profile.model_validate(config["profile"]),"iperf3")
     sent=agent.sync()
     current=int(time.time()) if now is None else now

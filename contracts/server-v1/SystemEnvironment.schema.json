@@ -1,0 +1,63 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "system": {
+      "enum": [
+        "linux",
+        "windows",
+        "macos",
+        "freebsd",
+        "other"
+      ],
+      "title": "System",
+      "type": "string"
+    },
+    "distribution": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-z0-9._-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Distribution"
+    },
+    "version": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._+-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version"
+    },
+    "architecture": {
+      "enum": [
+        "amd64",
+        "arm64",
+        "x86",
+        "arm",
+        "other"
+      ],
+      "title": "Architecture",
+      "type": "string"
+    }
+  },
+  "required": [
+    "system",
+    "architecture"
+  ],
+  "title": "SystemEnvironment",
+  "type": "object"
+}

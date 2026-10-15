@@ -12,6 +12,7 @@ from .desktop_controller import DEFAULT_SERVER
 from .desktop_service import DesktopConfiguration
 from .desktop_text import TEXT, LANGUAGES
 from .version import CLIENT_VERSION, build_label, diagnostic_text
+from .input_methods import bind_dead_keys
 
 BACKGROUND, PAPER, INK, MUTED, ACCENT = "#f2f1e9", "#ffffff", "#112b2a", "#49615c", "#c1ef55"
 
@@ -137,6 +138,7 @@ class Installer(tk.Tk):
             self.label(cell, self.t(key), size=10, color=MUTED).pack(anchor="w", pady=(0, 4))
             entry=ttk.Entry(cell, textvariable=self.fields[key], width=25)
             entry.pack(fill="x")
+            bind_dead_keys(entry)
             self.entries[key]=entry
         for column, (key, variable, choices) in enumerate((("access", self.access, ("fiber", "coaxial", "radio", "satellite", "cellular", "dsl", "other", "unknown")),
                 ("link", self.link, ("ethernet", "wifi")))):
@@ -367,7 +369,7 @@ class Installer(tk.Tk):
                 assert CLIENT_VERSION in self.title()
                 if page=="configure":assert "host" not in self.fields and "port" not in self.fields
         import os
-        if self.tk.call("tk","windowingsystem")=="x11" and os.environ.get("SPEEDTESTER_INPUT_SMOKE")=="1":
+        if self.tk.call("tk","windowingsystem")=="x11" and os.environ.get("SPEEDTESTER_INPUT_SMOKE") in {"1", "fallback"}:
             from .input_methods import smoke_dead_keys
             smoke_dead_keys(self)
         self.destroy()

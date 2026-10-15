@@ -60,3 +60,12 @@ Sem destino central disponível, a instalação pode ser vinculada e manter a re
 A versão fica no título/rodapé e no status. “Copiar dados para uma issue” inclui versão/build do aplicativo e serviço, plataforma e versão do Tk; exclui tokens, perfil, caminhos e endpoints. Os arquivos de download incluem a versão e um `build-info.json` vinculado ao manifesto do pacote.
 
 O bundle Linux passa a incluir dados de composição/locale e os módulos dinâmicos Xlib encontrados no ambiente de build. O aplicativo usa esses recursos na sua própria execução, preservando idioma, ABNT2 e método de entrada do desktop. O smoke do pacote Linux usa teclas reais em Xvfb/ABNT2 para `São Paulo`, `ação`, `México` e `España`. Isso melhora a verificação do pacote; a confirmação no Omarchy real ainda depende do teste nessa distribuição. Não reescrever textos como `S~ao` por heurística nem alterar o teclado do usuário.
+
+
+## Correção de composição no Client 0.3.0.dev3
+
+O reteste no Omarchy confirmou que a versão 0.3.0.dev2 ainda recebia o acento separado, apesar do payload de locale. O teste anterior apenas comprovava o caminho com XIM funcionando. A nova regressão usa teclas reais num display descartável com XIM indisponível: o campo de controle sem correção deve produzir exatamente `S~ao`, enquanto o campo do instalador deve produzir `São`. O pacote continua testando também o caminho nativo com XIM ativo.
+
+Os campos do formulário em X11/XWayland recebem um fallback local para as teclas mortas latinas de til, agudo, grave, circunflexo, trema e cedilha. Ele atua apenas quando esses eventos chegam sem composição; caracteres já compostos e métodos de entrada funcionando seguem o fluxo normal. Espaço/dobrar acento permitem pontuação literal. Backspace/Escape cancelam a composição; foco, mouse, atalhos e colagem limpam o estado pendente. Há testes de seleção/cursor, caixa alta e preservação de `ç`, Unicode e pontuação literal.
+
+Não há substituição de textos como `S~ao`, alteração do layout ABNT2, mudança de idioma/XMODIFIERS, hook global nem registro de teclas. A aplicação mantém a composição nativa em Windows/macOS. O cenário automatizado reproduz a ausência de composição; a confirmação final no Omarchy permanece dependente do reteste da nova versão. Instalação/pareamento continuam sem medições.

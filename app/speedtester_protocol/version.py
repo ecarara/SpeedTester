@@ -4,7 +4,7 @@
 import platform
 import re
 
-CLIENT_VERSION = '0.3.0.dev2'
+CLIENT_VERSION = '0.3.0.dev3'
 BUILD_REVISION = 'source'
 
 

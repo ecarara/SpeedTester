@@ -110,6 +110,9 @@ def build(smoke=True):
             if system=="Linux":
                 environment.update(SPEEDTESTER_INPUT_SMOKE="1",XMODIFIERS="@im=none")
             subprocess.run([str(executable), "--ui-smoke"], check=True, timeout=120, cwd=temporary,env=environment)
+            if system == "Linux":
+                environment.update(SPEEDTESTER_INPUT_SMOKE="fallback", XMODIFIERS="@im=cararalab-ci-unavailable")
+                subprocess.run([str(executable), "--ui-smoke"], check=True, timeout=120, cwd=temporary, env=environment)
     releases = output / "releases"
     releases.mkdir(parents=True, exist_ok=True)
     name = "SpeedTesterClient-" + CLIENT_VERSION + "-" + system.lower() + "-" + platform.machine().lower()

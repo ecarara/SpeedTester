@@ -3,6 +3,7 @@
 """Complete installer copy; Portuguese is always the initial language."""
 TEXT = {
 "pt-BR": {
+"experimental":"VERSÃO EXPERIMENTAL · Instalação nativa ainda em homologação. Não usar em produção.",
 "title":"SpeedTester Client · CararaLab", "tagline":"A sua conexão,\ncom evidências.",
 "navigation":"INSTALAÇÃO E MANUTENÇÃO", "footer":"CararaLab · Software livre", "language":"Idioma",
 "welcome":"Bem-vindo ao seu Client", "intro":"Instale o serviço uma vez. Ele funciona em segundo plano, mesmo sem esta janela aberta ou uma sessão de usuário.",
@@ -40,6 +41,7 @@ TEXT = {
 "no_runner":"A ferramenta de medição não está disponível neste pacote. A agenda continuará pausada.",
 },
 "en": {
+"experimental":"EXPERIMENTAL VERSION · Native installation is still under validation. Not for production use.",
 "title":"SpeedTester Client · CararaLab", "tagline":"Your connection,\nbacked by evidence.",
 "navigation":"INSTALLATION & MAINTENANCE", "footer":"CararaLab · Free software", "language":"Language",
 "welcome":"Welcome to your Client", "intro":"Install the service once. It runs in the background, even with this window closed and no user signed in.",
@@ -77,6 +79,7 @@ TEXT = {
 "no_runner":"The measurement tool is unavailable in this package. The schedule will stay paused.",
 },
 "es": {
+"experimental":"VERSIÓN EXPERIMENTAL · Instalación nativa en validación. No usar en producción.",
 "title":"SpeedTester Client · CararaLab", "tagline":"Tu conexión,\ncon evidencias.",
 "navigation":"INSTALACIÓN Y MANTENIMIENTO", "footer":"CararaLab · Software libre", "language":"Idioma",
 "welcome":"Bienvenido a tu Client", "intro":"Instala el servicio una vez. Funciona en segundo plano, incluso con esta ventana cerrada y sin sesión de usuario.",

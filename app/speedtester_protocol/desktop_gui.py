@@ -76,8 +76,8 @@ class Installer(tk.Tk):
         choice = ttk.Combobox(header, values=list(LANGUAGES), textvariable=self.languages, state="readonly", width=13)
         choice.pack(side="right")
         choice.bind("<<ComboboxSelected>>", self.change_language)
-        if self.controller.preview:
-            self.label(shell, self.t("preview"), size=10, color="#705016", width=680).pack(anchor="w", pady=(18, 0))
+        banner = "preview" if self.controller.preview else "experimental"
+        self.label(shell, self.t(banner), size=10, color="#705016", width=680).pack(anchor="w", pady=(18, 0))
         self.content = tk.Frame(shell, bg=BACKGROUND)
         self.content.pack(fill="both", expand=True, pady=(24, 0))
         getattr(self, "page_" + self.page)()

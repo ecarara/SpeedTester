@@ -32,6 +32,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y xvfb libtk8.6
       - name: Install public native build dependencies
         run: python -m pip install -r requirements-desktop.txt '.[desktop]'
+      - name: Audit native build and runtime dependencies
+        run: python -m pip_audit -r requirements-desktop.txt
       - name: Check platform code for undefined names
         run: python -m ruff check --select F821 app/speedtester_protocol tests/test_desktop_client.py tests/test_desktop_maintenance.py scripts/build_desktop.py
       - name: Portable service and maintenance contract, no measurements

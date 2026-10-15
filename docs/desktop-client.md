@@ -6,7 +6,7 @@ Esta é uma **prévia experimental**, ainda sem certificação para instalação
 
 ## O que está implementado
 
-- Assistente nativo com Tk e runtime empacotado pelo PyInstaller, sem depender de uma janela de navegador local.
+- Assistente nativo com Tk e runtime empacotado pelo PyInstaller, sem depender de uma janela de navegador local. O pacote inclui certificados públicos de confiança para HTTPS; uma CA definida explicitamente pelo administrador continua respeitada.
 - Serviço separado da interface, com adaptadores para systemd de sistema, LaunchDaemon e Windows Service de inicialização automática. Identidade dedicada, sem executar o runner como administrador/root.
 - Comunicação somente por loopback, mensagens autenticadas por HMAC, proteção contra repetição e respostas vinculadas à solicitação. A interface não recebe access/refresh tokens ou chaves privadas do protocolo.
 - Contribuição opcional, inicialmente desmarcada. Sem configuração/vínculo não há discovery, pareamento, transmissão de sistema operacional ou solicitação de medição. O serviço comunitário fica em espera; o standalone existente continua independente.

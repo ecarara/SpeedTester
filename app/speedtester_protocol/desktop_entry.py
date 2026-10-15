@@ -11,8 +11,17 @@ import threading
 from .native_services import BOOTSTRAP, MARKER, native_layout
 
 
+def configure_tls():
+    # Frozen apps cannot depend on the build machine's Python CA directory.
+    # Explicit administrator/test CA configuration is preserved.
+    if getattr(sys, "frozen", False) and not os.environ.get("SSL_CERT_FILE") and not os.environ.get("SSL_CERT_DIR"):
+        import certifi
+        os.environ["SSL_CERT_FILE"] = certifi.where()
+
+
 def agent_main(stop=None):
     from .desktop_service import run_service
+    configure_tls()
     layout = native_layout()
     bootstrap = layout.state / BOOTSTRAP
     if bootstrap.stat().st_size > 4096:
@@ -66,6 +75,9 @@ def main(argv=None):
     controller = PreviewController() if args.preview or args.ui_smoke else DesktopController()
     window = Installer(controller)
     if args.ui_smoke:
+        configure_tls()
+        import ssl
+        assert ssl.create_default_context().cert_store_stats()["x509_ca"] > 0
         window.smoke_test()
     else:
         window.mainloop()

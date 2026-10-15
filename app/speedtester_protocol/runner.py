@@ -16,7 +16,8 @@ class IperfRunner:
     def _capture(command,deadline,max_duration_ms):
         # Bound output without retaining operational addresses in memory/logs.
         with tempfile.TemporaryFile() as output,tempfile.TemporaryFile() as error:
-            with subprocess.Popen(command,stdout=output,stderr=error,start_new_session=True) as process:
+            options={"start_new_session":True} if os.name!="nt" else {"creationflags":subprocess.CREATE_NO_WINDOW}
+            with subprocess.Popen(command,stdout=output,stderr=error,**options) as process:
                 try:
                     while process.poll() is None:
                         if max(os.fstat(output.fileno()).st_size,os.fstat(error.fileno()).st_size)>65536:
@@ -27,7 +28,8 @@ class IperfRunner:
                     if process.returncode:raise RuntimeError("iperf_failed")
                 finally:
                     if process.poll() is None:
-                        os.killpg(process.pid,signal.SIGKILL)
+                        if os.name=="nt":process.kill()
+                        else:os.killpg(process.pid,signal.SIGKILL)
                         process.wait()
             output.seek(0);raw=output.read(65537)
             if len(raw)>65536:raise RuntimeError("iperf_output_too_large")

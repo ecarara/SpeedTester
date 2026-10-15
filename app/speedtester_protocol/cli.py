@@ -2,8 +2,8 @@
 # Copyright (C) 2026 Edson Angelo Carara
 
 """Guided headless installation and unattended community synchronization."""
-import argparse,fcntl,json,secrets,shutil,sys,time
-from contextlib import contextmanager
+import argparse,json,secrets,shutil,sys,time
+from contextlib import contextmanager,ExitStack
 from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,Ed25519PublicKey
 from .crypto import b64,unb64,public_bytes,digest
@@ -14,16 +14,15 @@ from .models import Profile
 from .agent import CommunityAgent
 from .runner import IperfRunner
 from .environment import sync_environment
+from .local_security import process_lock
 
 DEFAULT_STATE=Path.home()/".local/share/speedtester-client"
 
 
 @contextmanager
 def exclusive(queue):
-    import os
-    fd=os.open(queue.directory/"process.lock",os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
-    with os.fdopen(fd,"w") as stream:
-        try:fcntl.flock(stream,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    with ExitStack() as stack:
+        try:stack.enter_context(process_lock(queue.directory/"process.lock"))
         except BlockingIOError as exc:raise ProtocolError("client_already_running") from exc
         yield
 

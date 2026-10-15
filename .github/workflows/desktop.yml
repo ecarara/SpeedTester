@@ -1,0 +1,48 @@
+name: Desktop Client preview
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    name: Desktop ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-desktop.txt
+      - name: Native Linux graphical libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb libtk8.6
+      - name: Install public native build dependencies
+        run: python -m pip install -r requirements-desktop.txt '.[desktop]'
+      - name: Portable service and maintenance contract, no measurements
+        env:
+          PYTHONPATH: app
+        run: python -m unittest discover -s tests -p 'test_desktop_*.py' -v
+      - name: Graphical smoke and packaged runtime (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python scripts/build_desktop.py
+      - name: Graphical smoke and packaged runtime (Windows/macOS)
+        if: runner.os != 'Linux'
+        run: python scripts/build_desktop.py
+      - name: Preserve experimental bundles and checksums
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: desktop-preview-${{ runner.os }}-${{ runner.arch }}
+          path: dist/desktop/releases/*
+          if-no-files-found: error
+          retention-days: 7

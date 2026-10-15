@@ -1,0 +1,5 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+-r app/requirements-community.txt
+pyinstaller==6.22.3
+pywin32==312; sys_platform == 'win32'

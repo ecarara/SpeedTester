@@ -16,6 +16,10 @@ SQLite e disponibiliza uma API e um dashboard web.
 > os dados como evidência de SLA, valide o ambiente e mantenha uma cópia
 > externa do banco.
 
+## Instalador gráfico em desenvolvimento
+
+A [prévia do Client gráfico](docs/desktop-client.md) inicia o suporte a Windows, Linux e macOS, com serviço independente da interface, vínculo opcional, reparo e desinstalação. Ainda não é um pacote certificado para workstations de produção; o instalador Linux publicado permanece disponível. A agenda da prévia começa pausada, e sua instalação não executa medições.
+
 ## Client comunitário: baixar e instalar
 
 A consulta ao [SpeedTester Server](https://speedtester.cararalab.com.br/) é pública.

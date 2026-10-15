@@ -21,3 +21,7 @@ Schemas are generated from `speedtester_protocol.models` and checked by the publ
 This is the SpeedTester application protocol, inspired by [device authorization](https://www.rfc-editor.org/rfc/rfc8628), [OAuth security guidance](https://www.rfc-editor.org/rfc/rfc9700) and [DPoP](https://www.rfc-editor.org/rfc/rfc9449). The pairing/renewal JSON routes are not generic OAuth token endpoints and do not claim full OAuth wire compatibility.
 
 See the [installation guide](../../docs/community-client.md). Public aggregate queries and operator awards remain subsequent work. The existing standalone collector is unaffected.
+
+### Automatic test targets (additive capability)
+
+`automatic-test-target-v1` adds authenticated `POST /api/v1/test-target` with `TargetRequest` and a `TestTarget` envelope signed under `test-target-v1`. Access token, DPoP, active account/client and current legal authorization are required. The response binds the request/client IDs, endpoint, scope, deterministic target ID, and a lifetime no longer than 300 seconds. Fetching this policy is not a measurement grant and does not contact the destination. Never substitute a local/manual endpoint if this capability is unavailable or its signature/context is invalid. Grants retain their unchanged v1 schema; the runner must enforce the matching central target ID/scope before execution.

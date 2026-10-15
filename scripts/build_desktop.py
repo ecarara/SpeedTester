@@ -8,6 +8,8 @@ import importlib.metadata as metadata
 import json
 from pathlib import Path
 import platform
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -57,10 +59,26 @@ def build(smoke=True):
     work = ROOT / "build/desktop"
     work.mkdir(parents=True, exist_ok=True)
     launcher = work / "launcher.py"
-    launcher.write_text("from speedtester_protocol.desktop_entry import main\nraise SystemExit(main())\n")
+    revision=os.environ.get("SOURCE_REVISION","")
+    if not re.fullmatch("[0-9a-f]{40}",revision):
+        result=subprocess.run(["git","rev-parse","HEAD"],capture_output=True,text=True,cwd=ROOT)
+        revision=result.stdout.strip() if result.returncode==0 else "source"
+    sys.path.insert(0,str(ROOT/"app"))
+    from speedtester_protocol.version import CLIENT_VERSION
+    launcher.write_text("from speedtester_protocol.version import set_build_revision\nset_build_revision("+repr(revision)+")\nfrom speedtester_protocol.desktop_entry import main\nraise SystemExit(main())\n")
     command = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir",
         "--name", "SpeedTesterClient", "--paths", str(ROOT / "app"),
         "--distpath", str(output / "raw"), "--workpath", str(work / "cache"), "--specpath", str(work)]
+    if platform.system()=="Linux":
+        data=Path("/usr/share/X11/locale")
+        if not data.is_dir():raise RuntimeError("Xlib locale data required for Linux package")
+        command.extend(("--add-data",str(data)+":x11/locale"))
+        modules=[Path("/usr/lib/X11/locale"),*Path("/usr/lib").glob("*/X11/locale")]
+        for directory in modules:
+            for library in directory.rglob("*.so*") if directory.is_dir() else ():
+                if library.is_file():
+                    destination="x11/modules/"+library.parent.relative_to(directory).as_posix()
+                    command.extend(("--add-binary",str(library)+":"+destination))
     if platform.system() in ("Windows", "Darwin"):
         command.append("--windowed")
     if platform.system() == "Darwin":
@@ -71,6 +89,13 @@ def build(smoke=True):
     system = platform.system()
     bundle = output / "raw" / ("SpeedTesterClient.app" if system == "Darwin" else "SpeedTesterClient")
     notices(bundle)
+    if system=="Linux":
+        notice=Path("/usr/share/doc/libx11-6/copyright")
+        if notice.is_file():
+            directory=bundle/"THIRD-PARTY-LICENSES/libX11"
+            directory.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile(notice,directory/"copyright")
+    (bundle/"build-info.json").write_text(json.dumps({"version":CLIENT_VERSION,"revision":revision,"experimental":True},indent=2)+"\n")
     (bundle / "PREVIEW.txt").write_text(
         "EXPERIMENTAL DEVELOPER PREVIEW — not a certified production installer.\n"
         "Native service lifecycle and iPerf3 distribution still require full native validation.\n"
@@ -81,10 +106,13 @@ def build(smoke=True):
     executable = bundle / ("Contents/MacOS/SpeedTesterClient" if system == "Darwin" else "SpeedTesterClient.exe" if system == "Windows" else "SpeedTesterClient")
     if smoke:
         with __import__("tempfile").TemporaryDirectory() as temporary:
-            subprocess.run([str(executable), "--ui-smoke"], check=True, timeout=120, cwd=temporary)
+            environment=os.environ.copy()
+            if system=="Linux":
+                environment.update(SPEEDTESTER_INPUT_SMOKE="1",XMODIFIERS="@im=none")
+            subprocess.run([str(executable), "--ui-smoke"], check=True, timeout=120, cwd=temporary,env=environment)
     releases = output / "releases"
     releases.mkdir(parents=True, exist_ok=True)
-    name = "SpeedTesterClient-preview-" + system.lower() + "-" + platform.machine().lower()
+    name = "SpeedTesterClient-" + CLIENT_VERSION + "-" + system.lower() + "-" + platform.machine().lower()
     if system == "Darwin":
         archive = releases / (name + ".zip")
         subprocess.run(["/usr/bin/ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(bundle), str(archive)], check=True)

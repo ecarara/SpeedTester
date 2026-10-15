@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Edson Angelo Carara
 
 """Guided headless installation and unattended community synchronization."""
-import argparse,json,secrets,shutil,sys,time
+import argparse,json,secrets,sys,time,unicodedata
 from contextlib import contextmanager,ExitStack
 from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,Ed25519PublicKey
@@ -46,7 +46,7 @@ def context(queue,config,transport=None):
 
 
 def prompt_profile(input_fn=input):
-    def required(label):return " ".join(input_fn(label+": ").split())
+    def required(label):return unicodedata.normalize("NFC"," ".join(input_fn(label+": ").split()))
     kinds={"1":"fiber","2":"coaxial","3":"radio","4":"satellite","5":"cellular","6":"dsl","7":"other","8":"unknown"}
     operator=required("Operadora");country=required("Código do país (ex.: BR)").upper()
     region=required("Estado/região");city=required("Cidade")
@@ -64,13 +64,10 @@ def installation_config(queue,origin,server,input_fn):
             raise ProtocolError("installation_server_changed")
         return config
     profile=prompt_profile(input_fn)
-    host=input_fn("Destino iPerf3 (o teste é exploratório se não for controlado): ").strip()
-    port=int(input_fn("Porta iPerf3 [5201]: ").strip() or "5201")
-    IperfRunner(host,port) # Reject malformed destinations before persisting.
     hours=int(input_fn("Intervalo em horas [1, entre 1 e 24]: ").strip() or "1")
     if not 1<=hours<=24:raise ValueError("invalid_schedule")
     config={"origin":origin,"server_key":b64(public_bytes(server)),"possession_private":Ed25519PrivateKey.generate().private_bytes_raw().hex(),
-        "measurement_private":Ed25519PrivateKey.generate().private_bytes_raw().hex(),"profile":profile.model_dump(),"host":host,"port":port,"interval":hours*3600}
+        "measurement_private":Ed25519PrivateKey.generate().private_bytes_raw().hex(),"profile":profile.model_dump(),"target_mode":"automatic","interval":hours*3600}
     queue.state("installation",config)
     return config
 
@@ -121,7 +118,12 @@ def cycle(queue,*,transport=None,runner=None,now=None):
     if agent.state("active_attempt") or current>=(queue.state("next_due") or 0):
         # Reserve the next slot before running so restart cannot duplicate a due test.
         queue.state("next_due",current+config["interval"])
-        agent.run_once(runner or IperfRunner(config["host"],config["port"]))
+        if config.get("target_mode")=="automatic":
+            from .targets import automatic_runner
+            execute=automatic_runner(client,credentials.bundle.client_id,runner)
+        else:
+            execute=runner or IperfRunner(config["host"],config["port"])
+        agent.run_once(execute)
         return "attempt_completed"
     return "synchronized" if sent else "waiting"
 
@@ -162,7 +164,6 @@ def show_status(queue):
 
 def dispatch(args,queue):
     if args.command=="setup":
-        if not shutil.which("iperf3"):raise ProtocolError("iperf3_required")
         setup(queue,args.server,repair=args.repair)
     elif args.command=="service-file":print(systemd_unit(args.executable,args.state),end="")
     elif args.command=="status":show_status(queue)

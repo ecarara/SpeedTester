@@ -50,6 +50,8 @@ def agent_main(stop=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="CararaLab SpeedTester Client")
+    from .version import build_label
+    parser.add_argument("--version",action="version",version="SpeedTester Client "+build_label())
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--agent", action="store_true")
     modes.add_argument("--windows-service", action="store_true")
@@ -70,6 +72,8 @@ def main(argv=None):
         except Exception:
             # No exception serialization: paths, OS identities and secrets stay local.
             return 20
+    from .input_methods import configure_input_methods
+    configure_input_methods()
     from .desktop_controller import DesktopController, PreviewController
     from .desktop_gui import Installer
     controller = PreviewController() if args.preview or args.ui_smoke else DesktopController()

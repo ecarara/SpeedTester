@@ -27,8 +27,9 @@ MAX_PENDING_RECORDS = 10000
 class DesktopConfiguration(StrictModel):
     origin: str = Field(max_length=200)
     profile: Profile
-    host: str = Field(min_length=1, max_length=253)
-    port: int = Field(default=5201, ge=1, le=65535)
+    # Older GUIs may send these fields; they are discarded and never used.
+    host: str | None = Field(default=None, max_length=253, exclude=True)
+    port: int = Field(default=5201, ge=1, le=65535, exclude=True)
     interval_hours: int = Field(default=1, ge=1, le=24)
     contribute: bool = False
 
@@ -40,7 +41,8 @@ class DesktopConfiguration(StrictModel):
     @field_validator("host")
     @classmethod
     def destination(cls, value):
-        IperfRunner(value)
+        if value is not None:
+            IperfRunner(value)
         return value
 
 
@@ -54,6 +56,13 @@ class DesktopEngine:
         self.maintenance = maintenance
         self.last_tick = 0
         self.wake = threading.Event()
+        installed=self.installation()
+        if self.queue.state(CONFIGURATION) and installed and installed.get("target_mode")!="automatic":
+            installed.update(target_mode="automatic")
+            installed.pop("host",None)
+            installed.pop("port",None)
+            self.queue.state("installation",installed)
+            self.queue.state(ENABLED,False)
         self.last_snapshot = self.status()
 
     def configuration(self):
@@ -77,7 +86,8 @@ class DesktopEngine:
         credentials, _ = self.credentials()
         paired = bool(credentials and credentials.bundle)
         counts = self.counts()
-        result = {"ok": True, "service": "running", "code": self.last_code,
+        from .version import CLIENT_VERSION, BUILD_REVISION
+        result = {"client_version":CLIENT_VERSION,"build_revision":BUILD_REVISION,"ok": True, "service": "running", "code": self.last_code,
             "configured": bool(configuration), "paired": paired,
             "contribute": bool(configuration and configuration.contribute),
             "measurements_enabled": bool(self.queue.state(ENABLED)) and not self.maintenance,
@@ -104,8 +114,9 @@ class DesktopEngine:
         if installed:
             changed = {key: value for key, value in installed["profile"].items() if key != "version"} != configuration.profile.model_dump(exclude={"version"})
             profile = configuration.profile.model_copy(update={"version": installed["profile"]["version"] + 1}) if changed else Profile.model_validate(installed["profile"])
-            installed.update(profile=profile.model_dump(), host=configuration.host,
-                port=configuration.port, interval=configuration.interval_hours * 3600)
+            installed.update(profile=profile.model_dump(), target_mode="automatic", interval=configuration.interval_hours * 3600)
+            installed.pop("host", None)
+            installed.pop("port", None)
             self.queue.state("installation", installed)
         self.last_code = "ready" if old else "configured"
         return self.status()
@@ -123,8 +134,8 @@ class DesktopEngine:
             installed = {"origin": configuration.origin, "server_key": b64(public_bytes(server)),
                 "possession_private": Ed25519PrivateKey.generate().private_bytes_raw().hex(),
                 "measurement_private": Ed25519PrivateKey.generate().private_bytes_raw().hex(),
-                "profile": configuration.profile.model_dump(), "host": configuration.host,
-                "port": configuration.port, "interval": configuration.interval_hours * 3600}
+                "profile": configuration.profile.model_dump(), "target_mode": "automatic",
+                "interval": configuration.interval_hours * 3600}
             self.queue.state("installation", installed)
         credentials, measurement = self.credentials()
         if credentials.bundle:
@@ -174,10 +185,12 @@ class DesktopEngine:
                     credentials, _ = self.credentials()
                     if not configuration or not configuration.contribute or not credentials or not credentials.bundle:
                         raise ProtocolError("pairing_required")
+                    # Validate authorization and policy without probing any test server.
+                    credentials.ensure_current(force=True)
+                    from .targets import obtain_target
+                    obtain_target(credentials.client(), credentials.bundle.client_id)
                     if not self.runner and not shutil.which("iperf3"):
                         raise ProtocolError("iperf3_required")
-                    # Validate central authorization even if the access token is still young.
-                    credentials.ensure_current(force=True)
                     self.maintenance = False
                     self.queue.state("next_due", int(self.clock()) + configuration.interval_hours * 3600)
                     self.queue.state(ENABLED, True)
@@ -232,7 +245,13 @@ class DesktopEngine:
                     Profile.model_validate(self.installation()["profile"]), "iperf3").sync()
                 self.last_code = "storage_limit"
                 return self.last_code
-            self.last_code = cycle(self.queue, transport=self.transport, runner=self.runner, now=self.last_tick)
+            try:
+                self.last_code = cycle(self.queue, transport=self.transport, runner=self.runner, now=self.last_tick)
+            except ProtocolError as exc:
+                if exc.code not in {"test_target_unavailable", "invalid_test_target", "test_target_changed"}:
+                    raise
+                self.queue.state(ENABLED, False)
+                self.last_code = exc.code
             return self.last_code
 
 
@@ -241,7 +260,7 @@ DISPLAY_CODES = frozenset({"ready", "configured", "paired", "paused", "waiting",
     "contribution_not_selected", "pairing_required", "iperf3_required", "installation_server_changed",
     "account_suspended", "account_disabled", "client_revoked", "token_revoked", "consent_required", "consent_withdrawn", "contribution_consent_required",
     "legal_acceptance_required", "terms_acceptance_required", "legal_context_changed", "server_rejected", "storage_limit",
-    "local_or_network_failure", "unknown_local_operation", "invalid_local_arguments", "local_busy"})
+    "test_target_unavailable", "invalid_test_target", "test_target_changed", "local_or_network_failure", "unknown_local_operation", "invalid_local_arguments", "local_busy"})
 
 
 def run_service(state, key, stop=None, *, port=45873, maintenance=False):

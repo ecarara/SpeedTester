@@ -31,7 +31,7 @@ from speedtester_protocol.models import Pairing, PairingRequest, CredentialBundl
 def configuration(contribute=True):
     return {"origin": "https://server.example", "profile": {"version": 1, "operator": "Synthetic provider",
         "country_code": "ZZ", "region": "Test region", "city": "Test city", "access_type": "fiber", "link_type": "ethernet"},
-        "host": "target.example", "port": 5201, "interval_hours": 24, "contribute": contribute}
+        "interval_hours": 24, "contribute": contribute}
 
 
 class SignedProvider:
@@ -44,6 +44,7 @@ class SignedProvider:
         self.client_id = str(uuid4())
         self.last_bundle = None
         self.blocked = None
+        self.target_available = True
 
     def bundle(self, request_id):
         now = int(time.time())
@@ -74,6 +75,15 @@ class SignedProvider:
             check_dpop(headers["DPoP"], self.possession, method, "https://server.example" + path,
                 self.pairing.device_code, self.pairing.nonce)
             return 200, {}, self.bundle(self.pairing.request_id)
+        if path == "/api/v1/test-target":
+            if not self.target_available:
+                return 503, {}, {"code":"test_target_unavailable"}
+            from speedtester_protocol.targets import TestTarget, target_identifier
+            now=int(time.time())
+            target=TestTarget(request_id=body["request_id"],client_id=self.client_id,
+                host="target.example",port=5201,target_scope="unconfirmed",
+                target_id=target_identifier("target.example",5201,"unconfirmed"),issued_at=now,expires_at=now+300)
+            return 200, {}, sign(target.model_dump(),self.key,"test-target-v1")
         if path == "/api/v1/credentials/rotate":
             if self.blocked:
                 return 403, {}, {"code": self.blocked}
@@ -126,6 +136,35 @@ class DesktopTests(unittest.TestCase):
         self.assertNotIn(bundle.refresh_token, status)
         self.assertNotIn("device_code", status)
         restored = DesktopEngine(protected_queue(self.queue.directory), transport=self.provider, runner=self.runner)
+        self.assertTrue(restored.status()["paired"])
+        self.runner.assert_not_called()
+
+    def test_pairing_needs_no_target_and_unavailable_target_prevents_activation(self):
+        self.provider.target_available=False
+        self.pair()
+        self.assertNotIn("/api/v1/test-target",[path for _,path in self.provider.calls])
+        self.assertNotIn("host",self.queue.state("installation"))
+        self.assertEqual(self.queue.state("installation")["target_mode"],"automatic")
+        self.assertEqual(self.engine.dispatch("enable",{})["code"],"test_target_unavailable")
+        self.assertFalse(self.queue.state(ENABLED))
+        self.assertTrue(self.engine.status()["paired"])
+        self.runner.assert_not_called()
+
+    def test_upgrade_discards_old_manual_target_and_keeps_schedule_paused(self):
+        self.pair()
+        installed=self.queue.state("installation")
+        identity=installed["possession_private"]
+        installed.pop("target_mode")
+        installed.update(host="old-user-target.example",port=9999)
+        self.queue.state("installation",installed)
+        self.queue.state(ENABLED,True)
+        restored=DesktopEngine(self.queue,transport=self.provider,runner=self.runner)
+        upgraded=self.queue.state("installation")
+        self.assertEqual(upgraded["target_mode"],"automatic")
+        self.assertEqual(upgraded["possession_private"],identity)
+        self.assertNotIn("host",upgraded)
+        self.assertNotIn("port",upgraded)
+        self.assertFalse(restored.status()["measurements_enabled"])
         self.assertTrue(restored.status()["paired"])
         self.runner.assert_not_called()
 
@@ -304,3 +343,34 @@ class LocalControlTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class IdentificationTests(unittest.TestCase):
+    def test_version_matches_distribution_and_diagnostics_omit_operational_state(self):
+        import tomllib
+        from speedtester_protocol import version
+        project=tomllib.loads(Path(__file__).resolve().parents[1].joinpath('pyproject.toml').read_text())
+        self.assertEqual(version.CLIENT_VERSION,project['project']['version'])
+        with patch.object(version,'BUILD_REVISION','a'*40):
+            info=version.diagnostic_text({'client_version':version.CLIENT_VERSION,'build_revision':'a'*40,
+                'access_token':'never-copy-this','configuration':{'host':'private.internal'}})
+            self.assertIn(version.CLIENT_VERSION,info)
+            self.assertIn('a'*40,info)
+            self.assertNotIn('never-copy-this',info)
+            self.assertNotIn('private.internal',info)
+        with self.assertRaises(ValueError):version.set_build_revision('not-a-revision')
+
+    def test_linux_locale_payload_does_not_change_keyboard_ime_or_language(self):
+        from speedtester_protocol import input_methods
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            (root/'x11/locale').mkdir(parents=True);(root/'x11/modules').mkdir()
+            original={'LANG':'pt_BR.UTF-8','XMODIFIERS':'@im=fcitx','XKB_DEFAULT_LAYOUT':'br'}
+            with patch.dict(os.environ,original,clear=True),patch.object(sys,'platform','linux'),patch.object(sys,'frozen',True,create=True),patch.object(sys,'_MEIPASS',str(root),create=True):
+                input_methods.configure_input_methods()
+                self.assertEqual(os.environ['XLOCALEDIR'],str(root/'x11/locale'))
+                self.assertEqual(os.environ['XLOCALELIBDIR'],str(root/'x11/modules'))
+                for key,value in original.items():self.assertEqual(os.environ[key],value)
+                os.environ['XLOCALEDIR']='/explicit-user-config'
+                input_methods.configure_input_methods()
+                self.assertEqual(os.environ['XLOCALEDIR'],'/explicit-user-config')

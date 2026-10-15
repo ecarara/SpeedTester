@@ -19,7 +19,8 @@ TEXT = {
 "fiber":"Fibra", "coaxial":"Cabo coaxial", "radio":"Rádio", "satellite":"Satélite", "cellular":"Internet celular", "dsl":"DSL", "other":"Outra", "unknown":"Não sei",
 "ethernet":"Cabeada / Ethernet", "wifi":"Wi-Fi", "choose":"Selecione",
 "data":"O que será enviado", "data_detail":"Após aceite e vínculo: perfil da conexão, métricas separadas, sistema operacional/distribuição/versão/arquitetura e registros de autenticação e integridade. Consulte a lista completa antes de autorizar.",
-"target_notice":"Um destino sem controle confirmado produz resultados exploratórios, sem comprovar SLA. A instalação não executa teste de velocidade.",
+"target_notice":"O servidor de teste é configurado automaticamente pelo serviço central. Instalar e vincular não inicia medições.",
+"no_target":"O serviço central ainda não disponibilizou um servidor de teste autorizado. Sua instalação pode permanecer vinculada, com as medições pausadas.",
 "continue":"Instalar e continuar", "save":"Salvar configuração", "back":"Voltar", "close":"Fechar",
 "pair_title":"Vincule esta instalação", "pair_detail":"Entre pelo navegador, revise os documentos vigentes e registre seu aceite. Confira o código e a impressão digital antes de autorizar. Nenhum token precisa ser copiado.",
 "pair":"Vincular agora", "open_pair":"Abrir o portal de vínculo", "fingerprint":"Impressão digital da instalação", "expires":"O código tem prazo limitado. Se expirar, solicite outro abaixo.",
@@ -36,7 +37,7 @@ TEXT = {
 "removed":"Client desinstalado", "preserved":"Os dados locais foram preservados para reinstalação.", "purged":"Os dados locais foram removidos. Isso não confirma revogação ou exclusão no Server.",
 "reboot":"O Windows concluirá a remoção de arquivos em uso após reiniciar.",
 "busy":"Aguarde. O sistema pode solicitar autorização de administrador.", "error":"Não foi possível concluir a operação. Os dados existentes foram preservados. Verifique a conexão e use um pacote compatível; para reparar, abra o instalador baixado, fora da pasta instalada.",
-"invalid":"Revise os campos da conexão. Informe país com duas letras, tecnologia, cabeado/Wi-Fi, destino válido e intervalo de 1 a 24 horas.",
+"invalid":"Revise os campos da conexão. Informe país com duas letras, tecnologia, cabeado/Wi-Fi e intervalo de 1 a 24 horas.",
 "offline":"Serviço indisponível. Instale o Client ou use Reparar instalação.", "blocked":"O Server exige uma ação na conta ou recusou a autorização. Confira o portal; reparar não remove revogações, suspensões ou exigência de novo aceite.",
 "no_runner":"A ferramenta de medição não está disponível neste pacote. A agenda continuará pausada.",
 },
@@ -57,7 +58,8 @@ TEXT = {
 "fiber":"Fiber", "coaxial":"Coaxial cable", "radio":"Fixed wireless", "satellite":"Satellite", "cellular":"Mobile internet", "dsl":"DSL", "other":"Other", "unknown":"I don't know",
 "ethernet":"Wired / Ethernet", "wifi":"Wi-Fi", "choose":"Select",
 "data":"What will be sent", "data_detail":"After consent and pairing: connection profile, separate metrics, operating system/distribution/version/architecture, and authentication/integrity records. Read the full list before authorizing.",
-"target_notice":"An unconfirmed destination produces exploratory results and cannot prove an SLA. Installation does not run a speed test.",
+"target_notice":"The central service configures the test server automatically. Installing and pairing do not start measurements.",
+"no_target":"The central service has not provided an authorized test server yet. Your installation can remain paired with measurements paused.",
 "continue":"Install and continue", "save":"Save configuration", "back":"Back", "close":"Close",
 "pair_title":"Pair this installation", "pair_detail":"Sign in through your browser, review the current documents and record your consent. Check the code and fingerprint before authorizing. No tokens need to be copied.",
 "pair":"Pair now", "open_pair":"Open the pairing portal", "fingerprint":"Installation fingerprint", "expires":"The code expires. Request another below if needed.",
@@ -74,7 +76,7 @@ TEXT = {
 "removed":"Client uninstalled", "preserved":"Local data was preserved for reinstallation.", "purged":"Local data was removed. This does not confirm revocation or deletion on the Server.",
 "reboot":"Windows will finish removing files in use after restarting.",
 "busy":"Please wait. The operating system may request administrator authorization.", "error":"The operation could not be completed. Existing data was preserved. Check connectivity and use a compatible package; for repair, open the downloaded installer outside the installed folder.",
-"invalid":"Review the connection fields. Enter a two-letter country code, technology, wired/Wi-Fi, a valid destination and an interval from 1 to 24 hours.",
+"invalid":"Review the connection fields. Enter a two-letter country code, technology, wired/Wi-Fi, an interval from 1 to 24 hours.",
 "offline":"Service unavailable. Install the Client or choose Repair installation.", "blocked":"The Server requires an account action or rejected authorization. Check the portal; repair does not remove revocations, suspensions or a requirement for renewed consent.",
 "no_runner":"The measurement tool is unavailable in this package. The schedule will stay paused.",
 },
@@ -95,7 +97,8 @@ TEXT = {
 "fiber":"Fibra", "coaxial":"Cable coaxial", "radio":"Radio", "satellite":"Satélite", "cellular":"Internet móvil", "dsl":"DSL", "other":"Otra", "unknown":"No lo sé",
 "ethernet":"Por cable / Ethernet", "wifi":"Wi-Fi", "choose":"Seleccionar",
 "data":"Qué se enviará", "data_detail":"Tras aceptar y vincular: perfil de conexión, métricas separadas, sistema operativo/distribución/versión/arquitectura y registros de autenticación e integridad. Lee la lista completa antes de autorizar.",
-"target_notice":"Un destino sin control confirmado produce resultados exploratorios y no acredita un SLA. La instalación no ejecuta pruebas de velocidad.",
+"target_notice":"El servicio central configura automáticamente el servidor de prueba. Instalar y vincular no inicia mediciones.",
+"no_target":"El servicio central todavía no ha proporcionado un servidor de prueba autorizado. La instalación puede permanecer vinculada con las mediciones pausadas.",
 "continue":"Instalar y continuar", "save":"Guardar configuración", "back":"Volver", "close":"Cerrar",
 "pair_title":"Vincula esta instalación", "pair_detail":"Inicia sesión en el navegador, revisa los documentos vigentes y registra tu aceptación. Comprueba el código y la huella antes de autorizar. No necesitas copiar tokens.",
 "pair":"Vincular ahora", "open_pair":"Abrir el portal de vinculación", "fingerprint":"Huella de la instalación", "expires":"El código caduca. Solicita otro abajo si es necesario.",
@@ -112,9 +115,13 @@ TEXT = {
 "removed":"Client desinstalado", "preserved":"Los datos locales se conservaron para reinstalar.", "purged":"Los datos locales se eliminaron. Esto no confirma revocación ni eliminación en el Server.",
 "reboot":"Windows terminará de eliminar los archivos en uso después de reiniciar.",
 "busy":"Espera. El sistema puede solicitar autorización de administrador.", "error":"No se pudo completar la operación. Los datos existentes se conservaron. Comprueba la conexión y usa un paquete compatible; para reparar, abre el instalador descargado fuera de la carpeta instalada.",
-"invalid":"Revisa los campos. Indica un país de dos letras, tecnología, cable/Wi-Fi, destino válido e intervalo de 1 a 24 horas.",
+"invalid":"Revisa los campos. Indica un país de dos letras, tecnología, cable/Wi-Fi e intervalo de 1 a 24 horas.",
 "offline":"Servicio no disponible. Instala el Client o elige Reparar instalación.", "blocked":"El Server requiere una acción en la cuenta o rechazó la autorización. Revisa el portal; reparar no elimina revocaciones, suspensiones ni la exigencia de un nuevo consentimiento.",
 "no_runner":"La herramienta de medición no está disponible en este paquete. La agenda seguirá en pausa.",
 }}
 
 LANGUAGES = {"Português": "pt-BR", "English": "en", "Español": "es"}
+
+# Build identification is available in every supported language.
+for _code,_copy,_label in (("pt-BR","Copiar dados para uma issue","Versão"),("en","Copy issue information","Version"),("es","Copiar datos para una issue","Versión")):
+    TEXT[_code].update(copy_info=_copy,version_label=_label)

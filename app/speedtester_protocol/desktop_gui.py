@@ -4,12 +4,14 @@
 import queue
 import threading
 import time
+import unicodedata
 import tkinter as tk
 from tkinter import messagebox, ttk
 import webbrowser
 from .desktop_controller import DEFAULT_SERVER
 from .desktop_service import DesktopConfiguration
 from .desktop_text import TEXT, LANGUAGES
+from .version import CLIENT_VERSION, build_label, diagnostic_text
 
 BACKGROUND, PAPER, INK, MUTED, ACCENT = "#f2f1e9", "#ffffff", "#112b2a", "#49615c", "#c1ef55"
 
@@ -27,7 +29,7 @@ class Installer(tk.Tk):
         self.configure(bg=BACKGROUND)
         self.fields = {key: tk.StringVar(value=value) for key, value in {
             "origin": DEFAULT_SERVER, "operator": "", "country": "BR", "region": "", "city": "",
-            "host": "", "port": "5201", "hours": "1"}.items()}
+            "hours": "1"}.items()}
         self.access, self.link = tk.StringVar(), tk.StringVar()
         self.contribute, self.purge = tk.BooleanVar(value=False), tk.BooleanVar(value=False)
         self.languages = tk.StringVar(value="Português")
@@ -55,7 +57,7 @@ class Installer(tk.Tk):
     def render(self):
         for widget in self.winfo_children():
             widget.destroy()
-        self.title(self.t("title"))
+        self.title(self.t("title")+" — "+CLIENT_VERSION)
         rail = tk.Frame(self, bg=INK, width=245)
         rail.pack(side="left", fill="y")
         rail.pack_propagate(False)
@@ -67,7 +69,7 @@ class Installer(tk.Tk):
         self.label(rail, self.t("navigation"), color="#94b6a7", size=9, width=200).pack(anchor="w", padx=25)
         for number, key in (("01", "install"), ("02", "repair"), ("03", "uninstall")):
             self.label(rail, number + "   " + self.t(key), color=PAPER, size=11, width=205).pack(anchor="w", padx=25, pady=(18, 0))
-        self.label(rail, self.t("footer"), color="#94b6a7", size=10, width=200).pack(side="bottom", anchor="w", padx=25, pady=25)
+        self.label(rail, self.t("footer")+"\n"+build_label(), color="#94b6a7", size=10, width=200).pack(side="bottom", anchor="w", padx=25, pady=25)
         shell = tk.Frame(self, bg=BACKGROUND)
         shell.pack(side="left", fill="both", expand=True, padx=30, pady=24)
         header = tk.Frame(shell, bg=BACKGROUND)
@@ -93,7 +95,9 @@ class Installer(tk.Tk):
     def heading(self, title, detail):
         tk.Label(self.content, text=self.t(title), bg=BACKGROUND, fg=INK, font=("Georgia", 25),
             anchor="w", justify="left", wraplength=670).pack(fill="x", pady=(0, 14))
-        self.label(self.content, self.t(detail), color=MUTED, width=670).pack(fill="x", pady=(0, 22))
+        description=self.t(detail)
+        if self.page=="status":description+="\n"+self.t("version_label")+": "+build_label()
+        self.label(self.content, description, color=MUTED, width=670).pack(fill="x", pady=(0, 22))
 
     def show(self, page):
         self.page = page
@@ -119,6 +123,7 @@ class Installer(tk.Tk):
             self.show("remove" if operation == "uninstall" else "configure")
 
     def page_configure(self):
+        self.entries={}
         self.heading("configure", "configure_detail")
         tk.Checkbutton(self.content, text=self.t("contribute"), variable=self.contribute, bg=BACKGROUND,
             fg=INK, activebackground=BACKGROUND, font=("Helvetica", 12, "bold"), anchor="w").pack(fill="x", pady=(0, 16))
@@ -126,15 +131,17 @@ class Installer(tk.Tk):
         grid.pack(fill="x")
         for column in (0, 1):
             grid.columnconfigure(column, weight=1)
-        for index, key in enumerate(("origin", "operator", "country", "region", "city", "host", "port", "hours")):
+        for index, key in enumerate(("origin", "operator", "country", "region", "city", "hours")):
             cell = tk.Frame(grid, bg=BACKGROUND)
             cell.grid(row=index // 2, column=index % 2, sticky="ew", padx=(0, 14), pady=(0, 10))
             self.label(cell, self.t(key), size=10, color=MUTED).pack(anchor="w", pady=(0, 4))
-            ttk.Entry(cell, textvariable=self.fields[key], width=25).pack(fill="x")
+            entry=ttk.Entry(cell, textvariable=self.fields[key], width=25)
+            entry.pack(fill="x")
+            self.entries[key]=entry
         for column, (key, variable, choices) in enumerate((("access", self.access, ("fiber", "coaxial", "radio", "satellite", "cellular", "dsl", "other", "unknown")),
                 ("link", self.link, ("ethernet", "wifi")))):
             cell = tk.Frame(grid, bg=BACKGROUND)
-            cell.grid(row=4, column=column, sticky="ew", padx=(0, 14), pady=(0, 10))
+            cell.grid(row=3, column=column, sticky="ew", padx=(0, 14), pady=(0, 10))
             self.label(cell, self.t(key), size=10, color=MUTED).pack(anchor="w", pady=(0, 4))
             ttk.Combobox(cell, values=[self.t(choice) for choice in choices], textvariable=variable, state="readonly", width=25).pack(fill="x")
         self.label(self.content, self.t("target_notice"), color=MUTED, size=10).pack(fill="x", pady=(6, 10))
@@ -150,10 +157,10 @@ class Installer(tk.Tk):
         access_keys = ("fiber", "coaxial", "radio", "satellite", "cellular", "dsl", "other", "unknown")
         access = next((key for key in access_keys if self.t(key) == self.access.get()), None)
         link = next((key for key in ("ethernet", "wifi") if self.t(key) == self.link.get()), None)
-        value = lambda key: " ".join(self.fields[key].get().split())
+        value = lambda key: unicodedata.normalize("NFC", " ".join(self.fields[key].get().split()))
         return DesktopConfiguration(origin=value("origin"), profile={"version": 1, "operator": value("operator"),
             "country_code": value("country").upper(), "region": value("region"), "city": value("city"),
-            "access_type": access, "link_type": link}, host=value("host"), port=int(value("port")),
+            "access_type": access, "link_type": link},
             interval_hours=int(value("hours")), contribute=True).model_dump()
 
     def install(self):
@@ -254,7 +261,7 @@ class Installer(tk.Tk):
             for key, value in (("running", "✓"), ("paired" if self.snapshot.get("paired") else "unpaired", "●"),
                     ("enabled" if self.snapshot.get("measurements_enabled") else "paused", "●"),
                     ("pending", str(self.snapshot.get("pending", 0))), ("quarantined", str(self.snapshot.get("quarantined", 0)))):
-                row = tk.Frame(self.content, bg=PAPER, padx=18, pady=13)
+                row = tk.Frame(self.content, bg=PAPER, padx=18, pady=10)
                 row.pack(fill="x", pady=(0, 8))
                 self.label(row, self.t(key), size=12).pack(side="left")
                 self.label(row, value, bold=True).pack(side="right")
@@ -262,8 +269,17 @@ class Installer(tk.Tk):
             key = "pause" if self.snapshot.get("measurements_enabled") else "enable"
             self.button(self.content, key, lambda: self.schedule(key), primary=True).pack(anchor="w", pady=(16, 10))
         self.button(self.content, "manage", self.configure_existing).pack(anchor="w", pady=6)
-        self.button(self.content, "account", lambda: self.open_url(self.fields["origin"].get(), "/account")).pack(anchor="w", pady=6)
+        account_actions=tk.Frame(self.content,bg=BACKGROUND)
+        account_actions.pack(fill="x",pady=6)
+        self.button(account_actions,"account",lambda: self.open_url(self.fields["origin"].get(),"/account")).pack(side="left")
+        self.button(account_actions,"copy_info",self.copy_information).pack(side="left",padx=8)
         self.button(self.content, "home", lambda: self.show("welcome")).pack(anchor="w", pady=12)
+
+    def copy_information(self):
+        text=diagnostic_text(self.snapshot)+"\nTk: "+self.tk.call("package","provide","Tk")
+        text+="\nWindow system: "+self.tk.call("tk","windowingsystem")
+        self.clipboard_clear()
+        self.clipboard_append(text)
 
     def configure_existing(self):
         if self.busy:
@@ -272,7 +288,7 @@ class Installer(tk.Tk):
         if stored:
             profile = stored["profile"]
             values = {**profile, "origin": stored["origin"], "country": profile["country_code"],
-                "host": stored["host"], "port": str(stored["port"]), "hours": str(stored["interval_hours"])}
+                "hours": str(stored["interval_hours"])}
             for key, variable in self.fields.items():
                 variable.set(values[key])
             self.access.set(self.t(profile["access_type"]))
@@ -332,7 +348,7 @@ class Installer(tk.Tk):
                 completed(result)
             else:
                 code = result.get("code") if result else None
-                key = "no_runner" if code == "iperf3_required" else "blocked" if code else "error"
+                key = "no_target" if code in {"test_target_unavailable", "invalid_test_target", "test_target_changed"} else "no_runner" if code == "iperf3_required" else "blocked" if code else "error"
                 messagebox.showerror(self.t("title"), self.t(key), parent=self)
         self.after(100, self.drain)
 
@@ -348,4 +364,10 @@ class Installer(tk.Tk):
                 self.show(page)
                 self.update()
                 assert self.winfo_exists()
+                assert CLIENT_VERSION in self.title()
+                if page=="configure":assert "host" not in self.fields and "port" not in self.fields
+        import os
+        if self.tk.call("tk","windowingsystem")=="x11" and os.environ.get("SPEEDTESTER_INPUT_SMOKE")=="1":
+            from .input_methods import smoke_dead_keys
+            smoke_dead_keys(self)
         self.destroy()

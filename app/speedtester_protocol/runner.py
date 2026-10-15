@@ -7,10 +7,11 @@ from types import SimpleNamespace
 
 
 class IperfRunner:
-    def __init__(self,host,port=5201,*,binary="iperf3"):
+    def __init__(self,host,port=5201,*,binary="iperf3",target_id="participant-configured",target_scope=None,expires_at=None):
         if not isinstance(host,str) or not re.fullmatch(r"[A-Za-z0-9:.\[\]-]{1,253}",host) or host.startswith("-") or not 1<=port<=65535:
             raise ValueError("invalid iPerf3 destination")
         self.host,self.port,self.binary=host,port,binary
+        self.target_id,self.target_scope,self.expires_at=target_id,target_scope,expires_at
 
     @staticmethod
     def _capture(command,deadline,max_duration_ms):
@@ -45,9 +46,14 @@ class IperfRunner:
         if retransmits is not None and (type(retransmits) is not int or retransmits<0):raise RuntimeError("invalid_runner_metrics")
         return speed/1_000_000,size,retransmits
 
-    def __call__(self,grant):
-        if grant.runner!="iperf3" or grant.target_id!="participant-configured" or grant.max_bytes<2048 or grant.max_duration_ms<1000:
+    def check_policy(self,grant):
+        if (grant.runner!="iperf3" or grant.target_id!=self.target_id or grant.max_bytes<2048 or grant.max_duration_ms<1000
+                or (self.target_scope is not None and grant.target_scope!=self.target_scope)
+                or (self.expires_at is not None and time.time()>=self.expires_at)):
             raise ValueError("unsupported measurement policy")
+
+    def __call__(self,grant):
+        self.check_policy(grant)
         started=time.monotonic();deadline=started+grant.max_duration_ms/1000
         # --bytes counts application payload, not retransmissions, headers or control traffic.
         # Bound each direction to whole blocks and use one stream without an omit phase.

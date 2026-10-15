@@ -10,7 +10,7 @@ from .models import Observation,Manifest,METRICS
 from .client import ProtocolError
 
 
-TERMINAL_ATTEMPT_CODES=frozenset({"start_expired","grant_expired","attempt_expired","legal_context_changed"})
+TERMINAL_ATTEMPT_CODES=frozenset({"start_expired","grant_expired","attempt_expired","legal_context_changed","test_target_changed"})
 
 
 class CommunityAgent:
@@ -50,7 +50,7 @@ class CommunityAgent:
             raise ValueError("invalid runner metric")
         return round(value*multiplier)
 
-    def _authorize(self):
+    def _authorize(self,validate=None):
         request_id=self.state("grant_request")
         if request_id is None:
             request_id=str(uuid4());self.state("grant_request",request_id)
@@ -59,6 +59,8 @@ class CommunityAgent:
         # Persist verified evidence before checking the start window.
         self.state("active_attempt",grant.model_dump())
         if grant.start_before<int(time.time()):raise ProtocolError("grant_expired")
+        if validate:
+            validate(grant)
         self.client.start(grant)
         return grant
 
@@ -74,7 +76,7 @@ class CommunityAgent:
                     # A restarted process never executes a previously active grant.
                     self.client.start(grant)
                     return self._complete(grant,dict.fromkeys(METRICS),True,int(time.time()))
-                return self._measure(self._authorize(),execute)
+                return self._measure(self._authorize(getattr(execute,"__dict__",{}).get("validate_grant")),execute)
             except ProtocolError as exc:
                 if exc.code not in TERMINAL_ATTEMPT_CODES:raise
                 active=self.state("active_attempt")

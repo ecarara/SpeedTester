@@ -5,6 +5,7 @@ from collections import OrderedDict
 import hashlib
 import hmac
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from socketserver import TCPServer
 import json
 import secrets
 import threading
@@ -79,6 +80,12 @@ class ControlServer(HTTPServer):
         self.dispatch = dispatch
         super().__init__(("127.0.0.1", port), ControlHandler)
 
+    def server_bind(self):
+        # Loopback IPC does not need reverse DNS; some native environments have
+        # a slow/unavailable resolver even though localhost itself is healthy.
+        TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address
+
 
 class ControlHandler(BaseHTTPRequestHandler):
     def log_message(self, *_args):
@@ -113,8 +120,8 @@ class ControlHandler(BaseHTTPRequestHandler):
 
 
 class ControlClient:
-    def __init__(self, key, port=CONTROL_PORT):
-        self.auth, self.port = Authenticator(key), port
+    def __init__(self, key, port=CONTROL_PORT, timeout=35):
+        self.auth, self.port, self.timeout = Authenticator(key), port, timeout
         # Loopback control must never go through a configured HTTP proxy.
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
 
@@ -125,7 +132,7 @@ class ControlClient:
             raise ValueError("local_request_too_large")
         message = urllib.request.Request(f"http://127.0.0.1:{self.port}/control/v1", data=body,
             headers={"Content-Type": "application/json"}, method="POST")
-        with self.opener.open(message, timeout=35) as response:
+        with self.opener.open(message, timeout=self.timeout) as response:
             raw = response.read(MAX_MESSAGE + 1)
             if len(raw) > MAX_MESSAGE:
                 raise ProtocolError("local_response_too_large")

@@ -283,10 +283,12 @@ class LocalControlTests(unittest.TestCase):
             command = [sys.executable, "-c", "from speedtester_protocol.desktop_service import run_service;import sys;run_service(sys.argv[1],bytes.fromhex(sys.argv[2]),port=int(sys.argv[3]))", state, self.key.hex(), str(port)]
             process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
             try:
-                deadline = time.monotonic() + 10
+                deadline = time.monotonic() + 20
                 while True:
+                    if process.poll() is not None:
+                        raise AssertionError("Idle service exited: " + process.stderr.read().decode(errors="replace"))
                     try:
-                        response = ControlClient(self.key, port).call("status")
+                        response = ControlClient(self.key, port, timeout=1).call("status")
                         break
                     except OSError:
                         if time.monotonic() > deadline:raise

@@ -21,6 +21,7 @@ def reject_links(path):
 def windows_identity():
     import win32api
     import win32con
+    import ntsecuritycon as rights
     import win32security
     token = win32security.OpenProcessToken(win32api.GetCurrentProcess(), win32con.TOKEN_QUERY)
     try:
@@ -50,7 +51,7 @@ def windows_acl(path, *, principal=None, apply=False, directory=False, read_only
         acl = security.ACL()
         inherit = win32con.OBJECT_INHERIT_ACE | win32con.CONTAINER_INHERIT_ACE if directory else 0
         for sid in allowed:
-            access = win32con.FILE_GENERIC_READ | win32con.FILE_GENERIC_EXECUTE if read_only and sid == principal else win32con.FILE_ALL_ACCESS
+            access = rights.FILE_GENERIC_READ | rights.FILE_GENERIC_EXECUTE if read_only and sid == principal else rights.FILE_ALL_ACCESS
             acl.AddAccessAllowedAceEx(security.ACL_REVISION_DS, inherit, access, sid)
         security.SetNamedSecurityInfo(str(path), security.SE_FILE_OBJECT,
             security.DACL_SECURITY_INFORMATION | security.PROTECTED_DACL_SECURITY_INFORMATION,
@@ -64,7 +65,7 @@ def windows_acl(path, *, principal=None, apply=False, directory=False, read_only
         ace = acl.GetAce(index)
         if ace[0][0] != security.ACCESS_ALLOWED_ACE_TYPE or ace[-1] not in allowed:
             raise ValueError("insecure_state_acl")
-        if ace[-1] == principal and ace[1] & win32con.FILE_GENERIC_READ:
+        if ace[-1] == principal and ace[1] & rights.FILE_GENERIC_READ:
             current_allowed = True
     if not current_allowed:
         raise ValueError("state_owner_mismatch")

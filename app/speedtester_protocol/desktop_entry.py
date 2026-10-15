@@ -69,8 +69,17 @@ def main(argv=None):
         try:
             result = native_operation(read_request(args.native_helper))
             return 10 if result.get("reboot_required") else 0
-        except Exception:
-            # No exception serialization: paths, OS identities and secrets stay local.
+        except Exception as exc:
+            # Bounded diagnostic codes and source locations, never exception
+            # messages, request contents, paths, OS identities or credentials.
+            import traceback
+            frames = traceback.extract_tb(exc.__traceback__)[-8:]
+            diagnostic = {"code": "native_operation_failed", "type": type(exc).__name__,
+                "locations": [[Path(frame.filename).name, frame.name, frame.lineno] for frame in frames]}
+            try:
+                os.write(2, (json.dumps(diagnostic)+"\n").encode())
+            except OSError:
+                pass
             return 20
     from .input_methods import configure_input_methods
     configure_input_methods()

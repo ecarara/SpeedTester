@@ -71,6 +71,14 @@ class MaintenanceTests(unittest.TestCase):
         verify_database(backups[0])
         self.assertEqual(self.mock_start_service.call_count, 2)
 
+    def test_uninstall_can_purge_data_after_a_previous_preserving_uninstall(self):
+        self.install()
+        native_operation({**self.request,"operation":"uninstall"})
+        self.assertFalse(self.layout.runtime.exists())
+        self.assertTrue(self.layout.state.exists())
+        native_operation({**self.request,"operation":"uninstall","purge":True})
+        self.assertFalse(self.layout.state.exists())
+
     def test_corruption_or_missing_key_stops_repair_without_resetting_data(self):
         queue = self.install()
         queue.state("important", {"value": "preserve"})

@@ -62,7 +62,7 @@ def main():
             with os.fdopen(private_open(path,os.O_WRONLY|os.O_CREAT|os.O_TRUNC),'w') as stream:
                 json.dump({'operation':operation,'control_key':key.hex(),'purge':purge},stream)
             result=subprocess.run([str(executable),'--native-helper',str(path)],timeout=180,capture_output=True)
-            assert result.returncode==0, f'{operation}: helper exit {result.returncode}'
+            assert result.returncode==0, f'{operation}: helper exit {result.returncode}; '+result.stderr.decode(errors='replace')[-2048:]
         def check_state():
             directory=layout.state/'queue'
             verify_database(directory)
@@ -122,6 +122,7 @@ def main():
             native('uninstall');assert not layout.runtime.exists() and layout.state.exists()
             check_state();passed.append('real_uninstall_preserves_data')
             native('install');status();check_state();passed.append('real_reinstall_preserves_evidence')
+            native('uninstall');assert not layout.runtime.exists() and layout.state.exists()
             native('uninstall',True)
             assert not layout.runtime.exists() and not layout.state.exists()
             if layout.definition:assert not layout.definition.exists()

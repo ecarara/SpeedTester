@@ -460,7 +460,7 @@ class Installer(tk.Tk):
                     # A failed UI callback must not kill the event pump forever.
                     messagebox.showerror(self.t("title"), self.t("error"), parent=self)
             else:
-                code = result.get("code") if result else None
+                code = result.get("code") if isinstance(result, dict) else None
                 key = "no_target" if code in {"test_target_unavailable", "invalid_test_target", "test_target_changed"} else "no_runner" if code == "iperf3_required" else "blocked" if code else "error"
                 messagebox.showerror(self.t("title"), self.t(key), parent=self)
         try:

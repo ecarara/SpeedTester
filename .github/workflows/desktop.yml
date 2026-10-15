@@ -56,13 +56,13 @@ jobs:
         env:
           PYTHONPATH: app
           SPEEDTESTER_GUI_TESTS: '1'
-        run: xvfb-run -a python -m unittest discover -s tests -p 'test_desktop_gui.py' -v
+        run: xvfb-run -a python scripts/test_graphical_flows.py
       - name: Graphical workflow acceptance with authenticated local IPC (Windows/macOS)
         if: runner.os != 'Linux'
         env:
           PYTHONPATH: app
           SPEEDTESTER_GUI_TESTS: '1'
-        run: python -m unittest discover -s tests -p 'test_desktop_gui.py' -v
+        run: python scripts/test_graphical_flows.py
       - name: Frozen app opens an actual browser page (Linux)
         if: runner.os == 'Linux'
         run: xvfb-run -a python scripts/test_frozen_browser.py

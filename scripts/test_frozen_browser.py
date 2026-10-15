@@ -47,8 +47,16 @@ def main():
                 assert chrome,'A real Chrome/Chromium browser is required'
                 wrapper=Path(temporary)/'browser'
                 import shlex
-                wrapper.write_text('#!/bin/sh\nexec '+shlex.quote(chrome)+' --headless --no-sandbox --disable-gpu --no-first-run --no-default-browser-check --user-data-dir='+shlex.quote(temporary+'/profile')+' "$@"\n')
+                wrapper.write_text('#!/bin/sh\nexec '+shlex.quote(chrome)+' --headless --dump-dom --no-sandbox --disable-gpu --no-first-run --no-default-browser-check --user-data-dir='+shlex.quote(temporary+'/profile')+' "$@"\n')
                 wrapper.chmod(0o700)
+                applications=Path(temporary)/'data/applications'
+                applications.mkdir(parents=True)
+                (applications/'speedtester-browser-probe.desktop').write_text(
+                    '[Desktop Entry]\nType=Application\nName=SpeedTester CI real Chrome\nExec="'+str(wrapper)+'" %u\nMimeType=x-scheme-handler/http;x-scheme-handler/https;\n')
+                config=Path(temporary)/'config';config.mkdir()
+                (config/'mimeapps.list').write_text('[Default Applications]\nx-scheme-handler/http=speedtester-browser-probe.desktop\nx-scheme-handler/https=speedtester-browser-probe.desktop\n')
+                environment['XDG_DATA_HOME']=str(applications.parent)
+                environment['XDG_CONFIG_HOME']=str(config)
                 environment['BROWSER']=str(wrapper)
                 environment.pop('XDG_CURRENT_DESKTOP',None)
                 environment.pop('DESKTOP_SESSION',None)

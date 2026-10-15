@@ -99,7 +99,7 @@ def launch_daemon(layout):
 def checked(command, *, allowed=(0,)):
     result = subprocess.run(command, capture_output=True, text=True, timeout=360)
     if result.returncode not in allowed:
-        raise RuntimeError("native_service_operation_failed")
+        raise RuntimeError("native_service_operation_failed:"+str(result.returncode))
     return result.stdout
 
 
@@ -133,7 +133,14 @@ def stop_service(layout):
         loaded = subprocess.run(["/bin/launchctl", "print", "system/" + LABEL], capture_output=True, timeout=10).returncode == 0
         if loaded:
             checked(["/bin/launchctl", "bootout", "system/" + LABEL])
-            # bootout waits for termination; the definition remains for repair.
+            # launchd may retain the job briefly after bootout returns. Starting
+            # it immediately can fail with EIO, so wait for the label to unload.
+            deadline = time.monotonic() + 30
+            while subprocess.run(["/bin/launchctl", "print", "system/" + LABEL],
+                    capture_output=True, timeout=10).returncode == 0:
+                if time.monotonic() >= deadline:
+                    raise RuntimeError("native_service_stop_timeout")
+                time.sleep(.25)
     else:
         import win32service
         import win32serviceutil
@@ -180,7 +187,15 @@ def start_service(layout):
     if layout.system == "Linux":
         checked(["/usr/bin/systemctl", "start", layout.definition.name])
     elif layout.system == "Darwin":
-        checked(["/bin/launchctl", "bootstrap", "system", str(layout.definition)])
+        deadline = time.monotonic() + 15
+        while True:
+            result = subprocess.run(["/bin/launchctl", "bootstrap", "system", str(layout.definition)],
+                capture_output=True, timeout=30)
+            if result.returncode == 0:
+                break
+            if result.returncode != 5 or time.monotonic() >= deadline:
+                raise RuntimeError("native_service_bootstrap_failed:"+str(result.returncode))
+            time.sleep(.5)
     else:
         import win32serviceutil
         win32serviceutil.StartService(SERVICE)
@@ -361,7 +376,13 @@ def read_request(path):
             import win32security
             owner = win32security.GetNamedSecurityInfo(str(path), win32security.SE_FILE_OBJECT,
                 win32security.OWNER_SECURITY_INFORMATION).GetSecurityDescriptorOwner()
-            windows_acl(path, principal=owner)
+            # Administrators can own a newly created private file even when
+            # its DACL grants the individual creator access. The elevated helper
+            # must validate that creator's DACL, not treat the group as creator.
+            from .local_security import windows_identity
+            administrators = win32security.CreateWellKnownSid(win32security.WinBuiltinAdministratorsSid)
+            principal = windows_identity() if owner == administrators else owner
+            windows_acl(path, principal=principal)
         elif metadata.st_mode & 0o077:
             raise ValueError("insecure_native_request")
         raw = stream.read(4097)
@@ -388,6 +409,8 @@ def write_bootstrap(layout, key, identity):
 
 
 def remove_runtime(layout):
+    if not layout.runtime.exists():
+        return False
     try:
         shutil.rmtree(layout.runtime)
         return False

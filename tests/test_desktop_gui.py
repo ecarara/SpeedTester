@@ -174,6 +174,40 @@ class GraphicalFlows(unittest.TestCase):
         self.assertIn(self.window.t('reboot'),self.dialogs[-1][1][1])
         self.assertEqual(self.window.page,'welcome')
 
+    def test_every_access_and_link_option_survives_language_selection_events(self):
+        from tkinter import ttk
+        self.click('install');self.fill()
+        for access in ('fiber','coaxial','radio','satellite','cellular','dsl','other','unknown'):
+            for link in ('ethernet','wifi'):
+                self.window.access.set(self.window.t(access));self.window.link.set(self.window.t(link))
+                for language in ('English','Español','Português'):
+                    choices=[w for w in self.widgets() if isinstance(w,ttk.Combobox) and tuple(w.cget('values'))==('Português','English','Español')]
+                    self.assertEqual(len(choices),1)
+                    choices[0].set(language);choices[0].event_generate('<<ComboboxSelected>>');self.window.update()
+                    profile=self.window.configuration()['profile']
+                    self.assertEqual((profile['access_type'],profile['link_type']),(access,link))
+        checkboxes=[w for w in self.widgets() if isinstance(w,self.tk.Checkbutton)]
+        self.assertEqual(len(checkboxes),1)
+        checkboxes[0].invoke();self.assertIsNone(self.window.configuration())
+        checkboxes[0].invoke();self.assertIsNotNone(self.window.configuration())
+
+    def test_browser_dispatch_cannot_hold_maintenance_busy_and_success_always_keeps_copy_link(self):
+        import threading
+        waiting=threading.Event();release=threading.Event()
+        def slow(*a,**kw):
+            waiting.set();release.wait(4)
+            return {'ok':True,'opened':True}
+        self.browser.side_effect=slow
+        self.click('status');self.click('account')
+        self.assertTrue(waiting.wait(1));self.assertFalse(self.window.busy)
+        self.assertTrue(self.window.portal_window.winfo_exists())
+        self.click('copy_link',self.window.portal_window)
+        self.assertIn('/account?',self.window.clipboard_get())
+        self.click('close',self.window.portal_window)
+        self.click('home');self.click('repair')
+        self.assertEqual(self.native_calls,[('repair',False)])
+        release.set();self.settle()
+
     def test_invalid_input_browser_failure_and_callback_error_do_not_disable_later_actions(self):
         self.click('install');self.window.contribute.set(True);self.click('continue')
         self.assertEqual(self.dialogs[-1][0],'showerror');self.assertEqual(self.native_calls,[])

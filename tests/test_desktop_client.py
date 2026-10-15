@@ -31,7 +31,7 @@ from speedtester_protocol.models import Pairing, PairingRequest, CredentialBundl
 def configuration(contribute=True):
     return {"origin": "https://server.example", "profile": {"version": 1, "operator": "Synthetic provider",
         "country_code": "ZZ", "region": "Test region", "city": "Test city", "access_type": "fiber", "link_type": "ethernet"},
-        "interval_hours": 24, "contribute": contribute}
+        "timezone": "America/Sao_Paulo", "contribute": contribute}
 
 
 class SignedProvider:
@@ -203,6 +203,36 @@ class DesktopTests(unittest.TestCase):
             self.assertFalse(self.engine.dispatch("enable", {})["ok"])
             self.assertFalse(self.queue.state(ENABLED))
             self.assertFalse(self.engine.dispatch("pair", {})["ok"])
+        self.runner.assert_not_called()
+
+    def test_legacy_interval_migration_pauses_and_preserves_identity_and_schedule(self):
+        self.pair()
+        original=dict(self.queue.state("installation"))
+        original.pop("schedule")
+        original["interval"]=3600
+        # Simulate a pre-schedule installation, which has no persisted plans.
+        with self.queue.connection() as conn:
+            conn.execute("DELETE FROM state WHERE key LIKE ?",("schedule:%",))
+        self.queue.state("installation",original)
+        old_config=configuration();old_config.pop("timezone");old_config["interval_hours"]=1
+        self.queue.state(CONFIGURATION,old_config)
+        self.queue.state(ENABLED,True)
+        self.queue.state("retained-evidence",{"value":"unchanged"})
+        self.provider.calls.clear()
+        migrated=DesktopEngine(self.queue,transport=self.provider,runner=self.runner)
+        installed=self.queue.state("installation")
+        self.assertEqual({k:v for k,v in installed.items() if k!="schedule"},{k:v for k,v in original.items() if k!="interval"})
+        self.assertFalse(migrated.status()["measurements_enabled"])
+        self.assertTrue(migrated.status()["paired"])
+        self.assertNotIn("interval_hours",migrated.status()["configuration"])
+        self.assertEqual(self.queue.state("retained-evidence"),{"value":"unchanged"})
+        from speedtester_protocol.schedule import DailySchedule
+        before=DailySchedule(self.queue,installed["schedule"]).refresh(int(time.time()))
+        reopened=DesktopEngine(protected_queue(self.queue.directory),transport=self.provider,runner=self.runner)
+        after=DailySchedule(reopened.queue,installed["schedule"]).refresh(int(time.time()))
+        self.assertEqual(before,after)
+        self.assertEqual([len(day["slots"]) for day in after],[8,8])
+        self.assertEqual(self.provider.calls,[])
         self.runner.assert_not_called()
 
     def test_changed_server_identity_is_refused_and_profile_versions_are_stable(self):

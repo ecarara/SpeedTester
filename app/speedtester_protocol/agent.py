@@ -64,7 +64,7 @@ class CommunityAgent:
         self.client.start(grant)
         return grant
 
-    def run_once(self,execute):
+    def run_once(self,execute,*,allow_new=True):
         from .models import Grant
         self.sync()
         # At most one fresh retry after terminal recovery, never an unbounded loop.
@@ -76,6 +76,8 @@ class CommunityAgent:
                     # A restarted process never executes a previously active grant.
                     self.client.start(grant)
                     return self._complete(grant,dict.fromkeys(METRICS),True,int(time.time()))
+                if not allow_new:
+                    return None
                 return self._measure(self._authorize(getattr(execute,"__dict__",{}).get("validate_grant")),execute)
             except ProtocolError as exc:
                 if exc.code not in TERMINAL_ATTEMPT_CODES:raise

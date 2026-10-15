@@ -17,6 +17,8 @@ from .installation import protected_queue
 from .local_control import ControlServer, serve_in_thread
 from .models import Profile, StrictModel
 from .runner import IperfRunner
+from .schedule import DailySchedule, local_timezone, migrate_installation, policy
+from zoneinfo import ZoneInfo
 
 CONFIGURATION = "desktop:configuration"
 ENABLED = "desktop:measurements_enabled"
@@ -30,7 +32,14 @@ class DesktopConfiguration(StrictModel):
     # Older GUIs may send these fields; they are discarded and never used.
     host: str | None = Field(default=None, max_length=253, exclude=True)
     port: int = Field(default=5201, ge=1, le=65535, exclude=True)
-    interval_hours: int = Field(default=1, ge=1, le=24)
+    interval_hours: int | None = Field(default=None, ge=1, le=24, exclude=True)
+    timezone: str = Field(default_factory=local_timezone, max_length=100)
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value):
+        ZoneInfo(value)
+        return value
     contribute: bool = False
 
     @field_validator("origin")
@@ -63,6 +72,14 @@ class DesktopEngine:
             installed.pop("port",None)
             self.queue.state("installation",installed)
             self.queue.state(ENABLED,False)
+        if installed:
+            installed, migrated = migrate_installation(queue, installed)
+            if migrated:
+                self.queue.state(ENABLED, False)
+            if self.queue.state(CONFIGURATION):
+                configuration = self.configuration().model_copy(update={"timezone":installed["schedule"]["timezone"]})
+                self.queue.state(CONFIGURATION, configuration.model_dump())
+            DailySchedule(queue, installed["schedule"]).refresh(int(self.clock()))
         self.last_snapshot = self.status()
 
     def configuration(self):
@@ -114,7 +131,10 @@ class DesktopEngine:
         if installed:
             changed = {key: value for key, value in installed["profile"].items() if key != "version"} != configuration.profile.model_dump(exclude={"version"})
             profile = configuration.profile.model_copy(update={"version": installed["profile"]["version"] + 1}) if changed else Profile.model_validate(installed["profile"])
-            installed.update(profile=profile.model_dump(), target_mode="automatic", interval=configuration.interval_hours * 3600)
+            installed.update(profile=profile.model_dump(), target_mode="automatic")
+            installed.pop("interval", None)
+            configuration=configuration.model_copy(update={"timezone":installed["schedule"]["timezone"]})
+            self.queue.state(CONFIGURATION, configuration.model_dump())
             installed.pop("host", None)
             installed.pop("port", None)
             self.queue.state("installation", installed)
@@ -135,7 +155,7 @@ class DesktopEngine:
                 "possession_private": Ed25519PrivateKey.generate().private_bytes_raw().hex(),
                 "measurement_private": Ed25519PrivateKey.generate().private_bytes_raw().hex(),
                 "profile": configuration.profile.model_dump(), "target_mode": "automatic",
-                "interval": configuration.interval_hours * 3600}
+                "schedule": policy(configuration.timezone)}
             self.queue.state("installation", installed)
         credentials, measurement = self.credentials()
         if credentials.bundle:
@@ -192,7 +212,7 @@ class DesktopEngine:
                     if not self.runner and not shutil.which("iperf3"):
                         raise ProtocolError("iperf3_required")
                     self.maintenance = False
-                    self.queue.state("next_due", int(self.clock()) + configuration.interval_hours * 3600)
+                    DailySchedule(self.queue,self.installation()["schedule"]).refresh(int(self.clock()),activate=True)
                     self.queue.state(ENABLED, True)
                 else:
                     raise ProtocolError("unknown_local_operation")
@@ -225,7 +245,7 @@ class DesktopEngine:
                         return exc.code
                     raise
                 self.pairing = None
-                self.queue.state("next_due", self.last_tick + configuration.interval_hours * 3600)
+                DailySchedule(self.queue,self.installation()["schedule"]).refresh(self.last_tick,activate=True)
                 sync_environment(credentials, measurement)
                 self.last_code = "paired"
                 return self.last_code
@@ -246,7 +266,7 @@ class DesktopEngine:
                 self.last_code = "storage_limit"
                 return self.last_code
             try:
-                self.last_code = cycle(self.queue, transport=self.transport, runner=self.runner, now=self.last_tick)
+                self.last_code = cycle(self.queue, transport=self.transport, runner=self.runner, now=self.last_tick, clock=self.clock)
             except ProtocolError as exc:
                 if exc.code not in {"test_target_unavailable", "invalid_test_target", "test_target_changed"}:
                     raise
@@ -256,7 +276,7 @@ class DesktopEngine:
 
 
 DISPLAY_CODES = frozenset({"ready", "configured", "paired", "paused", "waiting", "synchronized",
-    "attempt_completed", "authorization_pending", "pairing_expired", "pairing_cancelled", "maintenance",
+    "attempt_completed", "attempt_recovered", "schedule_slot_expired", "authorization_pending", "pairing_expired", "pairing_cancelled", "maintenance",
     "contribution_not_selected", "pairing_required", "iperf3_required", "installation_server_changed",
     "account_suspended", "account_disabled", "client_revoked", "token_revoked", "consent_required", "consent_withdrawn", "contribution_consent_required",
     "legal_acceptance_required", "terms_acceptance_required", "legal_context_changed", "server_rejected", "storage_limit",

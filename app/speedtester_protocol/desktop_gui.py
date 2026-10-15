@@ -13,6 +13,7 @@ from .desktop_service import DesktopConfiguration
 from .desktop_text import TEXT, LANGUAGES
 from .version import CLIENT_VERSION, build_label, diagnostic_text
 from .input_methods import bind_dead_keys
+from .schedule import local_timezone
 
 BACKGROUND, PAPER, INK, MUTED, ACCENT = "#f2f1e9", "#ffffff", "#112b2a", "#49615c", "#c1ef55"
 
@@ -28,9 +29,9 @@ class Installer(tk.Tk):
         self.geometry("1040x820")
         self.minsize(960, 780)
         self.configure(bg=BACKGROUND)
+        self.schedule_timezone = local_timezone()
         self.fields = {key: tk.StringVar(value=value) for key, value in {
-            "origin": DEFAULT_SERVER, "operator": "", "country": "BR", "region": "", "city": "",
-            "hours": "1"}.items()}
+            "origin": DEFAULT_SERVER, "operator": "", "country": "BR", "region": "", "city": ""}.items()}
         self.access, self.link = tk.StringVar(), tk.StringVar()
         self.contribute, self.purge = tk.BooleanVar(value=False), tk.BooleanVar(value=False)
         self.languages = tk.StringVar(value="Português")
@@ -132,9 +133,9 @@ class Installer(tk.Tk):
         grid.pack(fill="x")
         for column in (0, 1):
             grid.columnconfigure(column, weight=1)
-        for index, key in enumerate(("origin", "operator", "country", "region", "city", "hours")):
+        for index, key in enumerate(("origin", "operator", "country", "region", "city")):
             cell = tk.Frame(grid, bg=BACKGROUND)
-            cell.grid(row=index // 2, column=index % 2, sticky="ew", padx=(0, 14), pady=(0, 10))
+            cell.grid(row=index // 2, column=index % 2, columnspan=2 if key=="city" else 1, sticky="ew", padx=(0, 14), pady=(0, 10))
             self.label(cell, self.t(key), size=10, color=MUTED).pack(anchor="w", pady=(0, 4))
             entry=ttk.Entry(cell, textvariable=self.fields[key], width=25)
             entry.pack(fill="x")
@@ -146,7 +147,7 @@ class Installer(tk.Tk):
             cell.grid(row=3, column=column, sticky="ew", padx=(0, 14), pady=(0, 10))
             self.label(cell, self.t(key), size=10, color=MUTED).pack(anchor="w", pady=(0, 4))
             ttk.Combobox(cell, values=[self.t(choice) for choice in choices], textvariable=variable, state="readonly", width=25).pack(fill="x")
-        self.label(self.content, self.t("target_notice"), color=MUTED, size=10).pack(fill="x", pady=(6, 10))
+        self.label(self.content, self.t("schedule_notice").format(timezone=self.schedule_timezone)+"\n"+self.t("target_notice"), color=MUTED, size=10).pack(fill="x", pady=(6, 10))
         self.button(self.content, "data", lambda: self.open_url(self.fields["origin"].get(), "/data")).pack(anchor="w")
         actions = tk.Frame(self.content, bg=BACKGROUND)
         actions.pack(fill="x", pady=(18, 0))
@@ -163,7 +164,7 @@ class Installer(tk.Tk):
         return DesktopConfiguration(origin=value("origin"), profile={"version": 1, "operator": value("operator"),
             "country_code": value("country").upper(), "region": value("region"), "city": value("city"),
             "access_type": access, "link_type": link},
-            interval_hours=int(value("hours")), contribute=True).model_dump()
+            timezone=self.schedule_timezone, contribute=True).model_dump()
 
     def install(self):
         try:
@@ -259,6 +260,8 @@ class Installer(tk.Tk):
 
     def page_status(self):
         self.heading("status", "status_detail")
+        zone=(self.snapshot.get("configuration") or {}).get("timezone",self.schedule_timezone)
+        self.label(self.content,self.t("schedule_short").format(timezone=zone),color=MUTED,size=10).pack(fill="x",pady=(0,8))
         if self.snapshot:
             for key, value in (("running", "✓"), ("paired" if self.snapshot.get("paired") else "unpaired", "●"),
                     ("enabled" if self.snapshot.get("measurements_enabled") else "paused", "●"),
@@ -289,8 +292,8 @@ class Installer(tk.Tk):
         stored = self.snapshot.get("configuration")
         if stored:
             profile = stored["profile"]
-            values = {**profile, "origin": stored["origin"], "country": profile["country_code"],
-                "hours": str(stored["interval_hours"])}
+            values = {**profile, "origin": stored["origin"], "country": profile["country_code"]}
+            self.schedule_timezone = stored.get("timezone", self.schedule_timezone)
             for key, variable in self.fields.items():
                 variable.set(values[key])
             self.access.set(self.t(profile["access_type"]))
@@ -367,7 +370,19 @@ class Installer(tk.Tk):
                 self.update()
                 assert self.winfo_exists()
                 assert CLIENT_VERSION in self.title()
-                if page=="configure":assert "host" not in self.fields and "port" not in self.fields
+                if page=="configure":
+                    assert not {"host", "port", "hours"}.intersection(self.fields)
+                    assert self.t("schedule_short").format(timezone=self.schedule_timezone)
+        from zoneinfo import ZoneInfo, reset_tzpath, TZPATH
+        paths=TZPATH
+        try:
+            reset_tzpath(())
+            ZoneInfo.clear_cache()
+            for zone in ("America/Sao_Paulo", "Europe/Madrid", self.schedule_timezone):
+                ZoneInfo(zone)
+        finally:
+            reset_tzpath(paths)
+            ZoneInfo.clear_cache()
         import os
         if self.tk.call("tk","windowingsystem")=="x11" and os.environ.get("SPEEDTESTER_INPUT_SMOKE") in {"1", "fallback"}:
             from .input_methods import smoke_dead_keys

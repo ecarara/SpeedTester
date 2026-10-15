@@ -15,6 +15,7 @@ from .agent import CommunityAgent
 from .runner import IperfRunner
 from .environment import sync_environment
 from .local_security import process_lock
+from .schedule import DailySchedule, migrate_installation, policy
 
 DEFAULT_STATE=Path.home()/".local/share/speedtester-client"
 
@@ -62,12 +63,10 @@ def installation_config(queue,origin,server,input_fn):
     if config:
         if config["origin"]!=origin or config["server_key"]!=b64(public_bytes(server)):
             raise ProtocolError("installation_server_changed")
-        return config
+        return migrate_installation(queue,config)[0]
     profile=prompt_profile(input_fn)
-    hours=int(input_fn("Intervalo em horas [1, entre 1 e 24]: ").strip() or "1")
-    if not 1<=hours<=24:raise ValueError("invalid_schedule")
     config={"origin":origin,"server_key":b64(public_bytes(server)),"possession_private":Ed25519PrivateKey.generate().private_bytes_raw().hex(),
-        "measurement_private":Ed25519PrivateKey.generate().private_bytes_raw().hex(),"profile":profile.model_dump(),"target_mode":"automatic","interval":hours*3600}
+        "measurement_private":Ed25519PrivateKey.generate().private_bytes_raw().hex(),"profile":profile.model_dump(),"target_mode":"automatic","schedule":policy()}
     queue.state("installation",config)
     return config
 
@@ -100,32 +99,52 @@ def setup(queue,origin,*,transport=None,input_fn=input,sleep=time.sleep,repair=F
         print("Impressão digital: "+digest(credentials.identity))
         print("Revise os termos e confirme apenas esta instalação. Aguardando aprovação…",flush=True)
         await_pairing(pairing_client,pairing,sleep)
-        queue.state("next_due",int(time.time())+config["interval"])
+        DailySchedule(queue,config["schedule"]).refresh(int(time.time()),activate=True)
         print("Pareamento concluído. Tokens guardados na fila cifrada; nenhum token precisa ser copiado.")
     sync_environment(credentials,measurement)
     return config
 
 
-def cycle(queue,*,transport=None,runner=None,now=None):
+def cycle(queue,*,transport=None,runner=None,now=None,clock=time.time):
     config=queue.state("installation")
     if not config:raise ProtocolError("setup_required")
+    config,_=migrate_installation(queue,config)
+    current=int(clock()) if now is None else int(now)
+    schedule=DailySchedule(queue,config["schedule"])
+    schedule.refresh(current)
     credentials,measurement=context(queue,config,transport)
     client=credentials.client()
     sync_environment(credentials,measurement)
     agent=CommunityAgent(client,queue,measurement,Profile.model_validate(config["profile"]),"iperf3")
     sent=agent.sync()
-    current=int(time.time()) if now is None else now
-    if agent.state("active_attempt") or current>=(queue.state("next_due") or 0):
-        # Reserve the next slot before running so restart cannot duplicate a due test.
-        queue.state("next_due",current+config["interval"])
+    if agent.state("active_attempt"):
+        # Recovery may preserve error evidence, but cannot authorize another test.
+        agent.run_once(None,allow_new=False)
+        return "attempt_recovered"
+    slot=schedule.claim(current,agent.destination+":grant_request")
+    if slot is None:
+        return "synchronized" if sent else "waiting"
+    attempt_id=None
+    try:
         if config.get("target_mode")=="automatic":
             from .targets import automatic_runner
             execute=automatic_runner(client,credentials.bundle.client_id,runner)
         else:
             execute=runner or IperfRunner(config["host"],config["port"])
-        agent.run_once(execute)
+        def validate(grant):
+            moment=int(clock())
+            if not slot["at"]<=moment<=slot["deadline"] or moment+(grant.max_duration_ms+999)//1000+60>slot["end_at"]:
+                raise ProtocolError("schedule_slot_expired")
+            guard=getattr(execute,"__dict__",{}).get("validate_grant")
+            if guard:guard(grant)
+        def checked(grant):
+            validate(grant)
+            return execute(grant)
+        checked.validate_grant=validate
+        attempt_id=agent.run_once(checked)
         return "attempt_completed"
-    return "synchronized" if sent else "waiting"
+    finally:
+        schedule.finish(slot,attempt_id=attempt_id)
 
 
 def arguments(argv):

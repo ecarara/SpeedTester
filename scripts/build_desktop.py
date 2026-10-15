@@ -67,7 +67,7 @@ def build(smoke=True):
     from speedtester_protocol.version import CLIENT_VERSION
     launcher.write_text("from speedtester_protocol.version import set_build_revision\nset_build_revision("+repr(revision)+")\nfrom speedtester_protocol.desktop_entry import main\nraise SystemExit(main())\n")
     command = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir",
-        "--name", "SpeedTesterClient", "--paths", str(ROOT / "app"),
+        "--collect-all", "tzdata", "--name", "SpeedTesterClient", "--paths", str(ROOT / "app"),
         "--distpath", str(output / "raw"), "--workpath", str(work / "cache"), "--specpath", str(work)]
     if platform.system()=="Linux":
         data=Path("/usr/share/X11/locale")

@@ -15,7 +15,7 @@ TEXT = {
 "contribute":"Quero vincular este Client e contribuir com o Server",
 "origin":"Endereço HTTPS do Server", "operator":"Operadora", "country":"País (código, ex.: BR)",
 "region":"Estado / região", "city":"Cidade", "access":"Tecnologia de acesso", "link":"Conexão desta máquina",
-"host":"Destino iPerf3", "port":"Porta", "hours":"Intervalo em horas (1–24)",
+"host":"Destino iPerf3", "port":"Porta",
 "fiber":"Fibra", "coaxial":"Cabo coaxial", "radio":"Rádio", "satellite":"Satélite", "cellular":"Internet celular", "dsl":"DSL", "other":"Outra", "unknown":"Não sei",
 "ethernet":"Cabeada / Ethernet", "wifi":"Wi-Fi", "choose":"Selecione",
 "data":"O que será enviado", "data_detail":"Após aceite e vínculo: perfil da conexão, métricas separadas, sistema operacional/distribuição/versão/arquitetura e registros de autenticação e integridade. Consulte a lista completa antes de autorizar.",
@@ -37,7 +37,7 @@ TEXT = {
 "removed":"Client desinstalado", "preserved":"Os dados locais foram preservados para reinstalação.", "purged":"Os dados locais foram removidos. Isso não confirma revogação ou exclusão no Server.",
 "reboot":"O Windows concluirá a remoção de arquivos em uso após reiniciar.",
 "busy":"Aguarde. O sistema pode solicitar autorização de administrador.", "error":"Não foi possível concluir a operação. Os dados existentes foram preservados. Verifique a conexão e use um pacote compatível; para reparar, abra o instalador baixado, fora da pasta instalada.",
-"invalid":"Revise os campos da conexão. Informe país com duas letras, tecnologia, cabeado/Wi-Fi e intervalo de 1 a 24 horas.",
+"invalid":"Revise os campos da conexão. Informe país com duas letras, tecnologia, cabeado/Wi-Fi.",
 "offline":"Serviço indisponível. Instale o Client ou use Reparar instalação.", "blocked":"O Server exige uma ação na conta ou recusou a autorização. Confira o portal; reparar não remove revogações, suspensões ou exigência de novo aceite.",
 "no_runner":"A ferramenta de medição não está disponível neste pacote. A agenda continuará pausada.",
 },
@@ -54,7 +54,7 @@ TEXT = {
 "contribute":"I want to pair this Client and contribute to the Server",
 "origin":"Server HTTPS address", "operator":"Provider", "country":"Country code (e.g. BR)",
 "region":"State / region", "city":"City", "access":"Access technology", "link":"This machine's connection",
-"host":"iPerf3 destination", "port":"Port", "hours":"Interval in hours (1–24)",
+"host":"iPerf3 destination", "port":"Port",
 "fiber":"Fiber", "coaxial":"Coaxial cable", "radio":"Fixed wireless", "satellite":"Satellite", "cellular":"Mobile internet", "dsl":"DSL", "other":"Other", "unknown":"I don't know",
 "ethernet":"Wired / Ethernet", "wifi":"Wi-Fi", "choose":"Select",
 "data":"What will be sent", "data_detail":"After consent and pairing: connection profile, separate metrics, operating system/distribution/version/architecture, and authentication/integrity records. Read the full list before authorizing.",
@@ -76,7 +76,7 @@ TEXT = {
 "removed":"Client uninstalled", "preserved":"Local data was preserved for reinstallation.", "purged":"Local data was removed. This does not confirm revocation or deletion on the Server.",
 "reboot":"Windows will finish removing files in use after restarting.",
 "busy":"Please wait. The operating system may request administrator authorization.", "error":"The operation could not be completed. Existing data was preserved. Check connectivity and use a compatible package; for repair, open the downloaded installer outside the installed folder.",
-"invalid":"Review the connection fields. Enter a two-letter country code, technology, wired/Wi-Fi, an interval from 1 to 24 hours.",
+"invalid":"Review the connection fields. Enter a two-letter country code, technology, wired/Wi-Fi.",
 "offline":"Service unavailable. Install the Client or choose Repair installation.", "blocked":"The Server requires an account action or rejected authorization. Check the portal; repair does not remove revocations, suspensions or a requirement for renewed consent.",
 "no_runner":"The measurement tool is unavailable in this package. The schedule will stay paused.",
 },
@@ -93,7 +93,7 @@ TEXT = {
 "contribute":"Quiero vincular este Client y contribuir al Server",
 "origin":"Dirección HTTPS del Server", "operator":"Operadora", "country":"Código del país (p. ej., BR)",
 "region":"Estado / región", "city":"Ciudad", "access":"Tecnología de acceso", "link":"Conexión de este equipo",
-"host":"Destino iPerf3", "port":"Puerto", "hours":"Intervalo en horas (1–24)",
+"host":"Destino iPerf3", "port":"Puerto",
 "fiber":"Fibra", "coaxial":"Cable coaxial", "radio":"Radio", "satellite":"Satélite", "cellular":"Internet móvil", "dsl":"DSL", "other":"Otra", "unknown":"No lo sé",
 "ethernet":"Por cable / Ethernet", "wifi":"Wi-Fi", "choose":"Seleccionar",
 "data":"Qué se enviará", "data_detail":"Tras aceptar y vincular: perfil de conexión, métricas separadas, sistema operativo/distribución/versión/arquitectura y registros de autenticación e integridad. Lee la lista completa antes de autorizar.",
@@ -115,7 +115,7 @@ TEXT = {
 "removed":"Client desinstalado", "preserved":"Los datos locales se conservaron para reinstalar.", "purged":"Los datos locales se eliminaron. Esto no confirma revocación ni eliminación en el Server.",
 "reboot":"Windows terminará de eliminar los archivos en uso después de reiniciar.",
 "busy":"Espera. El sistema puede solicitar autorización de administrador.", "error":"No se pudo completar la operación. Los datos existentes se conservaron. Comprueba la conexión y usa un paquete compatible; para reparar, abre el instalador descargado fuera de la carpeta instalada.",
-"invalid":"Revisa los campos. Indica un país de dos letras, tecnología, cable/Wi-Fi e intervalo de 1 a 24 horas.",
+"invalid":"Revisa los campos. Indica un país de dos letras, tecnología, cable/Wi-Fi.",
 "offline":"Servicio no disponible. Instala el Client o elige Reparar instalación.", "blocked":"El Server requiere una acción en la cuenta o rechazó la autorización. Revisa el portal; reparar no elimina revocaciones, suspensiones ni la exigencia de un nuevo consentimiento.",
 "no_runner":"La herramienta de medición no está disponible en este paquete. La agenda seguirá en pausa.",
 }}
@@ -125,3 +125,9 @@ LANGUAGES = {"Português": "pt-BR", "English": "en", "Español": "es"}
 # Build identification is available in every supported language.
 for _code,_copy,_label in (("pt-BR","Copiar dados para uma issue","Versão"),("en","Copy issue information","Version"),("es","Copiar datos para una issue","Versión")):
     TEXT[_code].update(copy_info=_copy,version_label=_label)
+
+for _code,_short,_periods in (
+    ("pt-BR","Agenda automática: 2 testes por período — 8 por dia. Fuso: {timezone}.","Madrugada 00–06h · Manhã 06–12h · Tarde 12–18h · Noite 18–24h."),
+    ("en","Automatic schedule: 2 tests per period — 8 per day. Time zone: {timezone}.","Overnight 00–06 · Morning 06–12 · Afternoon 12–18 · Evening 18–24."),
+    ("es","Agenda automática: 2 pruebas por período — 8 al día. Zona horaria: {timezone}.","Madrugada 00–06 · Mañana 06–12 · Tarde 12–18 · Noche 18–24.")):
+    TEXT[_code].update(schedule_short=_short,schedule_notice=_short+"\n"+_periods)

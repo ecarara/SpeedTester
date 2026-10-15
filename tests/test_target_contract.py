@@ -69,15 +69,17 @@ class TargetContractTests(unittest.TestCase):
             process.assert_not_called()
         execute.assert_not_called()
 
-    def test_terminal_setup_prompts_for_profile_and_schedule_only(self):
+    def test_terminal_setup_prompts_for_profile_without_manual_schedule(self):
         queue=Mock();queue.state.side_effect=[None,None]
-        answers=iter(['Synthetic provider','ZZ','Test region','Test city','1','1','24'])
+        answers=iter(['Synthetic provider','ZZ','Test region','Test city','1','1'])
         prompts=[]
         def input_fn(prompt):prompts.append(prompt);return next(answers)
         config=installation_config(queue,'https://server.example',self.server.public_key(),input_fn)
         self.assertEqual(config['target_mode'],'automatic')
         self.assertNotIn('host',config);self.assertNotIn('port',config)
-        self.assertEqual(len(prompts),7)
+        self.assertEqual(len(prompts),6)
+        self.assertEqual(config["schedule"]["format"],"quadrants-v1")
+        self.assertNotIn("interval",config)
 
     def test_published_automatic_target_schemas_match_consumer(self):
         root=Path(__file__).resolve().parents[1]/'contracts/server-v1'

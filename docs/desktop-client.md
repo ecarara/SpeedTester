@@ -11,10 +11,20 @@ Esta é uma **prévia experimental**, ainda sem certificação para instalação
 - Comunicação somente por loopback, mensagens autenticadas por HMAC, proteção contra repetição e respostas vinculadas à solicitação. A interface não recebe access/refresh tokens ou chaves privadas do protocolo.
 - Contribuição opcional, inicialmente desmarcada. Sem configuração/vínculo não há discovery, pareamento, transmissão de sistema operacional ou solicitação de medição. O serviço comunitário fica em espera; o standalone existente continua independente.
 - Pareamento pelo SDK real: código e impressão digital no assistente, login/aceite no portal, aprovação humana e tokens na fila cifrada. O assistente não aceita termos pelo participante.
-- Agenda inicialmente pausada; ativação explícita valida credenciais centrais e reserva o primeiro slot para um intervalo futuro. Instalar, parear ou reparar não executa teste de velocidade.
+- Agenda inicialmente pausada; ativação explícita valida credenciais centrais e libera somente horários futuros. Instalar, parear ou reparar não executa teste de velocidade.
 - Reparo: parar o serviço, validar SQLite e autenticar o conteúdo cifrado, criar backup consistente, preservar identidade/histórico/fila e substituir arquivos do pacote. A agenda fica pausada; corrupção ou chave perdida interrompem o processo sem zerar dados.
 - Desinstalação: parar/remover o serviço, preservar dados por padrão e oferecer exclusão local separada. A revogação central continua explícita no portal; exclusão local não é apresentada como revogação ou exclusão no Server.
 - SQLite embutido, leitura da fila em lotes de até 256 registros e pausa de novas medições ao atingir 128 MiB de banco ou 10 mil pendências. A sincronização pode drenar pendências sem novos grants. Esses limites ainda não abrangem todo o espaço de backups/runtime, nem substituem a política futura de retenção.
+
+## Agenda de medições
+
+O Client programa **dois testes por período, oito por dia completo**, no fuso horário identificado na instalação: madrugada (00h–06h), manhã (06h–12h), tarde (12h–18h) e noite (18h–24h). O fuso aparece no assistente; não existe intervalo em horas a configurar. O serviço funciona com a interface fechada, enquanto o computador estiver ligado e com rede.
+
+Os horários são sorteados, separados por pelo menos uma hora dentro de cada período, e persistidos no SQLite cifrado antes da execução. Reiniciar, reparar ou reabrir o assistente preserva o plano e a identidade. A migração da antiga agenda por intervalo pausa as medições e exige ativação explícita; não ativa testes durante a atualização.
+
+Instalar, parear e reparar não iniciam testes. A ativação libera somente horários futuros, com pelo menos um minuto de antecedência. Cada horário tem uma tolerância de até dez minutos, limitada ao fim do próprio período e ao orçamento de duração do teste. Horários perdidos durante suspensão, desligamento, pausa ou indisponibilidade não são compensados. Uma tentativa interrompida não executa novamente o runner. Portanto, oito testes programados não garantem oito resultados concluídos.
+
+Cada tentativa depende de token, consentimento e documentos vigentes, destino central autorizado e limites do Server. Testes usam banda e podem consumir franquia; falhas e métricas não suportadas mantêm seus estados, sem valores inventados. O cache de próximo horário não pode forçar um teste. Os testes automatizados verificam dias completos, horário de verão, reinícios, pausa e recuperação com relógio e runner sintéticos, sem medições externas.
 
 ## Desenvolvimento e testes sem medições
 

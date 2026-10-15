@@ -16,3 +16,7 @@ cryptography==50.0.2
 PyJWT==2.15.1
 rfc8785==0.1.4
 PyNaCl==1.6.2
+
+# Portable local-time detection and IANA fallback for native Clients.
+tzlocal==5.4.4
+tzdata==2026.5

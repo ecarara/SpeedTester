@@ -187,3 +187,26 @@ class PairingApproval(StrictModel):
         if type(value) is not bool or not value:
             raise ValueError("explicit confirmation required")
         return value
+
+
+class SystemEnvironment(StrictModel):
+    system: Literal["linux", "windows", "macos", "freebsd", "other"]
+    distribution: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[a-z0-9._-]+$")
+    version: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9._+-]+$")
+    architecture: Literal["amd64", "arm64", "x86", "arm", "other"]
+
+
+class EnvironmentReport(StrictModel):
+    protocol_version: Literal["1"] = "1"
+    environment_id: Identifier
+    client_id: Identifier
+    reported_at: int = Field(ge=0)
+    environment: SystemEnvironment
+
+
+class EnvironmentReceipt(StrictModel):
+    protocol_version: Literal["1"] = "1"
+    environment_id: Identifier
+    client_id: Identifier
+    digest: Digest
+    accepted_at: int = Field(ge=0)

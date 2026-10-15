@@ -79,7 +79,7 @@ class ContractTests(unittest.TestCase):
     def test_published_schemas_match_consumer_models(self):
         from speedtester_protocol import models
         root=Path(__file__).resolve().parents[1]/"contracts/server-v1"
-        for name in ("Profile","GrantRequest","Grant","Observation","Manifest","Envelope","Receipt","Enrollment","Acceptance","PairingRequest","Pairing","CredentialBundle","RotationRequest","PairingApproval"):
+        for name in ("Profile","GrantRequest","Grant","Observation","Manifest","Envelope","Receipt","Enrollment","Acceptance","PairingRequest","Pairing","CredentialBundle","RotationRequest","PairingApproval","SystemEnvironment","EnvironmentReport","EnvironmentReceipt"):
             self.assertEqual(json.loads((root/(name+".schema.json")).read_text()),getattr(models,name).model_json_schema())
 
     def test_https_origin_and_no_redirect_contract(self):

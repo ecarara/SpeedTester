@@ -6,7 +6,7 @@ import json
 import urllib.request
 import urllib.error
 from .crypto import make_dpop, digest, verify
-from .models import Grant, Receipt, Manifest
+from .models import Grant, Receipt, Manifest, EnvironmentReport, EnvironmentReceipt
 
 
 class ProtocolError(RuntimeError):
@@ -115,3 +115,14 @@ class ServerClient:
         payload = envelope["payload"]
         body = self.request("POST", "/api/v1/attempts/" + payload["attempt_id"] + "/finalize", envelope)
         return self.receipt(body, "manifest", payload["attempt_id"], digest(payload))
+
+    def environment(self, envelope):
+        payload = EnvironmentReport.model_validate(envelope["payload"])
+        body = self.request("POST", "/api/v1/client-environment", envelope)
+        try:
+            receipt = EnvironmentReceipt.model_validate(verify(body, self.server_key, "environment-receipt-v1"))
+            if (receipt.environment_id, receipt.client_id, receipt.digest) != (payload.environment_id, payload.client_id, digest(payload.model_dump())):
+                raise ValueError("mismatched environment receipt")
+            return body
+        except Exception as exc:
+            raise ProtocolError("invalid_environment_receipt") from exc

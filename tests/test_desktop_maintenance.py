@@ -32,7 +32,7 @@ class MaintenanceTests(unittest.TestCase):
         for name, options in {
             "native_layout": {"return_value": self.layout}, "bundle_root": {"return_value": self.source},
             "require_admin": {}, "trusted_parent": {}, "stop_service": {}, "register_service": {},
-            "start_service": {}, "remove_service": {}, "windows_acl": {},
+            "start_service": {}, "wait_for_service": {}, "remove_service": {}, "windows_acl": {},
             "provision_identity": {"return_value": self.identity},
         }.items():
             mock = patch("speedtester_protocol.native_services." + name, **options)
@@ -143,6 +143,20 @@ class MaintenanceTests(unittest.TestCase):
         self.assertIn("LaunchDaemons", str(macos.definition))
         self.assertEqual(definition["ProgramArguments"][-1], "--agent")
         self.assertNotIn("control_key", unit + json.dumps(definition))
+
+    def test_unsafe_repair_source_is_refused_before_stopping_the_service(self):
+        self.install()
+        self.mock_bundle_root.return_value = self.layout.runtime
+        before = self.mock_stop_service.call_count
+        with self.assertRaises(ValueError):native_operation({**self.request, "operation": "repair"})
+        self.assertEqual(self.mock_stop_service.call_count, before)
+
+    def test_failed_initial_health_removes_the_registered_service_and_keeps_state(self):
+        self.mock_wait_for_service.side_effect = RuntimeError("synthetic unhealthy service")
+        with self.assertRaises(RuntimeError):native_operation(self.request)
+        self.mock_remove_service.assert_called_once()
+        self.assertFalse(self.layout.runtime.exists())
+        self.assertTrue((self.layout.state / BOOTSTRAP).exists())
 
 
 if __name__ == "__main__":

@@ -88,6 +88,11 @@ class ControlServer(HTTPServer):
 
 
 class ControlHandler(BaseHTTPRequestHandler):
+    def setup(self):
+        super().setup()
+        # Bound idle connections before reading even the request line/headers.
+        self.connection.settimeout(3)
+
     def log_message(self, *_args):
         pass
 

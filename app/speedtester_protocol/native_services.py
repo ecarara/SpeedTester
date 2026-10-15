@@ -186,6 +186,21 @@ def start_service(layout):
         win32serviceutil.StartService(SERVICE)
 
 
+def wait_for_service(key):
+    from .local_control import ControlClient
+    deadline = time.monotonic() + 30
+    while True:
+        try:
+            status = ControlClient(bytes.fromhex(key), timeout=1).call("status")
+            if status.get("ok") and status.get("service") == "running":
+                return
+        except (OSError, ValueError):
+            pass
+        if time.monotonic() >= deadline:
+            raise RuntimeError("native_service_health_failed")
+        time.sleep(.25)
+
+
 def remove_service(layout):
     stop_service(layout)
     if layout.system == "Linux":
@@ -415,6 +430,13 @@ def native_operation(request):
             raise PermissionError("installation_control_mismatch")
     elif request["operation"] != "install" or layout.runtime.exists() or layout.state.exists():
         raise ValueError("managed_installation_not_found")
+    staged = layout.runtime.with_name(layout.runtime.name + ".new")
+    previous = layout.runtime.with_name(layout.runtime.name + ".previous")
+    if request["operation"] != "uninstall":
+        if source.resolve() == layout.runtime.resolve():
+            raise ValueError("open_downloaded_installer_for_repair")
+        if staged.exists() or previous.exists():
+            raise ValueError("previous_installation_transaction_exists")
     stop_service(layout)
     if request["operation"] == "uninstall":
         remove_service(layout)
@@ -437,12 +459,6 @@ def native_operation(request):
                         ("desktop:measurements_enabled", cipher.seal(False, "desktop:measurements_enabled")))
     # Install from a separate downloaded bundle. Never mutate the running GUI's
     # own directory or overwrite a runtime that Windows is still mapping.
-    if source.resolve() == layout.runtime.resolve():
-        raise ValueError("open_downloaded_installer_for_repair")
-    staged = layout.runtime.with_name(layout.runtime.name + ".new")
-    previous = layout.runtime.with_name(layout.runtime.name + ".previous")
-    if staged.exists() or previous.exists():
-        raise ValueError("previous_installation_transaction_exists")
     layout.runtime.parent.mkdir(parents=True, exist_ok=True)
     try:
         shutil.copytree(source, staged, symlinks=True)
@@ -450,6 +466,9 @@ def native_operation(request):
     except BaseException:
         if staged.exists():
             shutil.rmtree(staged)
+        if existing:
+            start_service(layout)
+            wait_for_service(request["control_key"])
         raise
     if os.name != "nt":
         for path in (staged, *staged.rglob("*")):
@@ -472,6 +491,7 @@ def native_operation(request):
         if layout.system != "Windows":
             register_service(layout)
         start_service(layout)
+        wait_for_service(request["control_key"])
     except BaseException:
         if swapped:
             stop_service(layout)
@@ -480,6 +500,9 @@ def native_operation(request):
             previous.rename(layout.runtime)
             # Preserve data and leave maintenance paused; never hide the failure.
             start_service(layout)
+            wait_for_service(request["control_key"])
+        elif not existing:
+            remove_service(layout)
         raise
     if previous.exists():
         shutil.rmtree(previous)

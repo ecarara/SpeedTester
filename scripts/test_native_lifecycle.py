@@ -143,6 +143,10 @@ def main():
                 except OSError:
                     assert time.monotonic()<deadline;time.sleep(.25)
             passed.append('real_stop_start_preserves_opt_out')
+            saved_configuration=status()['configuration']
+            native('install');check_state()
+            assert status()['configuration']==saved_configuration
+            passed.append('real_upgrade_preserves_configuration_keys_queue_and_opt_out')
             native('repair');status();check_state()
             backups=list((layout.state/'backups').iterdir())
             assert backups

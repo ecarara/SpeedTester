@@ -143,11 +143,12 @@ class DesktopTests(unittest.TestCase):
         self.assertIsNone(restored.status()['problem'])
         self.runner.assert_not_called()
 
-    def test_pairing_uses_signed_sdk_and_persists_tokens_without_starting_schedule(self):
+    def test_pairing_automatically_enables_future_slots_and_persists_tokens_without_immediate_test(self):
         self.pair()
         self.assertTrue(self.engine.status()["paired"])
-        self.assertFalse(self.engine.status()["measurements_enabled"])
-        self.assertGreater(self.queue.state("next_due"), int(time.time()))
+        self.assertTrue(self.engine.status()["measurements_enabled"])
+        self.assertGreaterEqual(self.queue.state("next_due"), int(time.time()) + 59)
+        self.assertEqual(self.engine.tick(), "waiting")
         bundle = self.provider.last_bundle
         raw = self.queue.path.read_bytes()
         self.assertNotIn(bundle.access_token.encode(), raw)
@@ -163,12 +164,74 @@ class DesktopTests(unittest.TestCase):
     def test_pairing_needs_no_target_and_unavailable_target_prevents_activation(self):
         self.provider.target_available=False
         self.pair()
-        self.assertNotIn("/api/v1/test-target",[path for _,path in self.provider.calls])
+        self.assertIn("/api/v1/test-target",[path for _,path in self.provider.calls])
+        self.assertEqual(self.engine.status()["problem"]["code"], "test_target_unavailable")
         self.assertNotIn("host",self.queue.state("installation"))
         self.assertEqual(self.queue.state("installation")["target_mode"],"automatic")
         self.assertEqual(self.engine.dispatch("enable",{})["code"],"test_target_unavailable")
         self.assertFalse(self.queue.state(ENABLED))
         self.assertTrue(self.engine.status()["paired"])
+        self.runner.assert_not_called()
+
+    def test_pairing_missing_runner_preserves_binding_and_reports_blocked_auto_activation(self):
+        self.engine.runner = None
+        with patch("speedtester_protocol.desktop_service.shutil.which", return_value=None):
+            self.pair()
+        self.assertTrue(self.engine.status()["paired"])
+        self.assertFalse(self.queue.state(ENABLED))
+        self.assertEqual(self.engine.status()["problem"]["code"], "iperf3_required")
+        self.assertFalse(any("measurement-grants" in path for _, path in self.provider.calls))
+
+    def test_unchanged_upgrade_configuration_preserves_binding_schedule_and_user_pause(self):
+        self.pair()
+        installed = self.queue.state("installation")
+        credentials = self.engine.credentials()[0].bundle
+        next_due = self.queue.state("next_due")
+        for enabled in (True, False):
+            credentials = self.engine.credentials()[0].bundle
+            self.queue.state(ENABLED, enabled)
+            self.assertTrue(self.engine.dispatch("configure", configuration())["ok"])
+            restored = DesktopEngine(protected_queue(self.queue.directory), transport=self.provider, runner=self.runner)
+            self.assertEqual(restored.status()["measurements_enabled"], enabled)
+            self.assertEqual(self.queue.state("installation"), installed)
+            self.assertEqual(restored.credentials()[0].bundle, credentials)
+            self.assertEqual(self.queue.state("next_due"), next_due)
+            self.assertTrue(restored.dispatch("pair", {})["paired"])
+            self.assertEqual(restored.status()["measurements_enabled"], enabled)
+        self.runner.assert_not_called()
+
+    def test_upgrade_restart_skips_due_slot_and_preserves_consumed_slots(self):
+        from speedtester_protocol.schedule import DailySchedule
+        self.pair()
+        installed = self.queue.state("installation")
+        plan = DailySchedule(self.queue, installed["schedule"]).refresh(int(time.time()))[1]
+        due = plan["slots"][1]["at"]
+        first = plan["slots"][0]
+        first["state"] = "attempted"
+        self.queue.state("schedule:day:" + plan["date"], plan)
+        self.queue.state("desktop:upgrade_pending", True)
+        self.provider.calls.clear()
+        restored = DesktopEngine(self.queue, transport=self.provider, runner=self.runner, clock=lambda: due)
+        self.assertTrue(restored.status()["measurements_enabled"])
+        self.assertGreaterEqual(restored.status()["next_due"], due + 60)
+        refreshed = self.queue.state("schedule:day:" + plan["date"])
+        self.assertEqual(refreshed["slots"][0]["state"], "attempted")
+        self.assertNotEqual(refreshed["slots"][1]["state"], "pending")
+        self.assertFalse(self.queue.state("desktop:upgrade_pending"))
+        self.assertEqual(self.provider.calls, [])
+        self.runner.assert_not_called()
+
+    def test_auto_activation_cannot_override_revocation_or_consent_and_does_not_retry_a_pause(self):
+        self.provider.blocked = "consent_withdrawn"
+        self.pair()
+        self.assertFalse(self.engine.status()["measurements_enabled"])
+        self.assertEqual(self.engine.status()["problem"]["code"], "consent_withdrawn")
+        self.assertFalse(self.engine.dispatch("enable", {})["ok"])
+        self.provider.blocked = None
+        self.engine.dispatch("pause", {})
+        self.engine.begin_pairing()
+        self.assertEqual(self.engine.tick(), "paused")
+        self.assertFalse(self.engine.status()["measurements_enabled"])
         self.runner.assert_not_called()
 
     def test_upgrade_discards_old_manual_target_and_keeps_schedule_paused(self):

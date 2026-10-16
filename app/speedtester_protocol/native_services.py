@@ -470,8 +470,8 @@ def native_operation(request):
         return {"ok": True, "reboot_required": reboot, "data_preserved": not request["purge"], "central_revocation": "not_requested"}
     if existing:
         backup_state(layout)
-        # Operational pause only: preserve metrics, identities and pending work.
-        # It persists across reboots, until the participant explicitly resumes.
+        # Upgrades preserve active/paused choice, credentials and all records.
+        # A repair deliberately pauses; both skip slots due during maintenance.
         database = layout.state / "queue/index.sqlite"
         if database.exists():
             from .queue import EncryptedQueue
@@ -479,8 +479,11 @@ def native_operation(request):
             cipher.key = (layout.state / "queue/storage.key").read_bytes()
             with closing(sqlite3.connect(database)) as connection:
                 with connection:
+                    if request["operation"] == "repair":
+                        connection.execute("INSERT OR REPLACE INTO state VALUES(?,?)",
+                            ("desktop:measurements_enabled", cipher.seal(False, "desktop:measurements_enabled")))
                     connection.execute("INSERT OR REPLACE INTO state VALUES(?,?)",
-                        ("desktop:measurements_enabled", cipher.seal(False, "desktop:measurements_enabled")))
+                        ("desktop:upgrade_pending", cipher.seal(True, "desktop:upgrade_pending")))
     # Install from a separate downloaded bundle. Never mutate the running GUI's
     # own directory or overwrite a runtime that Windows is still mapping.
     layout.runtime.parent.mkdir(parents=True, exist_ok=True)

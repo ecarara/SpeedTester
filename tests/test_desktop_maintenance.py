@@ -71,6 +71,28 @@ class MaintenanceTests(unittest.TestCase):
         verify_database(backups[0])
         self.assertEqual(self.mock_start_service.call_count, 2)
 
+    def test_upgrade_preserves_active_and_paused_state_configuration_credentials_and_queue(self):
+        queue = self.install()
+        retained = {"installation": {"possession_private": "synthetic-key", "origin": "https://server.example"},
+            "desktop:configuration": {"profile": {"city": "SÃO PAULO"}},
+            "synthetic:credentials": {"refresh_token": "synthetic-only"},
+            "schedule:day:synthetic": {"slots": [{"state": "attempted"}]}}
+        for name, value in retained.items():
+            queue.state(name, value)
+        record = {"id": "upgrade-record", "signature": "synthetic-signature"}
+        queue.put(record, "synthetic")
+        key = (queue.directory / "storage.key").read_bytes()
+        for enabled in (True, False):
+            queue.state("desktop:measurements_enabled", enabled)
+            native_operation(self.request)
+            restored = protected_queue(queue.directory)
+            self.assertEqual(restored.state("desktop:measurements_enabled"), enabled)
+            self.assertTrue(restored.state("desktop:upgrade_pending"))
+            for name, value in retained.items():
+                self.assertEqual(restored.state(name), value)
+            self.assertEqual(restored.pending("synthetic"), [record])
+            self.assertEqual((restored.directory / "storage.key").read_bytes(), key)
+
     def test_uninstall_can_purge_data_after_a_previous_preserving_uninstall(self):
         self.install()
         native_operation({**self.request,"operation":"uninstall"})

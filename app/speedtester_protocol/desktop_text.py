@@ -330,3 +330,32 @@ for _locale, _messages in _STATUS_TEXT.items():
 
 for _locale, _title, _detail in (("pt-BR", "Não foi possível consultar o serviço", "O status anterior não confirma que o serviço continua ativo. Tente atualizar; se o problema persistir, use Reparar instalação."), ("en", "Could not check the service", "The previous status does not confirm the service is still active. Try refreshing; if the problem persists, use Repair installation."), ("es", "No se pudo consultar el servicio", "El estado anterior no confirma que el servicio siga activo. Intenta actualizar; si el problema persiste, usa Reparar instalación.")):
     TEXT[_locale].update(service_unavailable=_title, service_unavailable_detail=_detail)
+
+# Pairing authorizes future scheduling; upgrades recover the existing installation.
+for _locale, _copy in {
+    "pt-BR": {
+        "upgrade": "Atualizar instalação",
+        "upgrade_detail": "Instalação existente encontrada. Dados da conexão, vínculo com o Server e estado ativo ou pausado serão preservados. Não é necessário parear novamente.",
+        "install_detail": "Instalar o serviço ou atualizar uma instalação existente, preservando seus dados e vínculo.",
+        "target_notice": "Após seu aceite e a autorização do vínculo, os testes automáticos são ativados nos próximos horários: 2 por período, 8 por dia. Nenhum teste imediato. O Server define o destino; falhas de autorização ou ferramenta ausente impedem a ativação.",
+        "pair_detail": "1. Copie o código abaixo. 2. Abra o portal, entre e aceite os documentos vigentes. 3. Confira o código e a impressão digital e autorize. Os testes serão ativados apenas nos próximos horários: 2 por período, 8 por dia. Nenhum teste imediato.",
+        "setup_complete_detail": "Seu vínculo está salvo. Os testes estão pausados; consulte o aviso abaixo, se houver. Retome a agenda quando desejar, sem reinstalar nem parear novamente.",
+    },
+    "en": {
+        "upgrade": "Update installation",
+        "upgrade_detail": "Existing installation found. Connection details, Server pairing and active or paused state will be preserved. You do not need to pair again.",
+        "install_detail": "Install the service or update an existing installation, preserving its data and pairing.",
+        "target_notice": "After acceptance and pairing approval, automatic tests are enabled for future slots: 2 per period, 8 per day. No immediate test. The Server selects the target; missing authorization or measurement tools prevent activation.",
+        "pair_detail": "1. Copy the code below. 2. Open the portal, sign in and accept the current documents. 3. Check the code and fingerprint and approve. Tests are enabled for future slots only: 2 per period, 8 per day. No immediate test.",
+        "setup_complete_detail": "Your pairing is saved. Tests are paused; check any notice below. Resume the schedule when ready, without reinstalling or pairing again.",
+    },
+    "es": {
+        "upgrade": "Actualizar instalación",
+        "upgrade_detail": "Se encontró una instalación existente. Se conservarán los datos de conexión, el vínculo con el Server y el estado activo o en pausa. No es necesario vincular de nuevo.",
+        "install_detail": "Instalar el servicio o actualizar una instalación existente, conservando sus datos y vínculo.",
+        "target_notice": "Tras aceptar y autorizar el vínculo, se activan las pruebas para horarios futuros: 2 por período, 8 al día. Ninguna prueba inmediata. El Server elige el destino; la falta de autorización o de herramientas impide la activación.",
+        "pair_detail": "1. Copia el código de abajo. 2. Abre el portal, inicia sesión y acepta los documentos vigentes. 3. Comprueba el código y la huella y autoriza. Las pruebas se activan solo para horarios futuros: 2 por período, 8 al día. Ninguna prueba inmediata.",
+        "setup_complete_detail": "Tu vínculo está guardado. Las pruebas están en pausa; revisa los avisos. Reanuda la agenda cuando quieras, sin reinstalar ni vincular de nuevo.",
+    },
+}.items():
+    TEXT[_locale].update(_copy)

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
-"""GUI-independent agent: optional enrollment, persistent queue, explicit schedule."""
+"""GUI-independent agent: optional enrollment and a persistent future-only schedule."""
 import json
 from pathlib import Path
 import shutil
@@ -80,7 +80,11 @@ class DesktopEngine:
             if self.queue.state(CONFIGURATION):
                 configuration = self.configuration().model_copy(update={"timezone":installed["schedule"]["timezone"], "profile":Profile.model_validate(installed["profile"])})
                 self.queue.state(CONFIGURATION, configuration.model_dump())
-            DailySchedule(queue, installed["schedule"]).refresh(int(self.clock()))
+            # Upgrades retain the user's choice, but never catch up a due slot at restart.
+            upgraded = bool(queue.state("desktop:upgrade_pending"))
+            DailySchedule(queue, installed["schedule"]).refresh(int(self.clock()), activate=upgraded)
+            if upgraded:
+                queue.state("desktop:upgrade_pending", False)
         self.last_snapshot = self.status()
 
     def configuration(self):
@@ -134,8 +138,13 @@ class DesktopEngine:
         if installed and installed["origin"] != configuration.origin:
             raise ProtocolError("installation_server_changed")
         # Configuration never enrolls, discovers or sends OS metadata implicitly.
+        unchanged = bool(old and old.contribute == configuration.contribute
+            and old.origin == configuration.origin
+            and old.profile.model_dump(exclude={"version"}) == configuration.profile.model_dump(exclude={"version"}))
         self.queue.state(CONFIGURATION, configuration.model_dump())
-        self.queue.state(ENABLED, False)
+        # Saving an unchanged upgrade form must not reset the participant's choice.
+        if not unchanged:
+            self.queue.state(ENABLED, False)
         self.pairing = None
         if installed:
             changed = {key: value for key, value in installed["profile"].items() if key != "version"} != configuration.profile.model_dump(exclude={"version"})
@@ -147,7 +156,8 @@ class DesktopEngine:
             installed.pop("host", None)
             installed.pop("port", None)
             self.queue.state("installation", installed)
-        self.queue.state("desktop:last_problem", {})
+        if not unchanged:
+            self.queue.state("desktop:last_problem", {})
         self.last_code = "ready" if old else "configured"
         return self.status()
 
@@ -180,6 +190,26 @@ class DesktopEngine:
             self.next_poll = int(self.clock())
             self.last_code = "authorization_pending"
         return self.status()
+
+    def enable_schedule(self):
+        """Authorize future slots only. This path never claims a slot or runs a test."""
+        self.queue.state(ENABLED, False)
+        configuration = self.configuration()
+        credentials, measurement = self.credentials()
+        if not configuration or not configuration.contribute or not credentials or not credentials.bundle:
+            raise ProtocolError("pairing_required")
+        credentials.ensure_current(force=True)
+        installed = sync_machine(credentials, measurement, self.installation())
+        self.queue.state(CONFIGURATION, configuration.model_copy(update={"timezone": installed["schedule"]["timezone"]}).model_dump())
+        from .targets import obtain_target
+        obtain_target(credentials.client(), credentials.bundle.client_id)
+        if self.runner is None and not shutil.which("iperf3"):
+            raise ProtocolError("iperf3_required")
+        self.maintenance = False
+        DailySchedule(self.queue, installed["schedule"]).refresh(int(self.clock()), activate=True)
+        self.queue.state(ENABLED, True)
+        self.queue.state("desktop:last_problem", {})
+        self.last_code = "ready"
 
     def dispatch(self, operation, arguments):
         if not self.lock.acquire(blocking=False):
@@ -214,23 +244,7 @@ class DesktopEngine:
                         self.queue.state(CONFIGURATION, configuration.model_copy(update={"contribute": False}).model_dump())
                     self.pairing = None
                 elif operation == "enable":
-                    configuration = self.configuration()
-                    credentials, _ = self.credentials()
-                    if not configuration or not configuration.contribute or not credentials or not credentials.bundle:
-                        raise ProtocolError("pairing_required")
-                    # Validate authorization and policy without probing any test server.
-                    credentials.ensure_current(force=True)
-                    installed=sync_machine(credentials,self.credentials()[1],self.installation())
-                    self.queue.state(CONFIGURATION,configuration.model_copy(update={"timezone":installed["schedule"]["timezone"]}).model_dump())
-                    from .targets import obtain_target
-                    obtain_target(credentials.client(), credentials.bundle.client_id)
-                    if not self.runner and not shutil.which("iperf3"):
-                        raise ProtocolError("iperf3_required")
-                    self.maintenance = False
-                    DailySchedule(self.queue,self.installation()["schedule"]).refresh(int(self.clock()),activate=True)
-                    self.queue.state(ENABLED, True)
-                    self.queue.state("desktop:last_problem", {})
-                    self.last_code = "ready"
+                    self.enable_schedule()
                 else:
                     raise ProtocolError("unknown_local_operation")
                 return self.status()
@@ -262,11 +276,15 @@ class DesktopEngine:
                         return exc.code
                     raise
                 self.pairing = None
-                installed=sync_machine(credentials,measurement,self.installation())
-                configuration=self.configuration().model_copy(update={"timezone":installed["schedule"]["timezone"]})
-                self.queue.state(CONFIGURATION,configuration.model_dump())
-                DailySchedule(self.queue,installed["schedule"]).refresh(self.last_tick,activate=True)
-                sync_environment(credentials, measurement)
+                try:
+                    sync_environment(credentials, measurement)
+                    self.enable_schedule()
+                except (OSError, ValueError, ProtocolError) as exc:
+                    # Pairing stays saved if activation is blocked. Do not pretend
+                    # it is active, loop into a measurement, or auto-resume a pause.
+                    self.queue.state(ENABLED, False)
+                    self.record_problem(exc.code if isinstance(exc, ProtocolError) else "local_or_network_failure")
+                    return "paired"
                 self.last_code = "paired"
                 return self.last_code
             if not credentials or not credentials.bundle:

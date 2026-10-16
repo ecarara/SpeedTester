@@ -116,7 +116,7 @@ class MachineProtocolTests(unittest.TestCase):
             self.assertEqual(sync_machine(self.credentials,self.measurement,changed),changed)
             collect.assert_called_once()
         self.assertEqual(len(self.requests),1)
-        self.assertFalse(self.engine.status()['measurements_enabled'])
+        self.assertTrue(self.engine.status()['measurements_enabled'])
         self.assertNotIn(b'"machine_id"',self.queue.path.read_bytes())
 
     def test_pending_acceptance_blocks_identifier_collection_and_transmission(self):

@@ -135,6 +135,7 @@ class GraphicalFlows(unittest.TestCase):
         self.provider.approved=True;self.engine.next_poll=0
         self.assertEqual(self.engine.tick(),'paired')
         self.window.poll_pairing();self.settle()
+        self.click('pause')
         self.confirmation_patcher.stop()
         with patch('speedtester_protocol.desktop_gui.messagebox.askyesno', side_effect=AssertionError('Native buttons ignore app language')):
             for language in ('Português','English','Español'):
@@ -166,6 +167,8 @@ class GraphicalFlows(unittest.TestCase):
         self.provider.approved=True;self.engine.next_poll=0
         self.assertEqual(self.engine.tick(),'paired')
         self.window.poll_pairing();self.settle()
+        self.assertTrue(self.window.snapshot['measurements_enabled'])
+        self.click('pause')
         for language in ('Português','English','Español'):
             self.window.languages.set(language);self.window.change_language();self.window.update()
             labels=[w.cget('text') for w in self.widgets() if isinstance(w,self.tk.Label)]
@@ -343,7 +346,9 @@ class GraphicalFlows(unittest.TestCase):
         self.assertEqual(self.engine.tick(),'paired')
         self.window.poll_pairing();self.settle()
         self.assertTrue(self.window.snapshot['paired'])
-        self.assertFalse(self.window.snapshot['measurements_enabled'])
+        self.assertTrue(self.window.snapshot['measurements_enabled'])
+        self.assertGreaterEqual(self.window.snapshot['next_due'],int(time.time())+59)
+        self.click('pause')
         self.confirm=False;self.click('enable')
         self.assertFalse(self.window.snapshot['measurements_enabled'])
         self.confirm=True;self.provider.target_available=False;self.click('enable')
@@ -372,10 +377,65 @@ class GraphicalFlows(unittest.TestCase):
     def test_opt_out_install_disconnects_an_existing_installation(self):
         self.engine.dispatch('configure',configuration())
         self.window.contribute.set(False)
-        self.click('install');self.click('continue')
+        self.click('install');self.window.contribute.set(False);self.click('upgrade')
         self.assertEqual(self.window.page,'status')
         self.assertFalse(self.engine.status()['contribute'])
         self.assertEqual(self.provider.calls,[])
+
+    def test_upgrade_loads_existing_fields_and_preserves_pairing_and_active_or_paused_choice(self):
+        self.click('install');self.fill();self.click('continue')
+        self.provider.approved=True;self.engine.next_poll=0
+        self.assertEqual(self.engine.tick(),'paired')
+        self.window.poll_pairing();self.settle()
+        installed=self.engine.installation()
+        for enabled in (True,False):
+            self.engine.queue.state('desktop:measurements_enabled',enabled)
+            self.window.show('welcome');self.click('install')
+            self.assertEqual(self.window.operation,'upgrade')
+            self.assertEqual(self.window.fields['origin'].get(),'https://server.example')
+            self.assertEqual(self.window.fields['city'].get(),'TEST CITY')
+            self.assertEqual(self.window.fields['operator'].get(),'SYNTHETIC PROVIDER')
+            self.assertEqual(self.window.fields['country'].get(),'ZZ')
+            self.assertTrue(self.window.contribute.get())
+            self.assertEqual(self.window.access.get(),self.window.t('fiber'))
+            self.assertEqual(self.window.link.get(),self.window.t('ethernet'))
+            self.window.geometry('960x780')
+            for language in ('Português','English','Español'):
+                self.window.languages.set(language);self.window.change_language();self.window.update()
+                for widget in self.widgets(self.window.content):
+                    if isinstance(widget,self.tk.Button):
+                        self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(), self.window.winfo_rooty()+self.window.winfo_height(), widget.cget('text'))
+            pairings=self.provider.calls.count(('POST','/api/v1/pairings'))
+            self.click('upgrade')
+            self.assertEqual(self.window.page,'status')
+            self.assertTrue(self.window.snapshot['paired'])
+            self.assertEqual(self.window.snapshot['measurements_enabled'],enabled)
+            self.assertEqual(self.engine.installation(),installed)
+            self.assertEqual(self.provider.calls.count(('POST','/api/v1/pairings')),pairings)
+
+    def test_upgrade_recovers_stopped_service_without_overwriting_existing_form_or_pairing(self):
+        self.click('install');self.fill();self.click('continue')
+        self.provider.approved=True;self.engine.next_poll=0
+        self.assertEqual(self.engine.tick(),'paired')
+        installed=self.engine.installation()
+        self.window.poll_pairing();self.settle()
+        self.window.show('welcome')
+        original=self.controller.call
+        def unavailable(operation, arguments=None):
+            if operation=='status':
+                raise OSError('Synthetic stopped service')
+            return original(operation,arguments)
+        self.controller.call=unavailable
+        self.click('install')
+        # No service: initially blank form. The helper brings the old service up.
+        self.window.contribute.set(False)
+        self.controller.call=original
+        self.click('continue')
+        self.assertEqual(self.window.page,'status')
+        self.assertTrue(self.window.snapshot['paired'])
+        self.assertTrue(self.window.snapshot['contribute'])
+        self.assertTrue(self.window.snapshot['measurements_enabled'])
+        self.assertEqual(self.engine.installation(),installed)
 
     def test_repair_uninstall_confirmation_preserve_purge_and_reboot_feedback(self):
         self.confirm=False;self.click('repair');self.assertEqual(self.native_calls,[])

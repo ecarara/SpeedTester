@@ -202,12 +202,27 @@ class Installer(tk.Tk):
         if operation == "repair":
             if self.ask_confirmation("repair", "repair_confirm"):
                 self.work(lambda: self.controller.native("repair"), lambda _result: self.load_status())
+        elif operation == "install":
+            def detect():
+                try:
+                    return self.controller.call("status")
+                except OSError:
+                    return {"ok": True}
+            def detected(result):
+                self.snapshot = result
+                if result.get("configured"):
+                    self.configure_existing()
+                    self.operation = "upgrade"
+                    self.render()
+                else:
+                    self.show("configure")
+            self.work(detect, detected)
         else:
             self.show("remove" if operation == "uninstall" else "configure")
 
     def page_configure(self):
         self.entries={}
-        self.heading("configure", "configure_detail")
+        self.heading("upgrade" if self.operation == "upgrade" else "configure", "upgrade_detail" if self.operation == "upgrade" else "configure_detail")
         tk.Checkbutton(self.content, text=self.t("contribute"), variable=self.contribute, bg=BACKGROUND,
             fg=INK, activebackground=BACKGROUND, font=("Helvetica", 12, "bold"), anchor="w").pack(fill="x", pady=(0, 16))
         grid = tk.Frame(self.content, bg=BACKGROUND)
@@ -234,7 +249,7 @@ class Installer(tk.Tk):
         actions = tk.Frame(self.content, bg=BACKGROUND)
         actions.pack(fill="x", pady=(18, 0))
         self.button(actions, "back", lambda: self.show("welcome")).pack(side="left")
-        self.button(actions, "save" if self.operation == "configure" else "continue", self.install, primary=True).pack(side="right")
+        self.button(actions, "upgrade" if self.operation == "upgrade" else "save" if self.operation == "configure" else "continue", self.install, primary=True).pack(side="right")
 
     def configuration(self):
         if not self.contribute.get():
@@ -256,7 +271,7 @@ class Installer(tk.Tk):
             return
         action = self.operation
         def operation():
-            if action == "install":
+            if action in ("install", "upgrade"):
                 self.controller.native("install")
             deadline = time.monotonic() + 45
             while True:
@@ -267,6 +282,10 @@ class Installer(tk.Tk):
                     if time.monotonic() >= deadline:
                         raise
                     time.sleep(.5)
+            if action == "install" and status.get("configured"):
+                # A stopped service may only reveal its existing state after the
+                # helper restarts it. Never overwrite it with an empty form.
+                return status
             if configuration:
                 status = self.controller.call("configure", configuration)
             else:

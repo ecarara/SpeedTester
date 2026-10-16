@@ -1,0 +1,46 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "request_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "client_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Client Id",
+      "type": "string"
+    },
+    "legal_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Legal Digest",
+      "type": "string"
+    },
+    "privacy_version": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Privacy Version",
+      "type": "string"
+    },
+    "issued_at": {
+      "minimum": 0,
+      "title": "Issued At",
+      "type": "integer"
+    },
+    "expires_at": {
+      "minimum": 0,
+      "title": "Expires At",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "request_id",
+    "client_id",
+    "legal_digest",
+    "privacy_version",
+    "issued_at",
+    "expires_at"
+  ],
+  "title": "MachinePermission",
+  "type": "object"
+}

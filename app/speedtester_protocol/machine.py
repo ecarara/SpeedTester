@@ -10,13 +10,14 @@ import hmac
 import platform
 import re
 import subprocess
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 from .client import ProtocolError, HTTPS
 from .crypto import b64, public_bytes, sign, verify
 from .desktop_links import system_environment
-from .models import MachineReport, MachinePolicy
+from .models import MachineReport, MachinePolicy, MachinePermission
 
 CAPABILITY = 'machine-schedule-v1'
 
@@ -79,6 +80,19 @@ def sync_machine(credentials, measurement_key, config):
     scope = credentials.scope + ':machine'
     cached = credentials.queue.state(scope+':policy')
     if not cached:
+        # Do not derive or send a new identifier merely because discovery
+        # advertises a capability. Confirm the participant's CURRENT consent
+        # and the disclosed privacy version using an authenticated request.
+        request_id = str(uuid4())
+        envelope = credentials.client().request('POST', '/api/v1/machine/permission', {'request_id':request_id})
+        try:
+            permission = MachinePermission.model_validate(verify(envelope, credentials.server_key, 'machine-permission-v1'))
+            now = int(time.time())
+            if ((permission.request_id, permission.client_id) != (request_id,credentials.bundle.client_id)
+                    or abs(permission.issued_at-now)>60 or not now<permission.expires_at<=now+300):
+                raise ValueError('permission binding mismatch')
+        except Exception as exc:
+            raise ProtocolError('invalid_machine_permission') from exc
         pending = credentials.queue.state(scope+':pending')
         if not pending:
             report = MachineReport(request_id=str(uuid4()), client_id=credentials.bundle.client_id,
@@ -103,6 +117,5 @@ def sync_machine(credentials, measurement_key, config):
         credentials.queue.state('installation', config)
         # A new namespace preserves every old plan and cannot replay its slots.
         from .schedule import DailySchedule
-        import time
         DailySchedule(credentials.queue, central).refresh(int(time.time()), activate=True)
     return config

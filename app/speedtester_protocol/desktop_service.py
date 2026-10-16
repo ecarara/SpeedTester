@@ -289,7 +289,7 @@ DISPLAY_CODES = frozenset({"ready", "configured", "paired", "paused", "waiting",
     "contribution_not_selected", "pairing_required", "iperf3_required", "installation_server_changed",
     "account_suspended", "account_disabled", "client_revoked", "token_revoked", "consent_required", "consent_withdrawn", "contribution_consent_required",
     "legal_acceptance_required", "terms_acceptance_required", "legal_context_changed", "server_rejected", "storage_limit",
-    "machine_privacy_not_ready", "machine_identity_unavailable", "machine_identity_required", "invalid_machine_policy", "machine_identity_changed", "schedule_update_required", "slot_already_reserved", "slot_not_due", "slot_expired", "test_target_unavailable", "invalid_test_target", "test_target_changed", "local_or_network_failure", "unknown_local_operation", "invalid_local_arguments", "local_busy"})
+    "machine_privacy_not_ready", "machine_identity_unavailable", "machine_identity_required", "invalid_machine_policy", "invalid_machine_permission", "machine_identity_changed", "schedule_update_required", "slot_already_reserved", "slot_not_due", "slot_expired", "test_target_unavailable", "invalid_test_target", "test_target_changed", "local_or_network_failure", "unknown_local_operation", "invalid_local_arguments", "local_busy"})
 
 
 def run_service(state, key, stop=None, *, port=45873, maintenance=False):

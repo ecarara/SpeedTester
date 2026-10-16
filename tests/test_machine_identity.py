@@ -75,14 +75,21 @@ class MachineProtocolTests(unittest.TestCase):
         from test_desktop_client import SignedProvider, configuration
         from speedtester_protocol.desktop_service import DesktopEngine
         from speedtester_protocol.crypto import sign, verify
-        from speedtester_protocol.models import MachineReport, MachinePolicy
+        from speedtester_protocol.models import MachineReport, MachinePolicy, MachinePermission
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
-        self.provider=SignedProvider();self.supported=False;self.tamper=False;self.requests=[]
+        self.provider=SignedProvider();self.supported=False;self.tamper=False;self.requests=[];self.permission_denied=False;self.permission_tamper=False
         self.queue=protected_queue(Path(self.temp.name).resolve()/'queue')
         def transport(method,path,headers,payload):
             if path=='/.well-known/speedtester-server':
                 status,reply_headers,body=self.provider(method,path,headers,payload)
                 return status,reply_headers,{**body,'capabilities':['machine-schedule-v1'] if self.supported else []}
+            if path=='/api/v1/machine/permission':
+                if self.permission_denied:
+                    return 403,{}, {'code':'terms_acceptance_required'}
+                import time
+                value=MachinePermission(request_id=payload['request_id'],client_id=str(__import__('uuid').uuid4()) if self.permission_tamper else self.provider.client_id,
+                    legal_digest='c'*64,privacy_version='synthetic-privacy',issued_at=int(time.time()),expires_at=int(time.time())+300)
+                return 200,{},sign(value.model_dump(),self.provider.key,'machine-permission-v1')
             if path=='/api/v1/machine':
                 from speedtester_protocol.crypto import public_bytes
                 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -111,6 +118,25 @@ class MachineProtocolTests(unittest.TestCase):
         self.assertEqual(len(self.requests),1)
         self.assertFalse(self.engine.status()['measurements_enabled'])
         self.assertNotIn(b'"machine_id"',self.queue.path.read_bytes())
+
+    def test_pending_acceptance_blocks_identifier_collection_and_transmission(self):
+        from speedtester_protocol.machine import sync_machine
+        self.supported=True;self.permission_denied=True
+        with patch('speedtester_protocol.machine.machine_identity',side_effect=AssertionError('No machine identifier before current consent')) as collect:
+            with self.assertRaises(ProtocolError) as error:sync_machine(self.credentials,self.measurement,self.queue.state('installation'))
+            self.assertEqual(error.exception.code,'terms_acceptance_required')
+            collect.assert_not_called()
+        self.assertEqual(self.requests,[])
+        self.assertIsNone(self.queue.state(self.credentials.scope+':machine:pending'))
+
+    def test_permission_for_another_client_is_rejected_before_reading_identity(self):
+        from speedtester_protocol.machine import sync_machine
+        self.supported=True;self.permission_tamper=True
+        with patch('speedtester_protocol.machine.machine_identity',side_effect=AssertionError('No identifier from an unbound permission')) as collect:
+            with self.assertRaises(ProtocolError) as error:sync_machine(self.credentials,self.measurement,self.queue.state('installation'))
+            self.assertEqual(error.exception.code,'invalid_machine_permission')
+            collect.assert_not_called()
+        self.assertEqual(self.requests,[])
 
     def test_unadvertised_feature_collects_nothing_and_tampered_policy_is_rejected(self):
         from speedtester_protocol.machine import sync_machine

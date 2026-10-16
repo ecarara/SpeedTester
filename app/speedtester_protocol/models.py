@@ -239,3 +239,16 @@ class MachinePolicy(StrictModel):
     timezone_database: Literal["2026.5"] = "2026.5"
     tests_per_quadrant: Literal[2] = 2
     tests_per_day: Literal[8] = 8
+
+
+class MachinePermissionRequest(StrictModel):
+    request_id: Identifier
+
+
+class MachinePermission(StrictModel):
+    request_id: Identifier
+    client_id: Identifier
+    legal_digest: Digest
+    privacy_version: str = Field(min_length=1, max_length=120)
+    issued_at: int = Field(ge=0)
+    expires_at: int = Field(ge=0)

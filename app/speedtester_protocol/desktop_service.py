@@ -145,6 +145,9 @@ class DesktopEngine:
         configuration = self.configuration()
         if not configuration or not configuration.contribute:
             raise ProtocolError("contribution_not_selected")
+        # Recover an active code instead of invalidating the portal's pending flow.
+        if self.pairing and self.pairing.expires_at > int(self.clock()):
+            return self.status()
         server = discover(configuration.origin, self.transport)
         installed = self.installation()
         if installed:

@@ -26,6 +26,7 @@ class Installer(tk.Tk):
         self.locale, self.page, self.operation = "pt-BR", "welcome", "install"
         self.form_locale = self.locale
         self.snapshot, self.pairing = {}, None
+        self.pairing_state, self.pair_poll = "idle", None
         self.events = queue.Queue()
         self.busy = False
         self.browser_events = queue.Queue()
@@ -208,47 +209,80 @@ class Installer(tk.Tk):
             return status
         def completed(result):
             self.snapshot = result
-            self.show("pair" if configuration else "status")
+            if configuration and not result.get("paired"):
+                self.show("pair")
+                self.begin_pairing()
+            else:
+                self.received_status(result)
         self.work(operation, completed)
 
     def page_pair(self):
         self.heading("pair_title", "pair_detail")
         if self.pairing:
+            self.label(self.content, self.t("pair_code"), bold=True).pack(anchor="w", pady=(0, 8))
             tk.Label(self.content, text=self.pairing["user_code"], bg=INK, fg=ACCENT,
-                padx=30, pady=18, font=("Courier", 30, "bold")).pack(fill="x", pady=(0, 16))
+                padx=22, pady=14, font=("Courier", 30, "bold")).pack(fill="x", pady=(0, 8))
+            self.button(self.content, "copy_code", self.copy_pairing_code).pack(anchor="w", pady=(0, 12))
             self.label(self.content, self.t("fingerprint"), bold=True).pack(anchor="w")
-            self.label(self.content, self.pairing["fingerprint"], size=11, width=650).pack(fill="x", pady=(6, 12))
-            self.label(self.content, self.t("expires"), size=11, color=MUTED).pack(fill="x", pady=(0, 12))
-            self.button(self.content, "open_pair", lambda: self.open_pair()).pack(anchor="w")
-            self.label(self.content, self.t("waiting_pair"), color=MUTED).pack(fill="x", pady=16)
-        self.label(self.content, self.t("data_detail"), size=11, color=MUTED).pack(fill="x", pady=(0, 18))
-        self.button(self.content, "retry_pair" if self.pairing else "pair", self.begin_pairing, primary=True).pack(anchor="w")
-        self.button(self.content, "later", self.finish_pairing).pack(anchor="w", pady=12)
+            self.label(self.content, self.pairing["fingerprint"], size=10, width=650).pack(fill="x", pady=(4, 8))
+            expires = time.strftime("%H:%M:%S", time.localtime(self.pairing["expires_at"]))
+            self.label(self.content, self.t("code_deadline").format(time=expires), size=11, color=MUTED).pack(fill="x", pady=(0, 8))
+            self.button(self.content, "open_pair", self.open_pair, primary=True).pack(anchor="w")
+            self.label(self.content, self.t("waiting_pair"), color=MUTED).pack(fill="x", pady=10)
+        else:
+            state = {"generating": "generating_code", "expired": "code_expired", "failed": "code_failed"}
+            self.label(self.content, self.t(state.get(self.pairing_state, "code_needed")), color=MUTED).pack(fill="x", pady=(0, 16))
+        self.label(self.content, self.t("data_detail"), size=10, color=MUTED).pack(fill="x", pady=(0, 12))
+        if self.pairing_state != "generating":
+            self.button(self.content, "retry_pair" if self.pairing else "pair", self.begin_pairing).pack(anchor="w")
+        self.button(self.content, "later", self.finish_pairing).pack(anchor="w", pady=8)
+
+    def copy_pairing_code(self):
+        if self.pairing and self.pairing["expires_at"] > time.time():
+            self.clipboard_clear()
+            self.clipboard_append(self.pairing["user_code"])
+            self.feedback.configure(text=self.t("code_copied"))
+        else:
+            self.poll_pairing()
+
+    def schedule_pair_poll(self):
+        if self.pair_poll is not None:
+            self.after_cancel(self.pair_poll)
+        self.pair_poll = self.after(1000, self.poll_pairing)
+
+    def received_pairing(self, result):
+        previous, previous_state = self.pairing, self.pairing_state
+        self.snapshot = result
+        self.pairing = result.get("pairing")
+        if result.get("paired"):
+            self.show("status")
+            return
+        expired = self.pairing_state == "expired" or result.get("code") == "pairing_expired" or (previous and previous["expires_at"] <= time.time())
+        self.pairing_state = "ready" if self.pairing else "expired" if expired else "failed"
+        # Stable status polling must not destroy the copyable portal window,
+        # keyboard focus or the button the participant is about to click.
+        if self.page != "pair" or previous != self.pairing or previous_state != self.pairing_state:
+            self.show("pair")
+        if self.pairing:
+            self.schedule_pair_poll()
 
     def begin_pairing(self):
-        def completed(result):
-            if result.get("paired"):
-                self.snapshot = result
-                self.show("status")
-                return
-            self.pairing = result.get("pairing")
-            self.show("pair")
-            self.after(5000, self.poll_pairing)
-        self.work(lambda: self.controller.call("pair"), completed)
+        if self.busy:
+            return
+        self.pairing_state = "generating"
+        self.show("pair")
+        self.work(lambda: self.controller.call("pair"), self.received_pairing)
 
     def poll_pairing(self):
-        if self.page != "pair" or self.busy:
+        if self.pair_poll is not None:
+            self.after_cancel(self.pair_poll)
+            self.pair_poll = None
+        if self.page != "pair":
             return
-        def completed(result):
-            self.snapshot = result
-            if result.get("paired"):
-                self.pairing = None
-                self.show("status")
-            else:
-                self.pairing = result.get("pairing")
-                self.render()
-                self.after(5000, self.poll_pairing)
-        self.work(lambda: self.controller.call("status"), completed)
+        if self.busy:
+            self.schedule_pair_poll()
+            return
+        self.work(lambda: self.controller.call("status"), self.received_pairing)
 
     def finish_pairing(self):
         def completed(result):
@@ -303,6 +337,9 @@ class Installer(tk.Tk):
         text.focus_set()
 
     def open_pair(self):
+        if self.pairing and self.pairing["expires_at"] <= time.time():
+            self.poll_pairing()
+            return
         if self.pairing:
             try:
                 url = pairing_url(self.pairing["verification_uri"], self.locale)
@@ -397,6 +434,8 @@ class Installer(tk.Tk):
                 row.pack(fill="x", pady=(0, 8))
                 self.label(row, self.t(key), size=12).pack(side="left")
                 self.label(row, value, bold=True).pack(side="right")
+        if self.snapshot.get("contribute") and not self.snapshot.get("paired"):
+            self.button(self.content, "resume_pair", self.begin_pairing, primary=True).pack(anchor="w", pady=(12, 6))
         if self.snapshot.get("paired"):
             key = "pause" if self.snapshot.get("measurements_enabled") else "enable"
             self.button(self.content, key, lambda: self.schedule(key), primary=True).pack(anchor="w", pady=(16, 10))
@@ -484,6 +523,9 @@ class Installer(tk.Tk):
                     # A failed UI callback must not kill the event pump forever.
                     messagebox.showerror(self.t("title"), self.t("error"), parent=self)
             else:
+                if self.page == "pair" and self.pairing_state == "generating":
+                    self.pairing_state = "failed"
+                    self.render()
                 code = result.get("code") if isinstance(result, dict) else None
                 key = "no_target" if code in {"test_target_unavailable", "invalid_test_target", "test_target_changed"} else "no_runner" if code == "iperf3_required" else "blocked" if code else "error"
                 messagebox.showerror(self.t("title"), self.t(key), parent=self)

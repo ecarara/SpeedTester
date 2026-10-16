@@ -99,3 +99,12 @@ A suíte gráfica usa `SPEEDTESTER_GUI_TESTS=1 python scripts/test_graphical_flo
 A conta usa o Server salvo na instalação, inclusive quando o assistente acaba de ser aberto. A abertura do navegador tem limite de tempo e não ocupa o bloqueio de manutenção. Bibliotecas e loaders de locale/Tk do pacote não devem interferir nos programas do sistema. Uma falha em um retorno da interface não encerra o processamento dos próximos cliques. Trocar o idioma preserva tecnologia, conexão e campos. A opção de apagar dados é desmarcada a cada nova operação de desinstalação; reinstalar após exclusão cria uma nova chave de controle persistida.
 
 Os testes mantêm medições desativadas. Ativação e pausa na suíte gráfica usam somente um runner que falha se for chamado. A ausência do componente real de medição também é testada e deve manter a agenda pausada. Não há certificação de coleta nativa no Omarchy/Wayland real, de elevação interativa ou de recuperação após reboot físico nesta prévia.
+
+
+## Código de vínculo no Client 0.3.0.dev7
+
+Ao marcar a contribuição e concluir **Instalar e continuar** ou **Salvar**, o assistente solicita o código automaticamente e o exibe em destaque, antes de oferecer o portal. Use **Copiar código**, abra o portal, entre na conta, registre o aceite se solicitado e informe esse código. Confira a impressão digital e autorize a instalação; o Client confirma o vínculo sem iniciar medições. Abrir a conta no Server, por si só, não gera códigos.
+
+Na tela **Seu serviço**, **Continuar vínculo / mostrar código** recupera o vínculo pendente. Reabrir a interface ou recuperar o código vigente preserva a autorização pendente. O horário de validade é mostrado no fuso do computador; após a expiração, o código desaparece e uma ação explícita gera outro. Falhas de conexão deixam uma mensagem com nova tentativa, sem exigir reinstalação. Sem contribuição selecionada, a instalação não solicita nenhum código nem contata o Server.
+
+A regressão gráfica reproduz a ausência do código antes da correção e verifica geração automática, visibilidade no tamanho mínimo da janela, cópia, recuperação após reabrir a interface, expiração, nova tentativa e erro de conexão com recuperação. São 11 casos gráficos com widgets Tk e IPC autenticado reais; o Server usa respostas assinadas sintéticas e o runner de medições é proibido. A integração com o Server privado permanece ativa.

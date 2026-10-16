@@ -164,3 +164,43 @@ for _code, _message in {
     "es": "Consultando la dirección del Server de esta instalación para abrir su cuenta…",
 }.items():
     TEXT[_code]["account_opening"] = _message
+
+
+# Pairing always displays a code in the Client before opening the browser.
+_PAIRING_TEXT = {
+    "pt-BR": {
+        "pair_detail": "1. Copie o código exibido abaixo. 2. Abra o portal, entre na sua conta e aceite os documentos, se solicitado. 3. Informe o código e confira a impressão digital antes de autorizar. Volte ao Client para ver a confirmação. Nenhuma medição será iniciada.",
+        "pair_code": "Seu código de vínculo — informe este código no portal",
+        "copy_code": "Copiar código", "code_copied": "Código copiado. Cole-o no portal de vínculo.",
+        "code_deadline": "Válido até {time} (horário deste computador). Se expirar, gere outro código aqui.",
+        "generating_code": "Gerando seu código de vínculo… Aguarde antes de abrir o portal.",
+        "code_needed": "Gere o código neste Client para vincular esta instalação à sua conta.",
+        "code_expired": "O código expirou. Clique em Gerar código de vínculo para obter um novo. O vínculo ainda não foi concluído.",
+        "code_failed": "Não foi possível obter o código. Verifique a conexão e tente gerar novamente. Abrir sua conta não gera um código.",
+        "pair": "Gerar código de vínculo", "retry_pair": "Recuperar código vigente", "resume_pair": "Continuar vínculo / mostrar código",
+    },
+    "en": {
+        "pair_detail": "1. Copy the code below. 2. Open the portal, sign in and accept the documents if requested. 3. Enter the code and compare the fingerprint before authorizing. Return to the Client for confirmation. No measurements will start.",
+        "pair_code": "Your pairing code — enter this code in the portal",
+        "copy_code": "Copy code", "code_copied": "Code copied. Paste it into the pairing portal.",
+        "code_deadline": "Valid until {time} (this computer's local time). Generate another code here if it expires.",
+        "generating_code": "Generating your pairing code… Wait before opening the portal.",
+        "code_needed": "Generate a code in this Client to link this installation to your account.",
+        "code_expired": "The code expired. Click Generate pairing code to get a new one. Pairing has not completed.",
+        "code_failed": "Could not obtain a code. Check connectivity and try generating it again. Opening your account does not generate a code.",
+        "pair": "Generate pairing code", "retry_pair": "Recover current code", "resume_pair": "Continue pairing / show code",
+    },
+    "es": {
+        "pair_detail": "1. Copia el código de abajo. 2. Abre el portal, inicia sesión y acepta los documentos si se solicita. 3. Introduce el código y compara la huella antes de autorizar. Vuelve al Client para ver la confirmación. No se iniciarán mediciones.",
+        "pair_code": "Tu código de vinculación — introduce este código en el portal",
+        "copy_code": "Copiar código", "code_copied": "Código copiado. Pégalo en el portal de vinculación.",
+        "code_deadline": "Válido hasta las {time} (hora local de este equipo). Si caduca, genera otro código aquí.",
+        "generating_code": "Generando tu código de vinculación… Espera antes de abrir el portal.",
+        "code_needed": "Genera un código en este Client para vincular esta instalación a tu cuenta.",
+        "code_expired": "El código caducó. Pulsa Generar código de vinculación para obtener otro. La vinculación aún no ha terminado.",
+        "code_failed": "No se pudo obtener un código. Comprueba la conexión y vuelve a intentarlo. Abrir tu cuenta no genera un código.",
+        "pair": "Generar código de vinculación", "retry_pair": "Recuperar código vigente", "resume_pair": "Continuar vinculación / mostrar código",
+    },
+}
+for _locale, _messages in _PAIRING_TEXT.items():
+    TEXT[_locale].update(_messages)

@@ -168,6 +168,18 @@ class DesktopTests(unittest.TestCase):
         self.assertTrue(restored.status()["paired"])
         self.runner.assert_not_called()
 
+    def test_pending_code_is_recovered_without_contacting_server_or_rotating_authorization(self):
+        self.engine.dispatch('configure',configuration())
+        first=self.engine.dispatch('pair',{})
+        pending=self.engine.pairing
+        calls=list(self.provider.calls)
+        recovered=self.engine.dispatch('pair',{})
+        self.assertEqual(first['pairing'],recovered['pairing'])
+        self.assertIs(self.engine.pairing,pending)
+        self.assertEqual(self.provider.calls,calls)
+        self.assertFalse(recovered['measurements_enabled'])
+        self.runner.assert_not_called()
+
     def test_expired_pairing_requires_explicit_restart_and_cancel_stops_polling(self):
         self.engine.dispatch("configure", configuration())
         self.engine.dispatch("pair", {})

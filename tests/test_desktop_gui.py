@@ -101,9 +101,11 @@ class GraphicalFlows(unittest.TestCase):
         self.click('continue')
         self.assertEqual(self.native_calls,[('install',False)])
         self.assertEqual(self.window.page,'pair')
-        self.click('pair')
         self.assertEqual(self.window.pairing['user_code'],'ABCDE-F2345')
         self.click('open_pair')
+        portal=self.window.portal_window
+        self.window.poll_pairing();self.settle()
+        self.assertTrue(portal.winfo_exists(),'Polling must preserve the portal link and code screen')
         self.assertEqual(self.window.portal_entry.get(),'https://server.example/pair?locale=pt-BR')
         self.click('copy_link',self.window.portal_window)
         self.assertEqual(self.window.clipboard_get(),self.window.portal_entry.get())
@@ -123,8 +125,71 @@ class GraphicalFlows(unittest.TestCase):
         self.assertFalse(self.window.snapshot['contribute'])
         self.assertEqual(self.provider.calls.count(('POST','/api/v1/measurement-grants')),0)
 
+    def test_opt_in_displays_code_before_any_browser_and_reopening_recovers_it(self):
+        self.click('install');self.fill();self.click('continue')
+        self.assertIsNotNone(self.window.pairing, 'Installing with pairing selected must show a code without another hidden step')
+        code=self.window.pairing['user_code']
+        self.assertTrue(any(isinstance(w,self.tk.Label) and w.cget('text')==code for w in self.widgets()))
+        self.assertFalse(self.browser.called)
+        self.window.geometry('960x780');self.window.update()
+        for w in self.widgets():
+            if isinstance(w,self.tk.Button):
+                self.assertLessEqual(w.winfo_rooty()+w.winfo_height(),self.window.winfo_rooty()+self.window.winfo_height(),w.cget('text'))
+        self.click('copy_code');self.assertEqual(self.window.clipboard_get(),code)
+        before=self.provider.calls.count(('POST','/api/v1/pairings'))
+        self.click('retry_pair')
+        self.assertEqual(self.provider.calls.count(('POST','/api/v1/pairings')),before)
+        self.window.destroy()
+        from speedtester_protocol.desktop_gui import Installer
+        self.window=Installer(self.controller);self.window.update()
+        self.click('status');self.click('resume_pair')
+        self.assertEqual(self.window.pairing['user_code'],code)
+        self.assertEqual(self.provider.calls.count(('POST','/api/v1/pairings')),before)
+        self.assertFalse(self.engine.status()['measurements_enabled'])
+
+    def test_expired_code_is_removed_and_only_explicit_retry_generates_a_new_one(self):
+        self.click('install');self.fill();self.click('continue')
+        device_code=self.engine.pairing.device_code
+        self.engine.pairing=self.engine.pairing.model_copy(update={'expires_at':1})
+        credentials,_=self.engine.credentials()
+        scope=credentials.scope+':pairing'
+        pending=self.engine.queue.state(scope);pending['pairing']['expires_at']=1;pending['request']['issued_at']=1
+        self.engine.queue.state(scope,pending)
+        self.window.pairing['expires_at']=1
+        self.click('open_pair')
+        self.assertFalse(self.browser.called)
+        self.assertIsNone(self.window.pairing)
+        self.assertTrue(any(isinstance(w,self.tk.Label) and w.cget('text')==self.window.t('code_expired') for w in self.widgets()))
+        before=self.provider.calls.count(('POST','/api/v1/pairings'))
+        self.window.poll_pairing();self.settle()
+        self.assertEqual(self.provider.calls.count(('POST','/api/v1/pairings')),before)
+        self.click('pair')
+        self.assertIsNotNone(self.window.pairing)
+        self.assertNotEqual(self.engine.pairing.device_code,device_code)
+        for language in ('English','Español','Português'):
+            self.window.languages.set(language);self.window.change_language();self.window.update()
+            self.click('copy_code');self.assertEqual(self.window.clipboard_get(),self.window.pairing['user_code'])
+        self.assertFalse(self.engine.status()['measurements_enabled'])
+
+    def test_code_generation_failure_is_visible_and_retry_recovers_without_reinstall(self):
+        from speedtester_protocol.client import ProtocolError
+        transport=self.engine.transport
+        self.engine.transport=lambda *a: (_ for _ in ()).throw(ProtocolError('server_rejected'))
+        self.click('install');self.fill();self.click('continue')
+        self.assertEqual(self.window.page,'pair')
+        self.assertIsNone(self.window.pairing)
+        self.assertTrue(any(isinstance(w,self.tk.Label) and w.cget('text')==self.window.t('code_failed') for w in self.widgets()))
+        self.assertFalse(self.browser.called)
+        self.engine.transport=transport
+        self.click('pair')
+        self.assertIsNotNone(self.window.pairing)
+        self.assertEqual(self.native_calls,[('install',False)])
+        self.click('later');self.click('manage');self.click('save')
+        self.assertIsNotNone(self.window.pairing)
+        self.assertFalse(self.engine.status()['measurements_enabled'])
+
     def test_pair_approval_schedule_errors_enable_cancel_pause_and_account_origin(self):
-        self.click('install');self.fill();self.click('continue');self.click('pair')
+        self.click('install');self.fill();self.click('continue')
         self.provider.approved=True;self.engine.next_poll=0
         self.assertEqual(self.engine.tick(),'paired')
         self.window.poll_pairing();self.settle()

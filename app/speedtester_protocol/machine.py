@@ -91,8 +91,8 @@ def sync_machine(credentials, measurement_key, config):
             if ((policy.request_id, policy.client_id, policy.machine_id) !=
                     (pending['request_id'], pending['client_id'], pending['machine_id'])):
                 raise ValueError('binding mismatch')
-            from zoneinfo import ZoneInfo
-            ZoneInfo(policy.timezone)
+            from .central_slots import central_zone
+            central_zone(policy.timezone)
         except Exception as exc:
             raise ProtocolError('invalid_machine_policy') from exc
         cached = policy.model_dump()

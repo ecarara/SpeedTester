@@ -5,7 +5,28 @@ from datetime import datetime, time, timedelta, timezone
 import hashlib
 import hmac
 from zoneinfo import ZoneInfo
+from functools import lru_cache
+from importlib.resources import files
 from .quadrants import QUADRANTS, PlannedSlot, SLOT_END_MARGIN_SECONDS, MIN_SLOT_GAP_SECONDS
+
+
+TIMEZONE_DATABASE = '2026.5'
+
+
+@lru_cache(maxsize=256)
+def central_zone(name):
+    # OS tzdb revisions differ across native platforms. The protocol uses the
+    # same pinned tzdata package on both sides, with no host-db fallback.
+    import tzdata
+    if tzdata.__version__ != TIMEZONE_DATABASE:
+        raise ValueError('unsupported timezone database')
+    if not isinstance(name,str) or not name or any(part in {'','..','.'} for part in name.split('/')) or name.startswith('/'):
+        raise ValueError('invalid timezone')
+    try:
+        with files('tzdata.zoneinfo').joinpath(*name.split('/')).open('rb') as source:
+            return ZoneInfo.from_file(source,key=name)
+    except (OSError, ValueError) as exc:
+        raise ValueError('unknown timezone') from exc
 
 
 def plan_central_day_slots(day, timezone_name, seed):
@@ -13,7 +34,7 @@ def plan_central_day_slots(day, timezone_name, seed):
     key=bytes.fromhex(seed)
     if len(key)!=32:
         raise ValueError('invalid central seed')
-    zone=ZoneInfo(timezone_name)
+    zone=central_zone(timezone_name)
     planned=[]
     for quadrant,start_time,end_time in QUADRANTS:
         start=datetime.combine(day,start_time,zone).astimezone(timezone.utc)

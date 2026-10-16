@@ -33,6 +33,12 @@
       "title": "Format",
       "type": "string"
     },
+    "timezone_database": {
+      "const": "2026.5",
+      "default": "2026.5",
+      "title": "Timezone Database",
+      "type": "string"
+    },
     "tests_per_quadrant": {
       "const": 2,
       "default": 2,

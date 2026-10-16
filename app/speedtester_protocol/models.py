@@ -224,11 +224,8 @@ class MachineReport(StrictModel):
     @field_validator("timezone")
     @classmethod
     def valid_timezone(cls, value):
-        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-        try:
-            ZoneInfo(value)
-        except (ZoneInfoNotFoundError, ValueError) as exc:
-            raise ValueError('invalid timezone') from exc
+        from .central_slots import central_zone
+        central_zone(value)
         return value
 
 
@@ -239,5 +236,6 @@ class MachinePolicy(StrictModel):
     timezone: str = Field(min_length=1, max_length=100)
     seed: Digest
     format: Literal["quadrants-server-v1"] = "quadrants-server-v1"
+    timezone_database: Literal["2026.5"] = "2026.5"
     tests_per_quadrant: Literal[2] = 2
     tests_per_day: Literal[8] = 8

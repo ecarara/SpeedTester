@@ -50,7 +50,8 @@ class DailySchedule:
             raise ValueError('invalid_schedule_policy')
         if not isinstance(configuration['seed'], str) or not 16 <= len(configuration['seed']) <= 64:
             raise ValueError('invalid_schedule_seed')
-        self.zone = ZoneInfo(configuration['timezone'])
+        from .central_slots import central_zone
+        self.zone = central_zone(configuration['timezone']) if configuration['format'] == CENTRAL_FORMAT else ZoneInfo(configuration['timezone'])
         from .crypto import digest
         self.namespace = 'schedule:central:' + digest(configuration) if configuration['format'] == CENTRAL_FORMAT else 'schedule'
         self.header_key = self.namespace + ':cursor'
@@ -111,7 +112,9 @@ class DailySchedule:
                             slot['state'] = 'interrupted' if slot['state'] == 'claimed' else 'missed'
                     self._save(conn, self.day_key(day), record)
         days = []
-        quadrant = quadrant_for_timestamp(datetime.fromtimestamp(effective, timezone.utc), self.policy['timezone'])
+        quadrant = (('madrugada','manha','tarde','noite')[datetime.fromtimestamp(effective,self.zone).hour//6]
+            if self.policy['format'] == CENTRAL_FORMAT
+            else quadrant_for_timestamp(datetime.fromtimestamp(effective, timezone.utc), self.policy['timezone']))
         for day in (today, today + timedelta(days=1)):
             record = self._day(conn, day, header['not_before'])
             for slot in record['slots']:

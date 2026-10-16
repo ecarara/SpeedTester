@@ -100,7 +100,9 @@ class ScheduleTests(unittest.TestCase):
         self.assertIsNone(self.schedule.claim(second['at'],'synthetic:grant_request'))
 
     def test_legacy_migration_preserves_identity_queue_and_ignores_interval(self):
-        original={'origin':'https://server.example','profile':{'operator':'Synthetic'},'interval':3600,
+        from speedtester_protocol.models import Profile
+        from test_desktop_client import configuration
+        original={'origin':'https://server.example','profile':Profile.model_validate(configuration()['profile']).model_dump(),'interval':3600,
             'possession_private':'synthetic-key','measurement_private':'synthetic-key-2'}
         self.queue.state('installation',original)
         migrated,changed=migrate_installation(self.queue,original,'America/Sao_Paulo')

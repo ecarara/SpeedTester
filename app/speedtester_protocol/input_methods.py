@@ -103,6 +103,9 @@ def smoke_dead_keys(window):
     assert "host" not in window.fields and "port" not in window.fields
 
     def type_keys(entry, keys, expected=None):
+        if expected is not None:
+            from .profile_text import uppercase_text
+            expected = uppercase_text(expected)
         entry.delete(0, "end")
         entry.focus_force()
         window.update()
@@ -143,7 +146,7 @@ def smoke_dead_keys(window):
     window.clipboard_append("S~ao / São / ç / México")
     entry.event_generate("<<Paste>>")
     window.update()
-    assert entry.get() == "S~ao / São / ç / México"
+    assert entry.get() == "S~AO / SÃO / Ç / MÉXICO"
     if fallback:
         type_keys(entry, ["dead_tilde", "BackSpace", "a"], "a")
         type_keys(entry, ["dead_acute", "Escape", "e"], "e")
@@ -153,9 +156,9 @@ def smoke_dead_keys(window):
         for _ in range(30):
             window.update()
             time.sleep(.01)
-        assert entry.get() == "ã"
+        assert entry.get() == "Ã"
         type_keys(entry, ["dead_tilde"], "")
         city = window.entries["city"]
         type_keys(city, ["a"], "a")
         type_keys(entry, ["a"], "a")
-    print("packaged_linux_dead_keys_ok: " + ("unavailable-XIM control=S~ao; fallback=São" if fallback else "native-XIM"), flush=True)
+    print("packaged_linux_dead_keys_ok: " + ("unavailable-XIM control=S~ao; fallback=SÃO" if fallback else "native-XIM"), flush=True)

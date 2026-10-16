@@ -101,6 +101,8 @@ def setup(queue,origin,*,transport=None,input_fn=input,sleep=time.sleep,repair=F
         await_pairing(pairing_client,pairing,sleep)
         DailySchedule(queue,config["schedule"]).refresh(int(time.time()),activate=True)
         print("Pareamento concluído. Tokens guardados na fila cifrada; nenhum token precisa ser copiado.")
+    from .machine import sync_machine
+    config=sync_machine(credentials,measurement,config)
     sync_environment(credentials,measurement)
     return config
 
@@ -110,9 +112,11 @@ def cycle(queue,*,transport=None,runner=None,now=None,clock=time.time):
     if not config:raise ProtocolError("setup_required")
     config,_=migrate_installation(queue,config)
     current=int(clock()) if now is None else int(now)
+    credentials,measurement=context(queue,config,transport)
+    from .machine import sync_machine
+    config=sync_machine(credentials,measurement,config)
     schedule=DailySchedule(queue,config["schedule"])
     schedule.refresh(current)
-    credentials,measurement=context(queue,config,transport)
     client=credentials.client()
     sync_environment(credentials,measurement)
     agent=CommunityAgent(client,queue,measurement,Profile.model_validate(config["profile"]),"iperf3")
@@ -124,6 +128,8 @@ def cycle(queue,*,transport=None,runner=None,now=None,clock=time.time):
     slot=schedule.claim(current,agent.destination+":grant_request")
     if slot is None:
         return "synchronized" if sent else "waiting"
+    if config["schedule"]["format"] == "quadrants-server-v1":
+        agent.schedule_slot={"local_date":slot["date"],"quadrant":slot["quadrant"],"index":slot["index"]}
     attempt_id=None
     try:
         if config.get("target_mode")=="automatic":

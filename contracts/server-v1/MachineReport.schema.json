@@ -1,0 +1,44 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "request_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "client_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Client Id",
+      "type": "string"
+    },
+    "machine_id": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Machine Id",
+      "type": "string"
+    },
+    "basis": {
+      "enum": [
+        "linux-machine-id",
+        "windows-machine-guid",
+        "macos-platform-uuid"
+      ],
+      "title": "Basis",
+      "type": "string"
+    },
+    "timezone": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Timezone",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id",
+    "client_id",
+    "machine_id",
+    "basis",
+    "timezone"
+  ],
+  "title": "MachineReport",
+  "type": "object"
+}

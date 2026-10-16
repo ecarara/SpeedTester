@@ -204,3 +204,9 @@ _PAIRING_TEXT = {
 }
 for _locale, _messages in _PAIRING_TEXT.items():
     TEXT[_locale].update(_messages)
+
+
+# New machine data is explicitly disclosed before optional contribution.
+TEXT['pt-BR']["data_detail"] = 'Após aceite e vínculo: perfil, métricas separadas, sistema operacional, identificador pseudônimo da máquina, fuso e registros de autenticação e integridade. Consulte a lista completa antes de autorizar.'
+TEXT['en']["data_detail"] = 'After consent and pairing: profile, separate metrics, operating system, pseudonymous machine identifier, time zone, and authentication/integrity records. Read the full list before authorizing.'
+TEXT['es']["data_detail"] = 'Tras aceptar y vincular: perfil, métricas separadas, sistema operativo, identificador seudónimo del equipo, zona horaria y registros de autenticación e integridad. Lee la lista completa antes de autorizar.'

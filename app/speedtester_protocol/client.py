@@ -84,6 +84,11 @@ class ServerClient:
         raise ProtocolError("proof_not_accepted")
 
     def grant(self, request):
+        from .models import Profile
+        try:
+            request = {**request, "profile":Profile.model_validate(request["profile"]).model_dump()}
+        except (ValueError, KeyError, TypeError) as exc:
+            raise ProtocolError("invalid_request") from exc
         body = self.request("POST", "/api/v1/measurement-grants", request)
         try:
             grant = Grant.model_validate(verify(body, self.server_key, "grant-v1"))

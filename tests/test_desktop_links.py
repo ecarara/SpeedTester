@@ -45,7 +45,7 @@ class PortalLinksTests(unittest.TestCase):
         self.assertEqual(set(DISCLOSURE_CATALOG),{'pt-BR','en','es'})
         for locale,catalog in DISCLOSURE_CATALOG.items():
             self.assertTrue(catalog['intro'])
-            self.assertEqual(len(catalog['sections']),8)
+            self.assertEqual(len(catalog['sections']),9)
             self.assertTrue(all(title and description for title,description in catalog['sections']))
             for key in ('data','data_offline','data_portal','portal_link','copy_link','link_copied',
                     'browser_requested','browser_unavailable','invalid_portal'):

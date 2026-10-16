@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from .quadrants import plan_day_slots, quadrant_for_timestamp, SLOT_END_MARGIN_SECONDS
 
 FORMAT = 'quadrants-v1'
+CENTRAL_FORMAT = 'quadrants-server-v1'
 HEADER = 'schedule:cursor'
 GRACE_SECONDS = 600
 TEST_SECONDS = 30
@@ -26,9 +27,16 @@ def policy(timezone_name=None):
 
 def migrate_installation(queue, config, timezone_name=None):
     """Discard the old interval cache; preserve keys, tokens, profile and queue."""
+    from .models import Profile
+    normalized = Profile.model_validate(config['profile']).model_dump()
+    changed = normalized != config['profile']
+    if changed:
+        normalized['version'] = config['profile']['version'] + 1
+        config = {**config, 'profile': normalized}
+        queue.state('installation', config)
     if 'schedule' in config:
         DailySchedule(queue, config['schedule'])
-        return config, False
+        return config, changed
     migrated = {key: value for key, value in config.items() if key != 'interval'}
     migrated['schedule'] = policy(timezone_name)
     queue.state('installation', migrated)
@@ -38,11 +46,14 @@ def migrate_installation(queue, config, timezone_name=None):
 class DailySchedule:
     def __init__(self, queue, configuration):
         self.queue, self.policy = queue, configuration
-        if set(configuration) != {'format', 'timezone', 'seed'} or configuration['format'] != FORMAT:
+        if set(configuration) != {'format', 'timezone', 'seed'} or configuration['format'] not in {FORMAT, CENTRAL_FORMAT}:
             raise ValueError('invalid_schedule_policy')
         if not isinstance(configuration['seed'], str) or not 16 <= len(configuration['seed']) <= 64:
             raise ValueError('invalid_schedule_seed')
         self.zone = ZoneInfo(configuration['timezone'])
+        from .crypto import digest
+        self.namespace = 'schedule:central:' + digest(configuration) if configuration['format'] == CENTRAL_FORMAT else 'schedule'
+        self.header_key = self.namespace + ':cursor'
 
     def _save(self, conn, key, value):
         if self.queue._read_state(conn,key) != value:
@@ -52,12 +63,20 @@ class DailySchedule:
     def key(day):
         return 'schedule:day:' + day.isoformat()
 
+    def day_key(self, day):
+        return self.namespace + ':day:' + day.isoformat()
+
     def _day(self, conn, day, floor):
-        stored = self.queue._read_state(conn, self.key(day))
+        stored = self.queue._read_state(conn, self.day_key(day))
         if stored is not None:
             return stored
         slots = []
-        for item in plan_day_slots(day, self.policy['timezone'], schedule_seed=self.policy['seed']):
+        if self.policy['format'] == CENTRAL_FORMAT:
+            from .central_slots import plan_central_day_slots
+            planned = plan_central_day_slots(day, self.policy['timezone'], self.policy['seed'])
+        else:
+            planned = plan_day_slots(day, self.policy['timezone'], schedule_seed=self.policy['seed'])
+        for item in planned:
             at = int(datetime.fromisoformat(item.scheduled_for.replace('Z', '+00:00')).timestamp())
             end_hour = {'madrugada': 6, 'manha': 12, 'tarde': 18, 'noite': 24}[item.quadrant]
             end_day = day + timedelta(days=1) if end_hour == 24 else day
@@ -66,11 +85,11 @@ class DailySchedule:
             slots.append({'quadrant': item.quadrant, 'index': item.slot_index, 'at': at,
                 'deadline': deadline, 'end_at': int(end.timestamp()), 'state': 'pending' if at >= floor else 'skipped'})
         result = {'date': day.isoformat(), 'timezone': self.policy['timezone'], 'seed': self.policy['seed'], 'slots': slots}
-        self._save(conn, self.key(day), result)
+        self._save(conn, self.day_key(day), result)
         return result
 
     def _refresh(self, conn, now, activate=False):
-        header = self.queue._read_state(conn, HEADER)
+        header = self.queue._read_state(conn, self.header_key)
         if header is None:
             header = {'policy': self.policy, 'not_before': now + 60, 'last_now': now, 'last_day': None}
         if header['policy'] != self.policy:
@@ -85,12 +104,12 @@ class DailySchedule:
             for day in {previous, previous + timedelta(days=1)}:
                 if day >= today:
                     continue
-                record = self.queue._read_state(conn, self.key(day))
+                record = self.queue._read_state(conn, self.day_key(day))
                 if record:
                     for slot in record['slots']:
                         if slot['state'] in {'pending', 'claimed'}:
                             slot['state'] = 'interrupted' if slot['state'] == 'claimed' else 'missed'
-                    self._save(conn, self.key(day), record)
+                    self._save(conn, self.day_key(day), record)
         days = []
         quadrant = quadrant_for_timestamp(datetime.fromtimestamp(effective, timezone.utc), self.policy['timezone'])
         for day in (today, today + timedelta(days=1)):
@@ -103,10 +122,10 @@ class DailySchedule:
                         slot['state'] = 'skipped'
                     elif slot['deadline'] < effective or (day == today and slot['at'] <= effective and slot['quadrant'] != quadrant):
                         slot['state'] = 'missed'
-            self._save(conn, self.key(day), record)
+            self._save(conn, self.day_key(day), record)
             days.append(record)
         header.update(last_now=effective, last_day=today.isoformat())
-        self._save(conn, HEADER, header)
+        self._save(conn, self.header_key, header)
         pending = [slot['at'] for day in days for slot in day['slots'] if slot['state'] == 'pending']
         self._save(conn, 'next_due', min(pending) if pending else None)
         return header, days
@@ -130,7 +149,7 @@ class DailySchedule:
                         # Reservation and grant identity commit before any request/runner.
                         slot.update(state='claimed', request_id=str(uuid4()))
                         self._save(conn, request_key, slot['request_id'])
-                        self._save(conn, self.key(datetime.fromisoformat(day['date']).date()), day)
+                        self._save(conn, self.day_key(datetime.fromisoformat(day['date']).date()), day)
                         pending = [s['at'] for d in days for s in d['slots'] if s['state'] == 'pending']
                         self._save(conn, 'next_due', min(pending) if pending else None)
                         return {**slot, 'date': day['date']}
@@ -139,7 +158,7 @@ class DailySchedule:
     def finish(self, slot, *, attempt_id=None):
         with self.queue.connection() as conn:
             conn.execute('BEGIN IMMEDIATE')
-            key = 'schedule:day:' + slot['date']
+            key = self.namespace + ':day:' + slot['date']
             day = self.queue._read_state(conn, key)
             original = next(s for s in day['slots'] if s['quadrant'] == slot['quadrant'] and s['index'] == slot['index'])
             if original.get('request_id') != slot['request_id']:

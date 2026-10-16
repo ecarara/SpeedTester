@@ -15,6 +15,7 @@ from .input_methods import bind_dead_keys
 from .schedule import local_timezone
 from .disclosure import DISCLOSURE_CATALOG
 from .desktop_links import portal_url, pairing_url, request_browser
+from .profile_text import uppercase_text
 
 BACKGROUND, PAPER, INK, MUTED, ACCENT = "#f2f1e9", "#ffffff", "#112b2a", "#49615c", "#c1ef55"
 
@@ -38,6 +39,10 @@ class Installer(tk.Tk):
         self.schedule_timezone = local_timezone()
         self.fields = {key: tk.StringVar(value=value) for key, value in {
             "origin": DEFAULT_SERVER, "operator": "", "country": "BR", "region": "", "city": ""}.items()}
+        # Preserve spaces/cursor while typing; collapse whitespace on validation.
+        for field in ("operator", "country", "region", "city"):
+            variable = self.fields[field]
+            variable.trace_add("write", lambda *_args, value=variable: self.uppercase_field(value))
         self.access, self.link = tk.StringVar(), tk.StringVar()
         self.contribute, self.purge = tk.BooleanVar(value=False), tk.BooleanVar(value=False)
         self.languages = tk.StringVar(value="Português")
@@ -48,6 +53,13 @@ class Installer(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.render()
         self.after(100, self.drain)
+
+    @staticmethod
+    def uppercase_field(variable):
+        value = variable.get()
+        converted = uppercase_text(value)
+        if value != converted:
+            variable.set(converted)
 
     def t(self, key):
         return TEXT[self.locale][key]
@@ -596,6 +608,12 @@ class Installer(tk.Tk):
             reset_tzpath(paths)
             ZoneInfo.clear_cache()
         import os
+        if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted":
+            from .machine import machine_identity
+            first=machine_identity("https://server.example")
+            assert first == machine_identity("https://SERVER.example:443/")
+            assert first["machine_id"] != machine_identity("https://another.example")["machine_id"]
+            assert len(first["machine_id"]) == 64
         if self.tk.call("tk","windowingsystem")=="x11" and os.environ.get("SPEEDTESTER_INPUT_SMOKE") in {"1", "fallback"}:
             from .input_methods import smoke_dead_keys
             smoke_dead_keys(self)

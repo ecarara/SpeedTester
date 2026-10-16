@@ -10,12 +10,13 @@ from .models import Observation,Manifest,METRICS
 from .client import ProtocolError
 
 
-TERMINAL_ATTEMPT_CODES=frozenset({"start_expired","grant_expired","attempt_expired","legal_context_changed","test_target_changed"})
+TERMINAL_ATTEMPT_CODES=frozenset({"start_expired","grant_expired","attempt_expired","legal_context_changed","test_target_changed","machine_identity_required","schedule_update_required"})
 
 
 class CommunityAgent:
-    def __init__(self,client,queue,measurement_key,profile,runner):
+    def __init__(self,client,queue,measurement_key,profile,runner,*,schedule_slot=None):
         self.client,self.queue,self.key,self.profile,self.runner=client,queue,measurement_key,profile,runner
+        self.schedule_slot=schedule_slot
         self.destination=digest({"origin":client.origin,"server_key":client.server_key.public_bytes_raw().hex(),"possession_key":client.possession_key.public_key().public_bytes_raw().hex()})
 
     def state(self,key,value=None):
@@ -55,6 +56,8 @@ class CommunityAgent:
         if request_id is None:
             request_id=str(uuid4());self.state("grant_request",request_id)
         request={"request_id":request_id,"profile":self.profile.model_dump(),"runner":self.runner}
+        if self.schedule_slot is not None:
+            request["schedule_slot"]=self.schedule_slot
         grant=self.client.grant(request)
         # Persist verified evidence before checking the start window.
         self.state("active_attempt",grant.model_dump())
@@ -75,7 +78,7 @@ class CommunityAgent:
                     grant=Grant.model_validate(active)
                     # A restarted process never executes a previously active grant.
                     self.client.start(grant)
-                    return self._complete(grant,dict.fromkeys(METRICS),True,int(time.time()))
+                    return self._complete(grant,dict.fromkeys(METRICS),True,grant.issued_at)
                 if not allow_new:
                     return None
                 return self._measure(self._authorize(getattr(execute,"__dict__",{}).get("validate_grant")),execute)

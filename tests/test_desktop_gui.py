@@ -93,7 +93,7 @@ class GraphicalFlows(unittest.TestCase):
             self.window.languages.set(language);self.window.change_language();self.window.update()
             self.assertEqual(self.window.configuration()['profile']['access_type'],'fiber')
             self.assertEqual(self.window.configuration()['profile']['link_type'],'ethernet')
-            self.assertEqual(self.window.fields['region'].get(),'Test region')
+            self.assertEqual(self.window.fields['region'].get(),'TEST REGION')
         self.click('data')
         self.assertIn('Sistema',self.window.disclosure_text.get('1.0','end'))
         self.assertEqual(self.window.disclosure_text.cget('state'),'disabled')
@@ -186,6 +186,21 @@ class GraphicalFlows(unittest.TestCase):
         self.assertEqual(self.native_calls,[('install',False)])
         self.click('later');self.click('manage');self.click('save')
         self.assertIsNotNone(self.window.pairing)
+        self.assertFalse(self.engine.status()['measurements_enabled'])
+
+    def test_profile_fields_uppercase_typing_and_paste_but_preserve_url_and_accents(self):
+        self.click('install');self.fill()
+        values={'operator':'  opéradora   exemplo ','country':'br','region':'sa\u0303o paulo','city':'guarulhos'}
+        for key,value in values.items():
+            entry=self.window.entries[key]
+            entry.delete(0,'end');entry.insert(0,value);self.window.update()
+            self.assertEqual(entry.get(),__import__('unicodedata').normalize('NFC',value.upper()))
+        self.window.fields['origin'].set('https://server.example')
+        profile=self.window.configuration()['profile']
+        self.assertEqual([profile[k] for k in ('operator','country_code','region','city')],['OPÉRADORA EXEMPLO','BR','SÃO PAULO','GUARULHOS'])
+        self.assertEqual(self.window.fields['origin'].get(),'https://server.example')
+        self.click('continue')
+        self.assertEqual(self.engine.configuration().profile.region,'SÃO PAULO')
         self.assertFalse(self.engine.status()['measurements_enabled'])
 
     def test_pair_approval_schedule_errors_enable_cancel_pause_and_account_origin(self):

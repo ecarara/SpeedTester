@@ -176,7 +176,7 @@ class Installer(tk.Tk):
             anchor="w", justify="left", wraplength=670).pack(fill="x", pady=(0, 14))
         description=self.t(detail)
         if self.page=="status":description+="\n"+self.t("version_label")+": "+build_label()
-        self.label(self.content, description, color=MUTED, width=670).pack(fill="x", pady=(0, 22))
+        self.label(self.content, description, color=MUTED, width=620 if self.page == "status" else 670).pack(fill="x", pady=(0, 22))
 
     def show(self, page):
         self.page = page

@@ -46,10 +46,12 @@ class GraphicalFlows(unittest.TestCase):
         self.addCleanup(lambda: self.window.destroy() if self.window.winfo_exists() else None)
         self.dialogs = []
         self.confirm = True
-        for name in ('showerror','showinfo','askyesno'):
+        for name in ('showerror','showinfo'):
             patcher = patch('speedtester_protocol.desktop_gui.messagebox.'+name,
                 side_effect=lambda *a, _name=name, **kw: self.dialogs.append((_name, a)) or self.confirm)
             patcher.start();self.addCleanup(patcher.stop)
+        self.confirmation_patcher = patch('speedtester_protocol.desktop_gui.Installer.ask_confirmation', side_effect=lambda *a: self.confirm)
+        self.confirmation_patcher.start();self.addCleanup(self.confirmation_patcher.stop)
         patcher=patch('speedtester_protocol.desktop_gui.request_browser',return_value={'ok':True,'opened':False})
         self.browser=patcher.start();self.addCleanup(patcher.stop)
         self.window.update()
@@ -84,6 +86,119 @@ class GraphicalFlows(unittest.TestCase):
             self.window.fields[key].set(value)
         self.window.access.set(self.window.t('fiber'))
         self.window.link.set(self.window.t('ethernet'))
+
+    def answer_confirmation(self, operation, decision, expected_title=None):
+        errors = []
+        deadline = time.monotonic() + 3
+        def answer():
+            popup = getattr(self.window, 'confirmation_window', None)
+            if popup is None or not popup.winfo_exists() or not popup.winfo_viewable():
+                if time.monotonic() < deadline:
+                    self.window.after(20, answer)
+                    return
+                errors.append(AssertionError('Confirmation did not become visible'))
+                return
+            try:
+                self.assertEqual(popup.title(), expected_title or self.window.t('enable'))
+                labels = [w.cget('text') for w in self.widgets(popup) if isinstance(w, self.tk.Label)]
+                buttons = [w for w in self.widgets(popup) if isinstance(w, self.tk.Button)]
+                expected = {'pt-BR': ('Sim', 'Não'), 'en': ('Yes', 'No'), 'es': ('Sí', 'No')}[self.window.locale]
+                self.assertEqual({w.cget('text') for w in buttons}, set(expected))
+                for widget in self.widgets(popup):
+                    self.assertLessEqual(widget.winfo_rootx()+widget.winfo_width(), popup.winfo_rootx()+popup.winfo_width())
+                    self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(), popup.winfo_rooty()+popup.winfo_height())
+                if expected_title is None:
+                    self.assertEqual(labels, [self.window.t('enable_confirm')])
+                    self.assertFalse(any(word in labels[0].lower() for word in ('orçamento', 'budget', 'presupuesto')))
+                yes = next(w for w in buttons if w.cget('text') == expected[0])
+                no = next(w for w in buttons if w.cget('text') == expected[1])
+                if decision == 'close':
+                    popup.tk.eval(popup.protocol('WM_DELETE_WINDOW'))
+                elif decision in ('escape', 'enter_no', 'enter_yes'):
+                    (yes if decision == 'enter_yes' else no).focus_force()
+                    popup.update()
+                    popup.event_generate('<Escape>' if decision == 'escape' else '<Return>')
+                else:
+                    (yes if decision == 'yes' else no).invoke()
+            except Exception as exc:
+                errors.append(exc)
+            finally:
+                if popup.winfo_exists():
+                    popup.destroy()
+        self.window.after(20, answer)
+        self.click(operation)
+        if errors:
+            raise errors[0]
+
+    def test_confirmation_buttons_and_cancel_keyboard_follow_selected_app_language(self):
+        self.click('install');self.fill();self.click('continue')
+        self.provider.approved=True;self.engine.next_poll=0
+        self.assertEqual(self.engine.tick(),'paired')
+        self.window.poll_pairing();self.settle()
+        self.confirmation_patcher.stop()
+        with patch('speedtester_protocol.desktop_gui.messagebox.askyesno', side_effect=AssertionError('Native buttons ignore app language')):
+            for language in ('Português','English','Español'):
+                self.window.languages.set(language);self.window.change_language();self.window.update()
+                for decision in ('no','escape','close','enter_no'):
+                    self.answer_confirmation('enable',decision)
+                    self.assertFalse(self.engine.status()['measurements_enabled'])
+                self.answer_confirmation('enable','enter_yes')
+                self.assertTrue(self.window.snapshot['measurements_enabled'])
+                self.click('pause')
+                self.answer_confirmation('enable','yes')
+                self.assertTrue(self.window.snapshot['measurements_enabled'])
+                self.click('pause')
+        self.assertEqual(self.provider.calls.count(('POST','/api/v1/measurement-grants')),0)
+
+    def test_repair_and_uninstall_use_translated_confirmation_buttons(self):
+        self.confirmation_patcher.stop()
+        for language in ('Português','English','Español'):
+            self.window.languages.set(language);self.window.change_language();self.window.update()
+            self.answer_confirmation('repair','no',self.window.t('repair'))
+            self.click('uninstall')
+            self.answer_confirmation('uninstall','close',self.window.t('uninstall'))
+            self.click('back')
+        self.assertEqual(self.native_calls,[])
+        self.assertEqual(self.provider.calls,[])
+
+    def test_status_explains_completed_installation_paused_active_and_blocked_without_measurements(self):
+        self.click('install');self.fill();self.click('continue')
+        self.provider.approved=True;self.engine.next_poll=0
+        self.assertEqual(self.engine.tick(),'paired')
+        self.window.poll_pairing();self.settle()
+        for language in ('Português','English','Español'):
+            self.window.languages.set(language);self.window.change_language();self.window.update()
+            labels=[w.cget('text') for w in self.widgets() if isinstance(w,self.tk.Label)]
+            self.assertIn(self.window.t('setup_complete'),labels)
+            self.assertIn(self.window.t('next_paused'),labels)
+            self.assertNotIn(self.window.t('tests_active'),labels)
+            calls=list(self.provider.calls)
+            self.click('refresh_status')
+            self.assertEqual(self.provider.calls,calls,'Refreshing local status must not contact the Server')
+            self.assertGreater(self.window.snapshot['observed_at'],0)
+            self.assertEqual(self.window.snapshot['accepted'],0)
+            self.assertIsNone(self.window.snapshot['last_attempt_at'])
+            self.provider.target_available=False;self.click('enable')
+            self.click('refresh_status')
+            labels=[w.cget('text') for w in self.widgets() if isinstance(w,self.tk.Label)]
+            self.assertIn(self.window.t('last_notice')+' '+self.window.t('no_target'),labels)
+            self.assertFalse(self.window.snapshot['measurements_enabled'])
+            self.provider.target_available=True;self.click('enable')
+            labels=[w.cget('text') for w in self.widgets() if isinstance(w,self.tk.Label)]
+            self.assertIn(self.window.t('tests_active'),labels)
+            self.assertIn(self.window.status_time(self.window.snapshot['next_due']),labels)
+            self.assertIsNone(self.window.snapshot['problem'])
+            self.window.geometry('960x780');self.window.update()
+            for widget in self.widgets():
+                if isinstance(widget,self.tk.Button):
+                    self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(),self.window.winfo_rooty()+self.window.winfo_height(),widget.cget('text'))
+            self.click('pause')
+        with patch.object(self.controller, 'call', side_effect=OSError('Synthetic stopped service')):
+            self.click('refresh_status')
+        labels=[w.cget('text') for w in self.widgets() if isinstance(w,self.tk.Label)]
+        self.assertIn(self.window.t('service_unavailable'),labels)
+        self.assertNotIn(self.window.t('tests_active'),labels)
+        self.assertEqual(self.provider.calls.count(('POST','/api/v1/measurement-grants')),0)
 
     def test_install_optional_pair_cancel_return_and_all_languages_preserve_form(self):
         self.click('install')

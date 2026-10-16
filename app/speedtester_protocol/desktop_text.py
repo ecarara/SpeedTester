@@ -27,7 +27,7 @@ TEXT = {
 "retry_pair":"Gerar / recuperar código", "later":"Concluir sem vincular agora", "paired":"Client vinculado", "waiting_pair":"Aguardando sua autorização no portal…",
 "status":"Seu serviço", "running":"Serviço em execução", "unpaired":"Aguardando vínculo", "paused":"Agenda pausada", "enabled":"Agenda habilitada", "pending":"Registros aguardando envio", "quarantined":"Registros preservados para revisão",
 "status_detail":"Você pode fechar esta janela. O serviço é independente da interface e inicia com o sistema.",
-"enable":"Ativar agenda", "enable_confirm":"Ativar medições futuras segundo a agenda e o orçamento autorizado pelo Server? Nenhuma medição é executada agora.",
+"enable":"Ativar agenda", "enable_confirm":"Deseja ativar os testes automáticos nos próximos horários agendados? Nenhum teste será executado agora.",
 "pause":"Pausar agenda", "manage":"Configurar / vincular", "account":"Abrir minha conta no Server", "home":"Início",
 "repair_confirm":"O serviço será parado, o banco verificado e um backup protegido será criado. Chaves, histórico, vínculo e pendências serão preservados. A agenda ficará pausada para revisão. Continuar?",
 "remove_title":"Desinstalar com segurança", "remove_detail":"O serviço será interrompido e removido. Sem marcar a opção abaixo, banco cifrado, chaves e fila ficam preservados para reinstalação.",
@@ -66,7 +66,7 @@ TEXT = {
 "retry_pair":"Create / recover code", "later":"Finish without pairing now", "paired":"Client paired", "waiting_pair":"Waiting for your authorization in the portal…",
 "status":"Your service", "running":"Service running", "unpaired":"Waiting for pairing", "paused":"Schedule paused", "enabled":"Schedule enabled", "pending":"Records awaiting delivery", "quarantined":"Records preserved for review",
 "status_detail":"You can close this window. The service runs independently and starts with the operating system.",
-"enable":"Enable schedule", "enable_confirm":"Enable future measurements under the schedule and Server-authorized budget? No measurement runs now.",
+"enable":"Enable schedule", "enable_confirm":"Enable automatic tests at the next scheduled times? No test will run now.",
 "pause":"Pause schedule", "manage":"Configure / pair", "account":"Open my Server account", "home":"Home",
 "repair_confirm":"The service will stop, the database will be checked and a protected backup created. Keys, history, pairing and pending records will be preserved. The schedule will stay paused for review. Continue?",
 "remove_title":"Uninstall safely", "remove_detail":"The service will be stopped and removed. Unless you select the option below, the encrypted database, keys and queue remain available for reinstallation.",
@@ -105,7 +105,7 @@ TEXT = {
 "retry_pair":"Generar / recuperar código", "later":"Finalizar sin vincular ahora", "paired":"Client vinculado", "waiting_pair":"Esperando tu autorización en el portal…",
 "status":"Tu servicio", "running":"Servicio en ejecución", "unpaired":"Esperando vínculo", "paused":"Agenda en pausa", "enabled":"Agenda habilitada", "pending":"Registros pendientes de envío", "quarantined":"Registros conservados para revisión",
 "status_detail":"Puedes cerrar esta ventana. El servicio es independiente y se inicia con el sistema operativo.",
-"enable":"Activar agenda", "enable_confirm":"¿Activar mediciones futuras según la agenda y el presupuesto autorizado por el Server? No se ejecutará ninguna medición ahora.",
+"enable":"Activar agenda", "enable_confirm":"¿Quieres activar las pruebas automáticas en los próximos horarios programados? No se ejecutará ninguna prueba ahora.",
 "pause":"Pausar agenda", "manage":"Configurar / vincular", "account":"Abrir mi cuenta en el Server", "home":"Inicio",
 "repair_confirm":"Se detendrá el servicio, se verificará la base de datos y se creará una copia protegida. Se conservarán claves, historial, vínculo y pendientes. La agenda quedará en pausa para revisión. ¿Continuar?",
 "remove_title":"Desinstalar con seguridad", "remove_detail":"Se detendrá y eliminará el servicio. Si no seleccionas la opción siguiente, la base cifrada, las claves y la cola se conservarán para reinstalar.",
@@ -210,3 +210,123 @@ for _locale, _messages in _PAIRING_TEXT.items():
 TEXT['pt-BR']["data_detail"] = 'Após aceite e vínculo: perfil, métricas separadas, sistema operacional, identificador pseudônimo da máquina, fuso e registros de autenticação e integridade. Consulte a lista completa antes de autorizar.'
 TEXT['en']["data_detail"] = 'After consent and pairing: profile, separate metrics, operating system, pseudonymous machine identifier, time zone, and authentication/integrity records. Read the full list before authorizing.'
 TEXT['es']["data_detail"] = 'Tras aceptar y vincular: perfil, métricas separadas, sistema operativo, identificador seudónimo del equipo, zona horaria y registros de autenticación e integridad. Lee la lista completa antes de autorizar.'
+
+
+# Confirmation buttons and status follow the selected app language, not the OS.
+_STATUS_TEXT = {'pt-BR': {'yes': 'Sim',
+           'no': 'Não',
+           'status': 'Estado do Client',
+           'status_detail': 'Consulte o serviço, a agenda e os envios. Você pode fechar esta janela; o '
+                            'serviço funciona em segundo plano.',
+           'setup_complete': 'Instalação e vínculo concluídos · testes pausados',
+           'setup_complete_detail': 'Não é necessário instalar nem vincular novamente. Ative os testes '
+                                    'automáticos quando quiser habilitar os próximos horários da agenda.',
+           'tests_active': 'Testes automáticos ativados',
+           'tests_active_detail': 'O Client aguarda os horários agendados. O computador precisa estar ligado '
+                                  'e conectado; perder um horário não gera teste extra.',
+           'setup_needed': 'Serviço instalado · configuração pendente',
+           'setup_needed_detail': 'Preencha os dados da conexão para concluir a configuração.',
+           'local_ready': 'Instalação concluída · contribuição desativada',
+           'local_ready_detail': 'O Client não enviará medições comunitárias. Para contribuir, revise a '
+                                 'configuração e conclua o vínculo.',
+           'pair_needed': 'Configuração salva · vínculo pendente',
+           'pair_needed_detail': 'Conclua o vínculo com sua conta para habilitar os testes automáticos.',
+           'status_unknown': 'Status ainda não consultado',
+           'status_unknown_detail': 'Atualize o status para consultar o serviço instalado.',
+           'service_response': 'Última resposta do serviço',
+           'next_test': 'Próximo teste agendado',
+           'next_paused': 'Aguardando ativação dos testes',
+           'last_attempt': 'Última tentativa finalizada',
+           'accepted_records': 'Registros confirmados pelo servidor',
+           'not_recorded': 'Sem registro disponível',
+           'last_notice': 'Último aviso:',
+           'connection_notice': 'Não foi possível comunicar com o servidor. Confira a conexão e atualize o '
+                                'status.',
+           'storage_notice': 'O limite de armazenamento foi atingido. Os dados existentes foram preservados '
+                             'para envio.',
+           'refresh_status': 'Atualizar status',
+           'enable': 'Ativar testes automáticos',
+           'pause': 'Pausar testes automáticos',
+           'manage': 'Revisar configuração',
+           'account': 'Minha conta no servidor',
+           'copy_info': 'Copiar diagnóstico',
+           'home': 'Instalação e manutenção'},
+ 'en': {'yes': 'Yes',
+        'no': 'No',
+        'status': 'Client status',
+        'status_detail': 'Check the service, schedule and deliveries. You can close this window; the service '
+                         'runs in the background.',
+        'setup_complete': 'Installation and pairing complete · tests paused',
+        'setup_complete_detail': 'You do not need to install or pair again. Enable automatic tests when you '
+                                 'want to activate future scheduled times.',
+        'tests_active': 'Automatic tests enabled',
+        'tests_active_detail': 'The Client is waiting for scheduled times. The computer must be on and '
+                               'connected; missed times do not trigger extra tests.',
+        'setup_needed': 'Service installed · configuration needed',
+        'setup_needed_detail': 'Enter your connection details to complete configuration.',
+        'local_ready': 'Installation complete · contribution disabled',
+        'local_ready_detail': 'The Client will not submit community measurements. To contribute, review '
+                              'configuration and complete pairing.',
+        'pair_needed': 'Configuration saved · pairing needed',
+        'pair_needed_detail': 'Complete pairing with your account to enable automatic tests.',
+        'status_unknown': 'Status not checked yet',
+        'status_unknown_detail': 'Refresh status to check the installed service.',
+        'service_response': 'Last service response',
+        'next_test': 'Next scheduled test',
+        'next_paused': 'Waiting for tests to be enabled',
+        'last_attempt': 'Last finalized attempt',
+        'accepted_records': 'Records confirmed by the server',
+        'not_recorded': 'No record available',
+        'last_notice': 'Last notice:',
+        'connection_notice': 'Could not communicate with the server. Check connectivity and refresh status.',
+        'storage_notice': 'The storage limit was reached. Existing records are preserved for delivery.',
+        'refresh_status': 'Refresh status',
+        'enable': 'Enable automatic tests',
+        'pause': 'Pause automatic tests',
+        'manage': 'Review configuration',
+        'account': 'My server account',
+        'copy_info': 'Copy diagnostics',
+        'home': 'Installation & maintenance'},
+ 'es': {'yes': 'Sí',
+        'no': 'No',
+        'status': 'Estado del Client',
+        'status_detail': 'Consulta el servicio, la agenda y los envíos. Puedes cerrar esta ventana; el '
+                         'servicio funciona en segundo plano.',
+        'setup_complete': 'Instalación y vínculo completos · pruebas en pausa',
+        'setup_complete_detail': 'No es necesario instalar ni vincular de nuevo. Activa las pruebas '
+                                 'automáticas cuando quieras habilitar los próximos horarios programados.',
+        'tests_active': 'Pruebas automáticas activadas',
+        'tests_active_detail': 'El Client espera los horarios programados. El equipo debe estar encendido y '
+                               'conectado; los horarios perdidos no generan pruebas adicionales.',
+        'setup_needed': 'Servicio instalado · falta configuración',
+        'setup_needed_detail': 'Introduce los datos de tu conexión para completar la configuración.',
+        'local_ready': 'Instalación completa · contribución desactivada',
+        'local_ready_detail': 'El Client no enviará mediciones comunitarias. Para contribuir, revisa la '
+                              'configuración y completa el vínculo.',
+        'pair_needed': 'Configuración guardada · falta vinculación',
+        'pair_needed_detail': 'Completa el vínculo con tu cuenta para habilitar las pruebas automáticas.',
+        'status_unknown': 'Estado aún no consultado',
+        'status_unknown_detail': 'Actualiza el estado para consultar el servicio instalado.',
+        'service_response': 'Última respuesta del servicio',
+        'next_test': 'Próxima prueba programada',
+        'next_paused': 'Esperando activación de las pruebas',
+        'last_attempt': 'Último intento finalizado',
+        'accepted_records': 'Registros confirmados por el servidor',
+        'not_recorded': 'Sin registro disponible',
+        'last_notice': 'Último aviso:',
+        'connection_notice': 'No se pudo comunicar con el servidor. Comprueba la conexión y actualiza el '
+                             'estado.',
+        'storage_notice': 'Se alcanzó el límite de almacenamiento. Los datos existentes se conservan para su '
+                          'envío.',
+        'refresh_status': 'Actualizar estado',
+        'enable': 'Activar pruebas automáticas',
+        'pause': 'Pausar pruebas automáticas',
+        'manage': 'Revisar configuración',
+        'account': 'Mi cuenta en el servidor',
+        'copy_info': 'Copiar diagnóstico',
+        'home': 'Instalación y mantenimiento'}}
+for _locale, _messages in _STATUS_TEXT.items():
+    TEXT[_locale].update(_messages)
+
+for _locale, _title, _detail in (("pt-BR", "Não foi possível consultar o serviço", "O status anterior não confirma que o serviço continua ativo. Tente atualizar; se o problema persistir, use Reparar instalação."), ("en", "Could not check the service", "The previous status does not confirm the service is still active. Try refreshing; if the problem persists, use Repair installation."), ("es", "No se pudo consultar el servicio", "El estado anterior no confirma que el servicio siga activo. Intenta actualizar; si el problema persiste, usa Reparar instalación.")):
+    TEXT[_locale].update(service_unavailable=_title, service_unavailable_detail=_detail)

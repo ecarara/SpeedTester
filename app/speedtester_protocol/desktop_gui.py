@@ -74,6 +74,60 @@ class Installer(tk.Tk):
             fg=INK, activebackground="#b1df47", activeforeground=INK, relief="flat", borderwidth=0,
             padx=18, pady=12, font=("Helvetica", 12, "bold"), cursor="hand2", takefocus=True)
 
+    def ask_confirmation(self, title_key, message_key):
+        """Own translated buttons; native message boxes follow the OS locale."""
+        existing = getattr(self, "confirmation_window", None)
+        if existing is not None and existing.winfo_exists():
+            existing.lift()
+            return False
+        window = tk.Toplevel(self)
+        self.confirmation_window = window
+        window.title(self.t(title_key))
+        window.configure(bg=BACKGROUND, padx=24, pady=20)
+        window.transient(self)
+        window.resizable(False, False)
+        answer = False
+        def finish(value=False):
+            nonlocal answer
+            answer = value
+            if window.winfo_exists():
+                window.destroy()
+        window.protocol("WM_DELETE_WINDOW", finish)
+        self.label(window, self.t(message_key), size=13, width=460).pack(fill="x")
+        actions = tk.Frame(window, bg=BACKGROUND)
+        actions.pack(fill="x", pady=(24, 0))
+        yes = self.button(actions, "yes", lambda: finish(True), primary=True)
+        no = self.button(actions, "no", finish)
+        yes.pack(side="left")
+        no.pack(side="right")
+        no.configure(default="active")
+        window.bind("<Escape>", lambda _event: finish())
+        def enter(_event):
+            finish(window.focus_get() == yes)
+            return "break"
+        window.bind("<Return>", enter)
+        window.update_idletasks()
+        width, height = window.winfo_reqwidth(), window.winfo_reqheight()
+        x = max(0, self.winfo_rootx() + (self.winfo_width() - width) // 2)
+        y = max(0, self.winfo_rooty() + (self.winfo_height() - height) // 2)
+        window.geometry(f"+{x}+{y}")
+        window.wait_visibility()
+        window.grab_set()
+        no.focus_set()
+        self.wait_window(window)
+        return answer
+
+    def status_time(self, value):
+        if not isinstance(value, (int, float)) or value <= 0:
+            return self.t("not_recorded")
+        from datetime import datetime
+        from .central_slots import central_zone
+        zone = (self.snapshot.get("configuration") or {}).get("timezone", self.schedule_timezone)
+        try:
+            return datetime.fromtimestamp(value, central_zone(zone)).strftime("%Y-%m-%d %H:%M:%S")
+        except (ValueError, KeyError, OverflowError, OSError):
+            return self.t("not_recorded")
+
     def render(self):
         for widget in self.winfo_children():
             widget.destroy()
@@ -146,7 +200,7 @@ class Installer(tk.Tk):
             # cancelled or completed uninstall in the same window.
             self.purge.set(False)
         if operation == "repair":
-            if messagebox.askyesno(self.t("repair"), self.t("repair_confirm"), parent=self):
+            if self.ask_confirmation("repair", "repair_confirm"):
                 self.work(lambda: self.controller.native("repair"), lambda _result: self.load_status())
         else:
             self.show("remove" if operation == "uninstall" else "configure")
@@ -432,31 +486,93 @@ class Installer(tk.Tk):
         self.show("status")
 
     def load_status(self):
-        self.work(lambda: self.controller.call("status"), self.received_status)
+        def read():
+            try:
+                return self.controller.call("status")
+            except OSError:
+                return {"ok": True, "service": "unavailable"}
+        self.work(read, self.received_status)
 
     def page_status(self):
         self.heading("status", "status_detail")
-        zone=(self.snapshot.get("configuration") or {}).get("timezone",self.schedule_timezone)
-        self.label(self.content,self.t("schedule_short").format(timezone=zone),color=MUTED,size=10).pack(fill="x",pady=(0,8))
-        if self.snapshot:
-            for key, value in (("running", "✓"), ("paired" if self.snapshot.get("paired") else "unpaired", "●"),
-                    ("enabled" if self.snapshot.get("measurements_enabled") else "paused", "●"),
-                    ("pending", str(self.snapshot.get("pending", 0))), ("quarantined", str(self.snapshot.get("quarantined", 0)))):
-                row = tk.Frame(self.content, bg=PAPER, padx=18, pady=10)
-                row.pack(fill="x", pady=(0, 8))
-                self.label(row, self.t(key), size=12).pack(side="left")
-                self.label(row, value, bold=True).pack(side="right")
-        if self.snapshot.get("contribute") and not self.snapshot.get("paired"):
-            self.button(self.content, "resume_pair", self.begin_pairing, primary=True).pack(anchor="w", pady=(12, 6))
-        if self.snapshot.get("paired"):
-            key = "pause" if self.snapshot.get("measurements_enabled") else "enable"
-            self.button(self.content, key, lambda: self.schedule(key), primary=True).pack(anchor="w", pady=(16, 10))
-        self.button(self.content, "manage", self.configure_existing).pack(anchor="w", pady=6)
-        account_actions=tk.Frame(self.content,bg=BACKGROUND)
-        account_actions.pack(fill="x",pady=6)
-        self.button(account_actions,"account",self.open_account).pack(side="left")
-        self.button(account_actions,"copy_info",self.copy_information).pack(side="left",padx=8)
-        self.button(self.content, "home", lambda: self.show("welcome")).pack(anchor="w", pady=12)
+        paired = self.snapshot.get("paired", False)
+        enabled = self.snapshot.get("measurements_enabled", False)
+        if not self.snapshot:
+            state, detail = "status_unknown", "status_unknown_detail"
+        elif self.snapshot.get("service") == "unavailable":
+            state, detail = "service_unavailable", "service_unavailable_detail"
+        elif not self.snapshot.get("configured"):
+            state, detail = "setup_needed", "setup_needed_detail"
+        elif not self.snapshot.get("contribute"):
+            state, detail = "local_ready", "local_ready_detail"
+        elif not paired:
+            state, detail = "pair_needed", "pair_needed_detail"
+        elif enabled:
+            state, detail = "tests_active", "tests_active_detail"
+        else:
+            state, detail = "setup_complete", "setup_complete_detail"
+        panel = tk.Frame(self.content, bg=PAPER, padx=16, pady=12)
+        panel.pack(fill="x", pady=(0, 12))
+        self.label(panel, self.t(state), bold=True, size=15).pack(fill="x")
+        self.label(panel, self.t(detail), size=11, color=MUTED).pack(fill="x", pady=(6, 0))
+        problem = self.snapshot.get("problem") or {}
+        code = problem.get("code") or self.snapshot.get("code")
+        problem_key = self.status_problem(code)
+        if problem_key:
+            self.label(panel, self.t("last_notice") + " " + self.t(problem_key),
+                size=11, color="#705016").pack(fill="x", pady=(8, 0))
+        zone = (self.snapshot.get("configuration") or {}).get("timezone", self.schedule_timezone)
+        self.label(self.content, self.t("schedule_short").format(timezone=zone),
+            color=MUTED, size=10).pack(fill="x", pady=(0, 8))
+        if self.snapshot and self.snapshot.get("service") != "unavailable":
+            next_test = self.status_time(self.snapshot.get("next_due")) if enabled else self.t("next_paused")
+            rows = [("service_response", self.status_time(self.snapshot.get("observed_at"))),
+                    ("next_test", next_test),
+                    ("last_attempt", self.status_time(self.snapshot.get("last_attempt_at"))),
+                    ("accepted_records", str(self.snapshot.get("accepted", 0))),
+                    ("pending", str(self.snapshot.get("pending", 0)))]
+            if self.snapshot.get("quarantined"):
+                rows.append(("quarantined", str(self.snapshot["quarantined"])))
+            for key, value in rows:
+                row = tk.Frame(self.content, bg=PAPER, padx=12, pady=6)
+                row.pack(fill="x", pady=(0, 4))
+                self.label(row, self.t(key), size=10, width=270).pack(side="left")
+                self.label(row, value, bold=True, size=10, width=360).pack(side="right")
+        primary = tk.Frame(self.content, bg=BACKGROUND)
+        primary.pack(fill="x", pady=(10, 0))
+        if self.snapshot.get("contribute") and not paired:
+            self.button(primary, "resume_pair", self.begin_pairing, primary=True).pack(side="left")
+        elif paired:
+            key = "pause" if enabled else "enable"
+            self.button(primary, key, lambda action=key: self.schedule(action), primary=True).pack(side="left")
+        self.button(primary, "refresh_status", self.load_status).pack(side="right")
+        secondary = tk.Frame(self.content, bg=BACKGROUND)
+        secondary.pack(fill="x", pady=(10, 0))
+        for key, command in (("manage", self.configure_existing), ("account", self.open_account),
+                             ("copy_info", self.copy_information), ("home", lambda: self.show("welcome"))):
+            index = ("manage", "account", "copy_info", "home").index(key)
+            button = self.button(secondary, key, command)
+            button.configure(font=("Helvetica", 10, "bold"), pady=8, padx=10)
+            button.grid(row=index // 2, column=index % 2, sticky="w", padx=(0, 8), pady=(0, 6))
+
+    @staticmethod
+    def status_problem(code):
+        if code in {"test_target_unavailable", "invalid_test_target", "test_target_changed"}:
+            return "no_target"
+        if code == "iperf3_required":
+            return "no_runner"
+        if code == "local_or_network_failure":
+            return "connection_notice"
+        if code == "storage_limit":
+            return "storage_notice"
+        if code in {"account_suspended", "account_disabled", "client_revoked", "consent_required", "consent_withdrawn",
+                    "contribution_consent_required", "terms_acceptance_required", "legal_context_changed",
+                    "legal_acceptance_required", "acceptance_required", "documents_changed", "server_rejected",
+                    "machine_privacy_not_ready", "invalid_machine_policy", "invalid_machine_permission",
+                    "machine_identity_unavailable", "machine_identity_required", "machine_identity_changed",
+                    "schedule_update_required", "credential_expired", "invalid_token", "token_revoked"}:
+            return "blocked"
+        return None
 
     def copy_information(self):
         text=diagnostic_text(self.snapshot)+"\nTk: "+self.tk.call("package","provide","Tk")
@@ -482,7 +598,9 @@ class Installer(tk.Tk):
         self.show("configure")
 
     def schedule(self, operation):
-        if operation == "enable" and not messagebox.askyesno(self.t("enable"), self.t("enable_confirm"), parent=self):
+        if self.busy:
+            return
+        if operation == "enable" and not self.ask_confirmation("enable", "enable_confirm"):
             return
         self.work(lambda: self.controller.call(operation), self.received_status)
 
@@ -497,7 +615,9 @@ class Installer(tk.Tk):
         self.button(self.content, "back", lambda: self.show("welcome")).pack(anchor="w", pady=10)
 
     def uninstall(self):
-        if not messagebox.askyesno(self.t("uninstall"), self.t("remove_confirm"), parent=self):
+        if self.busy:
+            return
+        if not self.ask_confirmation("uninstall", "remove_confirm"):
             return
         purge = self.purge.get()
         def completed(result):
@@ -565,6 +685,22 @@ class Installer(tk.Tk):
         # Real Tk widgets and all translations; the controller never touches I/O.
         for locale in TEXT:
             self.locale = locale
+            confirmation_errors = []
+            def dismiss_confirmation():
+                popup = self.confirmation_window
+                if not popup.winfo_viewable():
+                    self.after(20, dismiss_confirmation)
+                    return
+                try:
+                    buttons = [w for child in popup.winfo_children() for w in child.winfo_children() if isinstance(w, tk.Button)]
+                    assert {w.cget("text") for w in buttons} == {self.t("yes"), self.t("no")}
+                    next(w for w in buttons if w.cget("text") == self.t("no")).invoke()
+                except Exception as exc:
+                    confirmation_errors.append(exc)
+                    popup.destroy()
+            self.after(20, dismiss_confirmation)
+            assert not self.ask_confirmation("enable", "enable_confirm")
+            assert not confirmation_errors, confirmation_errors
             for page in ("welcome", "configure", "pair", "status", "remove"):
                 self.show(page)
                 self.update()

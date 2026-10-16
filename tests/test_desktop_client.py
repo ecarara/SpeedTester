@@ -122,6 +122,27 @@ class DesktopTests(unittest.TestCase):
         self.assertIsNone(self.queue.state("installation"))
         self.runner.assert_not_called()
 
+    def test_status_is_read_only_and_keeps_activation_problem_until_successful_retry(self):
+        self.pair()
+        calls=list(self.provider.calls)
+        with self.queue.connection() as conn:
+            before=conn.execute('SELECT key,value FROM state ORDER BY key').fetchall()
+        status=self.engine.dispatch('status',{})
+        self.assertGreater(status['observed_at'],0)
+        self.assertEqual(status['accepted'],0)
+        self.assertIsNone(status['last_attempt_at'])
+        with self.queue.connection() as conn:
+            self.assertEqual(before,conn.execute('SELECT key,value FROM state ORDER BY key').fetchall())
+        self.assertEqual(self.provider.calls,calls)
+        self.provider.target_available=False
+        self.assertEqual(self.engine.dispatch('enable',{})['code'],'test_target_unavailable')
+        restored=DesktopEngine(protected_queue(self.queue.directory),transport=self.provider,runner=self.runner)
+        self.assertEqual(restored.status()['problem']['code'],'test_target_unavailable')
+        self.provider.target_available=True
+        self.assertTrue(restored.dispatch('enable',{})['measurements_enabled'])
+        self.assertIsNone(restored.status()['problem'])
+        self.runner.assert_not_called()
+
     def test_pairing_uses_signed_sdk_and_persists_tokens_without_starting_schedule(self):
         self.pair()
         self.assertTrue(self.engine.status()["paired"])

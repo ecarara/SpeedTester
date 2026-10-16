@@ -110,6 +110,9 @@ class DesktopEngine:
             "contribute": bool(configuration and configuration.contribute),
             "measurements_enabled": bool(self.queue.state(ENABLED)) and not self.maintenance,
             "next_due": self.queue.state("next_due"), "pending": counts.get("pending", 0),
+            "accepted": counts.get("accepted", 0), "observed_at": int(self.clock()),
+            "last_attempt_at": self.queue.state("desktop:last_attempt_at"),
+            "problem": self.queue.state("desktop:last_problem") or None,
             "quarantined": counts.get("quarantined", 0), "database_bytes": self.queue.path.stat().st_size,
             "last_tick": self.last_tick, "configuration": configuration.model_dump() if configuration else None}
         if self.pairing and self.pairing.expires_at > int(self.clock()):
@@ -118,6 +121,10 @@ class DesktopEngine:
                 "fingerprint": digest(credentials.identity)}
         self.last_snapshot = result
         return result
+
+    def record_problem(self, code):
+        self.last_code = code if code in DISPLAY_CODES else "server_rejected"
+        self.queue.state("desktop:last_problem", {"code": self.last_code, "at": int(self.clock())})
 
     def configure(self, arguments):
         configuration = DesktopConfiguration.model_validate(arguments)
@@ -139,6 +146,7 @@ class DesktopEngine:
             installed.pop("host", None)
             installed.pop("port", None)
             self.queue.state("installation", installed)
+        self.queue.state("desktop:last_problem", {})
         self.last_code = "ready" if old else "configured"
         return self.status()
 
@@ -220,12 +228,14 @@ class DesktopEngine:
                     self.maintenance = False
                     DailySchedule(self.queue,self.installation()["schedule"]).refresh(int(self.clock()),activate=True)
                     self.queue.state(ENABLED, True)
+                    self.queue.state("desktop:last_problem", {})
+                    self.last_code = "ready"
                 else:
                     raise ProtocolError("unknown_local_operation")
                 return self.status()
             except ProtocolError as exc:
                 # The stable code is displayed locally; secrets/bodies never leave the service.
-                self.last_code = exc.code if exc.code in DISPLAY_CODES else "server_rejected"
+                self.record_problem(exc.code)
                 return {"ok": False, "code": self.last_code}
 
     def tick(self):
@@ -276,11 +286,14 @@ class DesktopEngine:
                 return self.last_code
             try:
                 self.last_code = cycle(self.queue, transport=self.transport, runner=self.runner, now=self.last_tick, clock=self.clock)
+                if self.last_code == "attempt_completed":
+                    self.queue.state("desktop:last_attempt_at", self.last_tick)
+                self.queue.state("desktop:last_problem", {})
             except ProtocolError as exc:
                 if exc.code not in {"test_target_unavailable", "invalid_test_target", "test_target_changed"}:
                     raise
                 self.queue.state(ENABLED, False)
-                self.last_code = exc.code
+                self.record_problem(exc.code)
             return self.last_code
 
 
@@ -316,7 +329,7 @@ def run_service(state, key, stop=None, *, port=45873, maintenance=False):
                     delay = 5 if engine.pairing else 60
                 except (OSError, ValueError, ProtocolError) as exc:
                     code = exc.code if isinstance(exc, ProtocolError) else "local_or_network_failure"
-                    engine.last_code = code if code in DISPLAY_CODES else "server_rejected"
+                    engine.record_problem(code)
                     delay = min(300, max(5, delay * 2))
         finally:
             stop.set()

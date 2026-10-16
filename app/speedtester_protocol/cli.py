@@ -87,7 +87,7 @@ def await_pairing(pairing_client,pairing,sleep):
 def setup(queue,origin,*,transport=None,input_fn=input,sleep=time.sleep,repair=False):
     origin=HTTPS(origin).origin
     server=discover(origin,transport)
-    print("Dados enviados após aceite e pareamento: perfil da conexão, métricas separadas e sistema operacional/distribuição/versão/arquitetura. Detalhes: "+origin+"/data")
+    print("Dados enviados após aceite e pareamento: perfil da conexão, métricas separadas, sistema operacional/distribuição/versão/arquitetura, identificação pseudônima da máquina e fuso horário. O identificador bruto do sistema não é enviado. Detalhes: "+origin+"/data")
     config=installation_config(queue,origin,server,input_fn)
     credentials,measurement=context(queue,config,transport)
     if credentials.bundle and not repair:

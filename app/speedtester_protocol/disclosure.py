@@ -74,10 +74,10 @@ DISCLOSURE_CATALOG = {'pt-BR': {'intro': 'Veja o que o Client comunitário trans
                          'compartilhada: dois testes em cada um dos quatro períodos e até oito '
                          'tentativas por dia local. O Server mantém o fuso e a agenda sorteada e recusa '
                          'autorizações duplicadas antes do teste; mudar de token, conta ou perfil não '
-                         'cria nova cota para a mesma identificação. Reinstalação/clonagem do sistema e '
-                         'adulteração por administrador são limites desse mecanismo; ele não é '
-                         'certificação física de hardware. O identificador pseudônimo e os vínculos '
-                         'entre instalações não são publicados nos comparativos.']],
+                         'cria nova cota para a mesma identificação. Reinstalação/clonagem do sistema, '
+                         'Client modificado e identificadores falsos são limites desse mecanismo; ele '
+                         'não é certificação física de hardware. O identificador pseudônimo e os '
+                         'vínculos entre instalações não são publicados nos comparativos.']],
            'publication': {'title': 'O que poderá aparecer nos resultados públicos',
                            'text': 'Os comparativos reunirão medições de vários participantes em '
                                    'estatísticas por operadora, região, período, tecnologia e métrica. '
@@ -163,9 +163,10 @@ DISCLOSURE_CATALOG = {'pt-BR': {'intro': 'Veja o que o Client comunitário trans
                       'tests in each of four periods and up to eight attempts per local day. The Server '
                       'retains the time zone and randomized plan and rejects duplicate authorizations '
                       'before testing; changing tokens, accounts or profiles does not create a new '
-                      'quota for the same identity. OS reinstallation/cloning and administrator '
-                      'tampering are limitations; this is not physical hardware certification. The '
-                      'pseudonym and links between installations are not published in comparisons.']],
+                      'quota for the same identity. OS reinstallation/cloning, modified Clients and '
+                      'false identity claims are limitations; this is not physical hardware '
+                      'certification. The pseudonym and links between installations are not published '
+                      'in comparisons.']],
         'publication': {'title': 'What may appear in public results',
                         'text': 'Comparisons will combine measurements from multiple participants into '
                                 'statistics by provider, region, period, technology and metric. They '
@@ -257,9 +258,10 @@ DISCLOSURE_CATALOG = {'pt-BR': {'intro': 'Veja o que o Client comunitário trans
                       'cuatro períodos y hasta ocho intentos por día local. El Server conserva la zona '
                       'horaria y el plan aleatorio y rechaza autorizaciones duplicadas antes de probar; '
                       'cambiar tokens, cuentas o perfiles no crea otra cuota para la misma '
-                      'identificación. Reinstalar/clonar el sistema y la manipulación administrativa '
-                      'son limitaciones; no es certificación física de hardware. El seudónimo y los '
-                      'vínculos entre instalaciones no se publican en las comparaciones.']],
+                      'identificación. Reinstalar/clonar el sistema, modificar el Client e informar '
+                      'identificadores falsos son limitaciones; no es certificación física de hardware. '
+                      'El seudónimo y los vínculos entre instalaciones no se publican en las '
+                      'comparaciones.']],
         'publication': {'title': 'Qué podrá aparecer en los resultados públicos',
                         'text': 'Las comparaciones reunirán mediciones de varios participantes en '
                                 'estadísticas por operadora, región, período, tecnología y métrica. No '

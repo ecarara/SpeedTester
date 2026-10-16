@@ -46,6 +46,12 @@ def main():
         except pywintypes.error as exc:
             if exc.winerror!=1060:raise
         else:raise RuntimeError('Pre-existing service')
+    if layout.system=='Linux':
+        # Hosted images deliberately make /opt writable for tool installation.
+        # Restore normal host permissions only in this disposable VM; the real
+        # installer must continue rejecting insecure parents on user machines.
+        os.chown('/opt',0,0)
+        os.chmod('/opt',0o755)
     bundle=ROOT/'dist/desktop/raw'/('SpeedTesterClient.app' if layout.system=='Darwin' else 'SpeedTesterClient')
     executable=bundle/('Contents/MacOS/SpeedTesterClient' if layout.system=='Darwin' else 'SpeedTesterClient.exe' if os.name=='nt' else 'SpeedTesterClient')
     key=secrets.token_bytes(32)

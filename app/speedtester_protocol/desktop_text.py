@@ -157,3 +157,10 @@ for _code, _message in {
     "es": "Abriendo en el navegador predeterminado. Si no aparece la página, copie este enlace en su navegador.",
 }.items():
     TEXT[_code]["browser_opening"] = _message
+
+for _code, _message in {
+    "pt-BR": "Consultando o endereço do Server desta instalação para abrir sua conta…",
+    "en": "Looking up this installation's Server address to open your account…",
+    "es": "Consultando la dirección del Server de esta instalación para abrir su cuenta…",
+}.items():
+    TEXT[_code]["account_opening"] = _message

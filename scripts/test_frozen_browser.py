@@ -61,6 +61,7 @@ def main():
                 environment['XDG_DATA_HOME']=str(applications.parent)
                 environment['XDG_CONFIG_HOME']=str(config)
                 environment['BROWSER']=str(wrapper)
+                environment['XDG_UTILS_DEBUG_LEVEL']='2'
                 environment.pop('XDG_CURRENT_DESKTOP',None)
                 environment.pop('DESKTOP_SESSION',None)
             result=subprocess.run([str(executable),'--ui-smoke'],env=environment,timeout=120,capture_output=True)

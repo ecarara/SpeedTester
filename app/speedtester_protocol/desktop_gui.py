@@ -29,6 +29,8 @@ class Installer(tk.Tk):
         self.events = queue.Queue()
         self.busy = False
         self.browser_events = queue.Queue()
+        self.portal_requests = queue.Queue()
+        self.account_pending = False
         self.geometry("1040x820")
         self.minsize(960, 780)
         self.configure(bg=BACKGROUND)
@@ -126,6 +128,10 @@ class Installer(tk.Tk):
         if self.busy:
             return
         self.operation = operation
+        if operation == "uninstall":
+            # Destructive opt-in belongs to this confirmation, not a previous
+            # cancelled or completed uninstall in the same window.
+            self.purge.set(False)
         if operation == "repair":
             if messagebox.askyesno(self.t("repair"), self.t("repair_confirm"), parent=self):
                 self.work(lambda: self.controller.native("repair"), lambda _result: self.load_status())
@@ -316,6 +322,24 @@ class Installer(tk.Tk):
     def account_origin(self):
         return (self.snapshot.get("configuration") or {}).get("origin", self.fields["origin"].get())
 
+    def open_account(self):
+        if (self.snapshot.get("configuration") or {}).get("origin"):
+            self.open_url(self.account_origin(), "/account")
+            return
+        if self.account_pending:
+            return
+        self.account_pending = True
+        fallback = self.fields["origin"].get()
+        self.feedback.configure(text=self.t("account_opening"))
+        def worker():
+            try:
+                result = self.controller.call("status")
+                origin = (result.get("configuration") or {}).get("origin", fallback)
+            except Exception:
+                origin = fallback
+            self.portal_requests.put(origin)
+        threading.Thread(target=worker, daemon=True).start()
+
     def open_external(self, url):
         # Show the address immediately, even if the OS reports success but its
         # default browser never appears. Browser launches cannot block maintenance.
@@ -379,7 +403,7 @@ class Installer(tk.Tk):
         self.button(self.content, "manage", self.configure_existing).pack(anchor="w", pady=6)
         account_actions=tk.Frame(self.content,bg=BACKGROUND)
         account_actions.pack(fill="x",pady=6)
-        self.button(account_actions,"account",lambda: self.open_url(self.account_origin(),"/account")).pack(side="left")
+        self.button(account_actions,"account",self.open_account).pack(side="left")
         self.button(account_actions,"copy_info",self.copy_information).pack(side="left",padx=8)
         self.button(self.content, "home", lambda: self.show("welcome")).pack(anchor="w", pady=12)
 
@@ -417,7 +441,7 @@ class Installer(tk.Tk):
             fg=INK, activebackground=BACKGROUND, wraplength=650, justify="left",
             font=("Helvetica", 12), anchor="w").pack(fill="x", pady=(8, 24))
         self.label(self.content, self.t("revoke_notice"), color=MUTED).pack(fill="x", pady=(0, 20))
-        self.button(self.content, "account", lambda: self.open_url(self.account_origin(), "/account")).pack(anchor="w", pady=(0, 24))
+        self.button(self.content, "account", self.open_account).pack(anchor="w", pady=(0, 24))
         self.button(self.content, "uninstall", self.uninstall, primary=True).pack(anchor="w", pady=10)
         self.button(self.content, "back", lambda: self.show("welcome")).pack(anchor="w", pady=10)
 
@@ -463,6 +487,13 @@ class Installer(tk.Tk):
                 code = result.get("code") if isinstance(result, dict) else None
                 key = "no_target" if code in {"test_target_unavailable", "invalid_test_target", "test_target_changed"} else "no_runner" if code == "iperf3_required" else "blocked" if code else "error"
                 messagebox.showerror(self.t("title"), self.t(key), parent=self)
+        try:
+            while True:
+                origin = self.portal_requests.get_nowait()
+                self.account_pending = False
+                self.open_url(origin, "/account")
+        except queue.Empty:
+            pass
         try:
             while True:
                 note, opened = self.browser_events.get_nowait()

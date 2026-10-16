@@ -70,7 +70,7 @@ class GraphicalFlows(unittest.TestCase):
 
     def settle(self):
         deadline=time.monotonic()+5
-        while self.window.busy or not self.window.events.empty() or not self.window.browser_events.empty():
+        while self.window.busy or self.window.account_pending or not self.window.events.empty() or not self.window.browser_events.empty():
             self.window.update()
             self.assertLess(time.monotonic(),deadline,'UI worker did not complete')
             time.sleep(.01)
@@ -136,6 +136,13 @@ class GraphicalFlows(unittest.TestCase):
         self.assertEqual(self.dialogs[-1][0],'showerror')
         self.assertIn(self.window.t('no_target'),self.dialogs[-1][1])
         self.provider.target_available=True
+        runner=self.engine.runner
+        self.engine.runner=None
+        with patch('speedtester_protocol.desktop_service.shutil.which',return_value=None):
+            self.click('enable')
+        self.assertIn(self.window.t('no_runner'),self.dialogs[-1][1])
+        self.assertFalse(self.engine.status()['measurements_enabled'])
+        self.engine.runner=runner
         # Only synthetic target authorization; never tick with an enabled schedule.
         self.click('enable');self.assertTrue(self.window.snapshot['measurements_enabled'])
         self.click('pause');self.assertFalse(self.window.snapshot['measurements_enabled'])
@@ -165,7 +172,9 @@ class GraphicalFlows(unittest.TestCase):
         self.click('account');self.assertIn('/account?',self.window.portal_entry.get())
         self.click('close',self.window.portal_window)
         self.confirm=False;self.click('uninstall');self.assertEqual(len(self.native_calls),1)
+        self.window.purge.set(True)
         self.click('back');self.click('uninstall')
+        self.assertFalse(self.window.purge.get())
         self.confirm=True;self.click('uninstall')
         self.assertEqual(self.native_calls[-1],('uninstall',False))
         self.assertIn(self.window.t('preserved'),self.dialogs[-1][1])
@@ -190,6 +199,15 @@ class GraphicalFlows(unittest.TestCase):
         self.assertEqual(len(checkboxes),1)
         checkboxes[0].invoke();self.assertIsNone(self.window.configuration())
         checkboxes[0].invoke();self.assertIsNotNone(self.window.configuration())
+
+    def test_account_from_fresh_uninstaller_reads_persisted_server_without_reconfiguring(self):
+        self.engine.dispatch('configure',configuration())
+        self.assertEqual(self.window.snapshot,{})
+        self.click('uninstall');self.click('account')
+        self.assertEqual(self.window.portal_entry.get(),'https://server.example/account?locale=pt-BR')
+        self.assertFalse(self.window.busy)
+        self.assertEqual(self.native_calls,[])
+        self.assertEqual(self.provider.calls,[])
 
     def test_browser_dispatch_cannot_hold_maintenance_busy_and_success_always_keeps_copy_link(self):
         import threading

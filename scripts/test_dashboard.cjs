@@ -49,7 +49,9 @@ const reports = require('istanbul-reports');
     const session=await (await request.get(base+'/api/auth/session')).json();
     assert.equal((await request.post(base+'/api/availability-events',{data:{started_at:'2020-01-01T00:00:00Z',ended_at:'2020-01-01T01:00:00Z',event_type:'POWER_OUTAGE',source:'manual',note:'Synthetic test interval'},headers:{'X-CSRF-Token':session.csrf_token}})).status(),200);
     await page.locator('#dayFilter').fill('2026-10-10');await page.locator('#dayFilter').dispatchEvent('change');
-    await page.waitForFunction(()=>document.querySelector('#coverageTitle').textContent==='8 concluídos');
+    // A previous day's chart can also contain eight results. Wait for both
+    // queued refreshes to finish before focusing a point that render replaces.
+    await page.waitForFunction(()=>!state.refreshing&&!state.refreshPending&&document.querySelector('#coveragePeriod').textContent==='2026-10-10'&&document.querySelector('#coverageTitle').textContent==='8 concluídos');
     assert.equal(await page.locator('#chart circle').count(),16);
     await page.locator('#chart circle').first().focus();
     const chartDetail=await page.waitForFunction(()=>{const value=document.querySelector('#chartDetail').textContent;return /download:.*Mbps/.test(value)?value:false;});

@@ -6,6 +6,7 @@
 Uses the real frozen helper and OS service manager. Never pairs, requests a grant,
 or enables measurements. Refuses to touch any pre-existing installation.
 """
+from contextlib import closing
 import hashlib
 import json
 import os
@@ -68,7 +69,7 @@ def main():
             verify_database(directory)
             cipher=object.__new__(EncryptedQueue)
             cipher.key=(directory/'storage.key').read_bytes()
-            with sqlite3.connect((directory/'index.sqlite').as_uri()+'?mode=ro',uri=True) as db:
+            with closing(sqlite3.connect((directory/'index.sqlite').as_uri()+'?mode=ro',uri=True)) as db:
                 value=db.execute('SELECT ciphertext FROM entries WHERE id=?',('synthetic-ci-record',)).fetchone()[0]
                 assert cipher.open(value,'synthetic-ci-record:ci-evidence')=={'id':'synthetic-ci-record','metric':123}
                 assert hashlib.sha256(value).hexdigest()==evidence_hash
@@ -103,8 +104,9 @@ def main():
             cipher=object.__new__(EncryptedQueue)
             cipher.key=(directory/'storage.key').read_bytes()
             evidence=cipher.seal({'id':'synthetic-ci-record','metric':123},'synthetic-ci-record:ci-evidence')
-            with sqlite3.connect(directory/'index.sqlite') as db:
-                db.execute('INSERT INTO entries(id,ciphertext,destination) VALUES(?,?,?)',('synthetic-ci-record',evidence,'ci-evidence'))
+            with closing(sqlite3.connect(directory/'index.sqlite')) as db:
+                with db:
+                    db.execute('INSERT INTO entries(id,ciphertext,destination) VALUES(?,?,?)',('synthetic-ci-record',evidence,'ci-evidence'))
             evidence_hash=hashlib.sha256(evidence).hexdigest()
             key_hash=digest(directory/'storage.key');bootstrap_hash=digest(layout.state/'service.json')
             start_service(layout)

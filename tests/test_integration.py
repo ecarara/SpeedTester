@@ -24,6 +24,35 @@ from fixtures import IntegrationFixture, server
 
 
 class IntegrationTests(IntegrationFixture):
+    def test_summary_outliers_keep_row_labels_after_failures_and_missing_metrics(self):
+        start = datetime(2026, 10, 8, 12, tzinfo=timezone.utc)
+        # The failed row and absent upload leave gaps in the metric indices.
+        speeds = [900, None, 910, 920, 930, 940, 950, 960, 200]
+        self.store.add_samples([
+            Sample(
+                started_at=(start + timedelta(days=i)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                local_date=(start + timedelta(days=i)).date().isoformat(),
+                quadrant='tarde', runner='iperf3', is_failure=speed is None,
+                download_mbps=speed, upload_mbps=speed if i != 2 else None,
+            )
+            for i, speed in enumerate(speeds)
+        ])
+        for query in ('date=2026-10-16',
+                      'from=2026-10-10&to=2026-10-16',
+                      'from=2026-09-17&to=2026-10-16',
+                      'from=2026-07-19&to=2026-10-16', ''):
+            with self.subTest(query=query):
+                response = self.client.get('/api/summary?runner=iperf3&' + query)
+                self.assertEqual(response.status_code, 200)
+        summary = self.client.get('/api/summary?runner=iperf3').json()
+        self.assertEqual(summary['failure_count'], 1)
+        self.assertEqual(summary['outliers']['download'], [
+            {'i': 8, 'value': 200.0, 'zscore': -2.64},
+        ])
+        self.assertEqual(summary['outliers']['upload'], [
+            {'i': 8, 'value': 200.0, 'zscore': -2.44},
+        ])
+
     def test_filters_precede_pagination_and_newest_is_present(self):
         self.add_many()
         all_rows = self.client.get('/api/samples').json()

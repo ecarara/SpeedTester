@@ -996,7 +996,8 @@ def _compute_outliers(df: pd.DataFrame) -> dict:
         mask = (s < lo) | (s > hi)
         out = []
         for i, v in s[mask].items():
-            out.append({"i": int(i), "value": round(float(v), 2), "zscore": round(float(z.iloc[i]), 2)})
+            # Filtering failures/null metrics preserves row labels, not positions.
+            out.append({"i": int(i), "value": round(float(v), 2), "zscore": round(float(z.loc[i]), 2)})
         return out
 
     return {"download": _series("download_mbps"), "upload": _series("upload_mbps")}

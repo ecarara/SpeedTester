@@ -52,10 +52,11 @@ def main():
                 log=Path(temporary)/'browser.log'
                 wrapper.write_text('#!/bin/sh\necho invoked >> '+shlex.quote(str(log))+'\nexec '+shlex.quote(chrome)+' --headless --dump-dom --no-sandbox --disable-gpu --no-first-run --no-default-browser-check --user-data-dir='+shlex.quote(temporary+'/profile')+' "$@" >> '+shlex.quote(str(log))+' 2>&1\n')
                 wrapper.chmod(0o700)
+                assert not any(c.isspace() for c in str(wrapper))
                 applications=Path(temporary)/'data/applications'
                 applications.mkdir(parents=True)
                 (applications/'speedtester-browser-probe.desktop').write_text(
-                    '[Desktop Entry]\nType=Application\nName=SpeedTester CI real Chrome\nExec="'+str(wrapper)+'" %u\nMimeType=x-scheme-handler/http;x-scheme-handler/https;\n')
+                    '[Desktop Entry]\nType=Application\nName=SpeedTester CI real Chrome\nExec='+str(wrapper)+' %u\nMimeType=x-scheme-handler/http;x-scheme-handler/https;\n')
                 config=Path(temporary)/'config';config.mkdir()
                 (config/'mimeapps.list').write_text('[Default Applications]\nx-scheme-handler/http=speedtester-browser-probe.desktop\nx-scheme-handler/https=speedtester-browser-probe.desktop\n')
                 environment['XDG_DATA_HOME']=str(applications.parent)

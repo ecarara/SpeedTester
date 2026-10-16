@@ -10,7 +10,7 @@ Esta é uma **prévia experimental**, ainda sem certificação para instalação
 - Serviço separado da interface, com adaptadores para systemd de sistema, LaunchDaemon e Windows Service de inicialização automática. Identidade dedicada, sem executar o runner como administrador/root.
 - Comunicação somente por loopback, mensagens autenticadas por HMAC, proteção contra repetição e respostas vinculadas à solicitação. A interface não recebe access/refresh tokens ou chaves privadas do protocolo.
 - Contribuição opcional, inicialmente desmarcada. Sem configuração/vínculo não há discovery, pareamento, transmissão de sistema operacional ou solicitação de medição. O serviço comunitário fica em espera; o standalone existente continua independente.
-- “O que será enviado” abre uma lista local e rolável nos três idiomas, sem depender do navegador ou da rede. Ela descreve os campos públicos e excluídos, sem mostrar valores pessoais, tokens ou chaves. Consultar a lista não envia dados nem registra aceite. A consulta ao portal é opcional; falha ao abrir o navegador oferece um link para copiar.
+- “O que será enviado” abre uma lista local e rolável nos três idiomas, sem depender do navegador ou da rede. Ela descreve os campos públicos e excluídos, sem mostrar valores pessoais, tokens ou chaves. Consultar a lista não envia dados nem registra aceite. A consulta ao portal é opcional. Abrir a conta, o vínculo ou o portal sempre oferece também um endereço copiável, mesmo se o sistema informar sucesso sem mostrar o navegador.
 - Pareamento pelo SDK real: código e impressão digital no assistente, login/aceite no portal, aprovação humana e tokens na fila cifrada. O assistente não aceita termos pelo participante.
 - Agenda inicialmente pausada; ativação explícita valida credenciais centrais e libera somente horários futuros. Instalar, parear ou reparar não executa teste de velocidade.
 - Reparo: parar o serviço, validar SQLite e autenticar o conteúdo cifrado, criar backup consistente, preservar identidade/histórico/fila e substituir arquivos do pacote. A agenda fica pausada; corrupção ou chave perdida interrompem o processo sem zerar dados.
@@ -55,12 +55,12 @@ A interface guarda somente sua chave de controle local na configuração privada
 
 ## Antes de disponibilizar aos participantes
 
-1. Certificar instalação, privilégios, parada/recuperação, logout, boot e manutenção nos sistemas/arquiteturas reais. Os testes de lifecycle atuais substituem os adaptadores do sistema por mocks; não constituem essa certificação.
+1. Certificar elevação gráfica, logout, boot e manutenção nas máquinas/arquiteturas suportadas. O CI executa instalação, reinício, reparo, reinstalação e remoção reais em VMs descartáveis, além dos testes unitários com adaptadores simulados. Isso não certifica reinicialização física, diálogos UAC/polkit/macOS nem todas as distribuições.
 2. Distribuir e verificar o runner nativo aprovado. **iPerf3 não está incluído nesta prévia**, e o upstream não oferece suporte oficial em Windows. Não anunciar coleta pronta nessa plataforma antes da validação do adaptador e da distribuição escolhida.
 3. Produzir MSI/EXE, PKG e DEB/RPM, registrar desinstalação no sistema, resolver manutenção do aplicativo instalado e assinar/notarizar os pacotes. Os primeiros builds geram bundles ZIP/TAR experimentais com checksums e lista de componentes, sem assinatura de release.
 4. Validar restauração/rollback completo, ACLs, restrições do helper e fila grande/disco cheio; implementar a retenção configurável sem descartar pendências silenciosamente.
 5. Aprovar a integração privada com pareamento, renovação, suspensão/revogação, retirada de consentimento e nova versão legal; preservar os testes existentes e limitar o runner a fixtures descartáveis.
-6. Somente então trocar os botões do site pelos pacotes efetivamente aprovados.
+6. Somente então anunciar um instalador estável para participantes. Downloads de teste continuam explicitamente experimentais e sem coleta habilitada.
 
 ## Atualização em desenvolvimento: 0.3.0.dev2
 
@@ -80,3 +80,22 @@ O reteste no Omarchy confirmou que a versão 0.3.0.dev2 ainda recebia o acento s
 Os campos do formulário em X11/XWayland recebem um fallback local para as teclas mortas latinas de til, agudo, grave, circunflexo, trema e cedilha. Ele atua apenas quando esses eventos chegam sem composição; caracteres já compostos e métodos de entrada funcionando seguem o fluxo normal. Espaço/dobrar acento permitem pontuação literal. Backspace/Escape cancelam a composição; foco, mouse, atalhos e colagem limpam o estado pendente. Há testes de seleção/cursor, caixa alta e preservação de `ç`, Unicode e pontuação literal.
 
 Não há substituição de textos como `S~ao`, alteração do layout ABNT2, mudança de idioma/XMODIFIERS, hook global nem registro de teclas. A aplicação mantém a composição nativa em Windows/macOS. O cenário automatizado reproduz a ausência de composição; a confirmação final no Omarchy permanece dependente do reteste da nova versão. Instalação/pareamento continuam sem medições.
+
+
+## Verificação funcional do Client 0.3.0.dev6
+
+O CI separa as verificações, preserva os relatórios `acceptance-*.json` e bloqueia a publicação se qualquer uma falhar:
+
+| Camada | O que é exercitado | Limite |
+| --- | --- | --- |
+| Interface real Tk e IPC autenticado | Instalação com/sem contribuição; validação de campos; lista de dados e seus links; código de vínculo, nova tentativa, cancelamento e aprovação; status; configurar/salvar; ativação recusada/confirmada e pausa; conta; cópia de link/diagnóstico; navegação; confirmações de reparo/desinstalação, preservar/apagar dados; falhas e recuperação da interface | Respostas do Server assinadas e sintéticas; elevação e manutenção simuladas nesta camada; runner proibido |
+| Todas as opções do formulário | Oito tecnologias, Ethernet/Wi-Fi e português/inglês/espanhol, com seleção real dos widgets e preservação do perfil | Não identifica automaticamente o equipamento físico |
+| Navegador a partir do pacote congelado | O abridor do próprio sistema deve carregar uma página HTTP de loopback em navegador real; observar somente o retorno do abridor não é suficiente | Não autentica uma conta nem registra aceite; Linux usa Chrome isolado no display de CI |
+| Serviços nativos reais nos três sistemas | Helper congelado, systemd/LaunchDaemon/SCM, identidade dedicada e configuração de autostart, IPC, parar/iniciar, reparar com backup, preservar bytes cifrados/chaves/fila, reinstalar, desinstalar preservando e excluir os dados depois | VMs descartáveis, helper já elevado; sem clique nos diálogos administrativos, logout ou reinicialização física |
+| SDK/Server privado com PostgreSQL | Pareamento, renovação, métricas separadas, revogação, suspensão, retirada de consentimento e novo aceite legal | Runners sintéticos; não substitui o login/aceite humano da conta real |
+
+A suíte gráfica usa `SPEEDTESTER_GUI_TESTS=1 python scripts/test_graphical_flows.py` (no Linux, dentro de `xvfb-run -a`). No PowerShell, defina `$env:SPEEDTESTER_GUI_TESTS='1'` antes de executar o script. Ela não chama o helper de manutenção real. Os scripts de navegador e lifecycle recusam execução fora de runners GitHub descartáveis e não devem ser usados para testar uma workstation com dados reais.
+
+A conta usa o Server salvo na instalação, inclusive quando o assistente acaba de ser aberto. A abertura do navegador tem limite de tempo e não ocupa o bloqueio de manutenção. Bibliotecas e loaders de locale/Tk do pacote não devem interferir nos programas do sistema. Uma falha em um retorno da interface não encerra o processamento dos próximos cliques. Trocar o idioma preserva tecnologia, conexão e campos. A opção de apagar dados é desmarcada a cada nova operação de desinstalação; reinstalar após exclusão cria uma nova chave de controle persistida.
+
+Os testes mantêm medições desativadas. Ativação e pausa na suíte gráfica usam somente um runner que falha se for chamado. A ausência do componente real de medição também é testada e deve manter a agenda pausada. Não há certificação de coleta nativa no Omarchy/Wayland real, de elevação interativa ou de recuperação após reboot físico nesta prévia.

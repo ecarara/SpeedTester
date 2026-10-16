@@ -98,7 +98,7 @@ def build(smoke=True):
     (bundle/"build-info.json").write_text(json.dumps({"version":CLIENT_VERSION,"revision":revision,"experimental":True},indent=2)+"\n")
     (bundle / "PREVIEW.txt").write_text(
         "EXPERIMENTAL DEVELOPER PREVIEW — not a certified production installer.\n"
-        "Native service lifecycle and iPerf3 distribution still require full native validation.\n"
+        "CI exercises native service maintenance on disposable VMs; interactive elevation/reboot certification and iPerf3 distribution remain pending.\n"
         "Code signing/notarization, MSI/PKG/DEB/RPM integration and native uninstall registration are pending.\n"
         "Installation and pairing do not run measurements. The schedule starts disabled.\n"
         "The measurement tool is not bundled in this preview; do not enable it on a production workstation.\n")

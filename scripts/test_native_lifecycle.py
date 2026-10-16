@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import platform
 import secrets
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -70,6 +71,26 @@ def main():
                 json.dump({'operation':operation,'control_key':key.hex(),'purge':purge},stream)
             result=subprocess.run([str(executable),'--native-helper',str(path)],timeout=180,capture_output=True)
             assert result.returncode==0, f'{operation}: helper exit {result.returncode}; '+result.stderr.decode(errors='replace')[-2048:]
+        def removed():
+            if layout.definition:
+                assert not layout.definition.exists()
+            try:
+                connection=socket.create_connection(('127.0.0.1',45873),timeout=1)
+            except OSError:
+                pass
+            else:
+                connection.close()
+                raise AssertionError('Control listener survived service removal')
+            if layout.system=='Windows':
+                import pywintypes
+                import win32serviceutil
+                try:win32serviceutil.QueryServiceStatus(SERVICE)
+                except pywintypes.error as exc:assert exc.winerror==1060
+                else:raise AssertionError('SCM service survived removal')
+            elif layout.system=='Darwin':
+                assert subprocess.run(['/bin/launchctl','print','system/'+LABEL],capture_output=True).returncode!=0
+            else:
+                assert subprocess.run(['/usr/bin/systemctl','is-enabled',layout.definition.name],capture_output=True).returncode!=0
         def check_state():
             directory=layout.state/'queue'
             verify_database(directory)
@@ -127,11 +148,11 @@ def main():
             assert backups
             for backup in backups:verify_database(backup)
             passed.append('real_repair_preserves_ciphertext_keys_pending_queue_and_backup')
-            native('uninstall');assert not layout.runtime.exists() and layout.state.exists()
+            native('uninstall');removed();assert not layout.runtime.exists() and layout.state.exists()
             check_state();passed.append('real_uninstall_preserves_data')
             native('install');status();check_state();passed.append('real_reinstall_preserves_evidence')
-            native('uninstall');assert not layout.runtime.exists() and layout.state.exists()
-            native('uninstall',True)
+            native('uninstall');removed();assert not layout.runtime.exists() and layout.state.exists()
+            native('uninstall',True);removed()
             assert not layout.runtime.exists() and not layout.state.exists()
             if layout.definition:assert not layout.definition.exists()
             passed.append('real_uninstall_purge')

@@ -99,9 +99,18 @@ def main(argv=None):
                     or not re.fullmatch(r"[0-9]{1,5}/[0-9a-f]{32}", probe)
                     or not 1 <= int(probe.split("/")[0]) <= 65535):
                 raise ValueError("invalid_ci_browser_probe")
-            from .desktop_links import request_browser
-            # The external test server independently observes the browser GET.
-            request_browser("http://127.0.0.1:" + probe)
+            from .desktop_links import open_system_browser
+            # Report only a fixed outcome/class for this synthetic CI URL. The
+            # external test server independently observes the real browser GET.
+            try:
+                dispatched = open_system_browser("http://127.0.0.1:" + probe)
+                diagnostic = "ci_browser_dispatch:" + str(dispatched)
+            except Exception as exc:
+                diagnostic = "ci_browser_exception:" + type(exc).__name__
+            try:
+                os.write(2, (diagnostic+"\n").encode())
+            except OSError:
+                pass
     else:
         window.mainloop()
     return 0

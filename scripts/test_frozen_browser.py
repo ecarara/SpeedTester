@@ -24,9 +24,11 @@ def main():
         raise RuntimeError('Requires a disposable GitHub-hosted desktop')
     nonce=secrets.token_hex(16)
     loaded=threading.Event()
+    browser_agents=[]
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             if self.path=='/'+nonce:
+                browser_agents.append(self.headers.get('User-Agent',''))
                 loaded.set()
             self.send_response(200);self.send_header('Content-Type','text/html');self.end_headers()
             self.wfile.write(b'<title>SpeedTester browser acceptance fixture</title><p>Local test complete.</p>')
@@ -47,7 +49,8 @@ def main():
                 assert chrome,'A real Chrome/Chromium browser is required'
                 wrapper=Path(temporary)/'browser'
                 import shlex
-                wrapper.write_text('#!/bin/sh\nexec '+shlex.quote(chrome)+' --headless --dump-dom --no-sandbox --disable-gpu --no-first-run --no-default-browser-check --user-data-dir='+shlex.quote(temporary+'/profile')+' "$@"\n')
+                log=Path(temporary)/'browser.log'
+                wrapper.write_text('#!/bin/sh\necho invoked >> '+shlex.quote(str(log))+'\nexec '+shlex.quote(chrome)+' --headless --dump-dom --no-sandbox --disable-gpu --no-first-run --no-default-browser-check --user-data-dir='+shlex.quote(temporary+'/profile')+' "$@" >> '+shlex.quote(str(log))+' 2>&1\n')
                 wrapper.chmod(0o700)
                 applications=Path(temporary)/'data/applications'
                 applications.mkdir(parents=True)
@@ -61,10 +64,14 @@ def main():
                 environment.pop('XDG_CURRENT_DESKTOP',None)
                 environment.pop('DESKTOP_SESSION',None)
             result=subprocess.run([str(executable),'--ui-smoke'],env=environment,timeout=120,capture_output=True)
-            assert result.returncode==0, f'Frozen smoke failed: {result.returncode}'
-            assert loaded.wait(30),'OS opener returned but no real browser loaded the fixture page'
+            assert result.returncode==0, f'Frozen smoke failed: {result.returncode}; '+result.stderr.decode(errors='replace')[-2000:]
+            if not loaded.wait(30):
+                print(result.stderr.decode(errors='replace')[-2000:])
+                if system=='Linux':print('chrome_trace:',log.read_text()[-2000:] if log.exists() else 'wrapper not invoked')
+                raise AssertionError('OS opener returned but no real browser loaded the fixture page')
+            assert any('Mozilla/' in agent for agent in browser_agents),'Expected an actual browser user agent'
         report={'platform':system,'frozen_system_dispatch':True,'real_browser_page_loaded':True,
-            'fixture':'loopback HTTP only','measurements':0}
+            'fixture':'loopback HTTP only','browser_user_agent':browser_agents[0],'measurements':0}
         (ROOT/'dist/desktop/acceptance-browser.json').write_text(json.dumps(report,indent=2)+'\n')
         print(json.dumps(report))
     finally:

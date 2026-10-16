@@ -30,7 +30,7 @@ jobs:
           cache-dependency-path: requirements-desktop.txt
       - name: Native Linux graphical libraries
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y xvfb libtk8.6 xdotool x11-xkb-utils
+        run: sudo apt-get update && sudo apt-get install -y xvfb libtk8.6 xdotool x11-xkb-utils xdg-utils
       - name: Install public native build dependencies
         run: python -m pip install -r requirements-desktop.txt '.[desktop]'
       - name: Audit native build and runtime dependencies
@@ -42,11 +42,13 @@ jobs:
           PYTHONPATH: app
         run: python -m unittest discover -s tests -p 'test_desktop_*.py' -v
       - name: Graphical smoke and packaged runtime (Linux)
+        id: build_linux
         if: runner.os == 'Linux'
         env:
           SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
         run: xvfb-run -a python scripts/build_desktop.py
       - name: Graphical smoke and packaged runtime (Windows/macOS)
+        id: build_other
         if: runner.os != 'Linux'
         env:
           SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -70,10 +72,10 @@ jobs:
         if: runner.os != 'Linux'
         run: python scripts/test_frozen_browser.py
       - name: Real system service installation, repair and removal (Linux/macOS)
-        if: runner.os != 'Windows'
+        if: ${{ !cancelled() && runner.os != 'Windows' && (steps.build_linux.outcome == 'success' || steps.build_other.outcome == 'success') }}
         run: sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted "$(command -v python)" scripts/test_native_lifecycle.py
       - name: Real system service installation, repair and removal (Windows)
-        if: runner.os == 'Windows'
+        if: ${{ !cancelled() && runner.os == 'Windows' && steps.build_other.outcome == 'success' }}
         run: python scripts/test_native_lifecycle.py
       - name: Preserve acceptance evidence
         if: always()

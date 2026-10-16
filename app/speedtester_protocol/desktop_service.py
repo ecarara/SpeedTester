@@ -111,6 +111,7 @@ class DesktopEngine:
             "measurements_enabled": bool(self.queue.state(ENABLED)) and not self.maintenance,
             "next_due": self.queue.state("next_due"), "pending": counts.get("pending", 0),
             "accepted": counts.get("accepted", 0), "observed_at": int(self.clock()),
+            "runner_available": self.runner is not None or shutil.which("iperf3") is not None,
             "last_attempt_at": self.queue.state("desktop:last_attempt_at"),
             "problem": self.queue.state("desktop:last_problem") or None,
             "quarantined": counts.get("quarantined", 0), "database_bytes": self.queue.path.stat().st_size,

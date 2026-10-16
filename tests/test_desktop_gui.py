@@ -183,6 +183,12 @@ class GraphicalFlows(unittest.TestCase):
             labels=[w.cget('text') for w in self.widgets() if isinstance(w,self.tk.Label)]
             self.assertIn(self.window.t('last_notice')+' '+self.window.t('no_target'),labels)
             self.assertFalse(self.window.snapshot['measurements_enabled'])
+            self.window.geometry('960x780');self.window.update()
+            for widget in self.widgets(self.window.content):
+                if isinstance(widget,self.tk.Label):
+                    self.assertLessEqual(widget.winfo_reqwidth(),widget.winfo_width()+4,widget.cget('text'))
+                if isinstance(widget,self.tk.Button):
+                    self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(),self.window.winfo_rooty()+self.window.winfo_height(),widget.cget('text'))
             self.provider.target_available=True;self.click('enable')
             labels=[w.cget('text') for w in self.widgets() if isinstance(w,self.tk.Label)]
             self.assertIn(self.window.t('tests_active'),labels)
@@ -193,6 +199,19 @@ class GraphicalFlows(unittest.TestCase):
                 if isinstance(widget,self.tk.Button):
                     self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(),self.window.winfo_rooty()+self.window.winfo_height(),widget.cget('text'))
             self.click('pause')
+        runner=self.engine.runner
+        self.engine.runner=None
+        self.engine.queue.state('desktop:last_problem',{})
+        calls=list(self.provider.calls)
+        with patch('speedtester_protocol.desktop_service.shutil.which',return_value=None):
+            self.click('refresh_status')
+        labels=[w.cget('text') for w in self.widgets() if isinstance(w,self.tk.Label)]
+        self.assertIn(self.window.t('last_notice')+' '+self.window.t('no_runner'),labels)
+        activate=next(w for w in self.widgets() if isinstance(w,self.tk.Button) and w.cget('text')==self.window.t('enable'))
+        self.assertEqual(activate.cget('state'),'disabled')
+        activate.invoke()
+        self.assertEqual(self.provider.calls,calls)
+        self.engine.runner=runner
         with patch.object(self.controller, 'call', side_effect=OSError('Synthetic stopped service')):
             self.click('refresh_status')
         labels=[w.cget('text') for w in self.widgets() if isinstance(w,self.tk.Label)]

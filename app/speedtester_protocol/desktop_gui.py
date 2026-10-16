@@ -514,13 +514,14 @@ class Installer(tk.Tk):
         panel = tk.Frame(self.content, bg=PAPER, padx=16, pady=12)
         panel.pack(fill="x", pady=(0, 12))
         self.label(panel, self.t(state), bold=True, size=15).pack(fill="x")
-        self.label(panel, self.t(detail), size=11, color=MUTED).pack(fill="x", pady=(6, 0))
         problem = self.snapshot.get("problem") or {}
         code = problem.get("code") or self.snapshot.get("code")
         problem_key = self.status_problem(code)
-        if problem_key:
-            self.label(panel, self.t("last_notice") + " " + self.t(problem_key),
-                size=11, color="#705016").pack(fill="x", pady=(8, 0))
+        if not problem_key and paired and not enabled and self.snapshot.get("runner_available") is False:
+            problem_key = "no_runner"
+        explanation = self.t("last_notice") + " " + self.t(problem_key) if problem_key else self.t(detail)
+        self.label(panel, explanation, size=11, width=580,
+            color="#705016" if problem_key else MUTED).pack(fill="x", pady=(6, 0))
         zone = (self.snapshot.get("configuration") or {}).get("timezone", self.schedule_timezone)
         self.label(self.content, self.t("schedule_short").format(timezone=zone),
             color=MUTED, size=10).pack(fill="x", pady=(0, 8))
@@ -544,7 +545,10 @@ class Installer(tk.Tk):
             self.button(primary, "resume_pair", self.begin_pairing, primary=True).pack(side="left")
         elif paired:
             key = "pause" if enabled else "enable"
-            self.button(primary, key, lambda action=key: self.schedule(action), primary=True).pack(side="left")
+            activate = self.button(primary, key, lambda action=key: self.schedule(action), primary=True)
+            if not enabled and self.snapshot.get("runner_available") is False:
+                activate.configure(state="disabled")
+            activate.pack(side="left")
         self.button(primary, "refresh_status", self.load_status).pack(side="right")
         secondary = tk.Frame(self.content, bg=BACKGROUND)
         secondary.pack(fill="x", pady=(10, 0))

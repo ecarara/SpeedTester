@@ -3,6 +3,8 @@
 """Open system applications without leaking the frozen runtime library paths."""
 import os
 import platform
+from pathlib import Path
+import sys
 import subprocess
 import threading
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -35,6 +37,13 @@ def system_environment():
         environment.pop(key, None)
         if original:
             environment[key] = original
+    bundle = getattr(sys, "_MEIPASS", None)
+    if bundle:
+        # Tk's bundled Xlib locale loaders must not leak into GTK/desktop apps.
+        for key in ("XLOCALEDIR", "XLOCALELIBDIR", "TCL_LIBRARY", "TK_LIBRARY"):
+            value = environment.get(key)
+            if value and Path(value).is_relative_to(bundle):
+                environment.pop(key)
     return environment
 
 

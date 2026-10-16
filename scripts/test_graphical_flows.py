@@ -10,7 +10,14 @@ import unittest
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT/'app'),str(ROOT/'tests')]
 suite=unittest.defaultTestLoader.discover(str(ROOT/'tests'),pattern='test_desktop_gui.py')
-cases=[case.id() for group in suite for case in group]
+def test_ids(node):
+    for child in node:
+        if isinstance(child, unittest.TestSuite):
+            yield from test_ids(child)
+        else:
+            yield child.id()
+
+cases=list(test_ids(suite))
 result=unittest.TextTestRunner(verbosity=2).run(suite)
 report={'layer':'real Tk and authenticated IPC; signed synthetic Server; simulated OS elevation',
     'run':result.testsRun,'failures':len(result.failures),'errors':len(result.errors),

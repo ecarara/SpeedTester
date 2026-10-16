@@ -76,3 +76,18 @@ class PortalLinksTests(unittest.TestCase):
                 self.assertNotIn('shell',run.call_args.kwargs)
                 run.side_effect=subprocess.TimeoutExpired('opener',8)
                 self.assertFalse(request_browser('https://server.example/account')['opened'])
+
+    def test_system_browser_does_not_load_the_clients_xlib_or_tk_payload(self):
+        import os
+        with patch('sys._MEIPASS','/application/bundle',create=True), patch.dict(os.environ,{
+                'XLOCALEDIR':'/application/bundle/x11/locale','XLOCALELIBDIR':'/application/bundle/x11/modules',
+                'TCL_LIBRARY':'/application/bundle/tcl','TK_LIBRARY':'/system/tk','LANG':'pt_BR.UTF-8',
+                'XMODIFIERS':'@im=fcitx'},clear=True):
+            env=system_environment()
+            self.assertNotIn('XLOCALEDIR',env)
+            self.assertNotIn('XLOCALELIBDIR',env)
+            self.assertNotIn('TCL_LIBRARY',env)
+            self.assertEqual(env['TK_LIBRARY'],'/system/tk')
+            self.assertEqual(env['LANG'],'pt_BR.UTF-8')
+            self.assertEqual(env['XMODIFIERS'],'@im=fcitx')
+            self.assertIn('XLOCALEDIR',os.environ)

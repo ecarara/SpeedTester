@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 from .local_security import reject_links, windows_acl
+from .desktop_links import system_environment
 
 SERVICE = "CararaLabSpeedTesterClient"
 LABEL = "com.cararalab.speedtester.client"
@@ -97,7 +98,7 @@ def launch_daemon(layout):
 
 
 def checked(command, *, allowed=(0,)):
-    result = subprocess.run(command, capture_output=True, text=True, timeout=360)
+    result = subprocess.run(command, capture_output=True, text=True, timeout=360, env=system_environment())
     if result.returncode not in allowed:
         raise RuntimeError("native_service_operation_failed:"+str(result.returncode))
     return result.stdout
@@ -130,14 +131,14 @@ def stop_service(layout):
             checked(["/usr/bin/systemctl", "stop", layout.definition.name])
             checked(["/usr/bin/systemctl", "is-active", layout.definition.name], allowed=(3,))
     elif layout.system == "Darwin":
-        loaded = subprocess.run(["/bin/launchctl", "print", "system/" + LABEL], capture_output=True, timeout=10).returncode == 0
+        loaded = subprocess.run(["/bin/launchctl", "print", "system/" + LABEL], capture_output=True, timeout=10, env=system_environment()).returncode == 0
         if loaded:
             checked(["/bin/launchctl", "bootout", "system/" + LABEL])
             # launchd may retain the job briefly after bootout returns. Starting
             # it immediately can fail with EIO, so wait for the label to unload.
             deadline = time.monotonic() + 30
             while subprocess.run(["/bin/launchctl", "print", "system/" + LABEL],
-                    capture_output=True, timeout=10).returncode == 0:
+                    capture_output=True, timeout=10, env=system_environment()).returncode == 0:
                 if time.monotonic() >= deadline:
                     raise RuntimeError("native_service_stop_timeout")
                 time.sleep(.25)
@@ -190,7 +191,7 @@ def start_service(layout):
         deadline = time.monotonic() + 15
         while True:
             result = subprocess.run(["/bin/launchctl", "bootstrap", "system", str(layout.definition)],
-                capture_output=True, timeout=30)
+                capture_output=True, timeout=30, env=system_environment())
             if result.returncode == 0:
                 break
             if result.returncode != 5 or time.monotonic() >= deadline:

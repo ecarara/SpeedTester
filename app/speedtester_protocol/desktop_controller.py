@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 from .local_control import ControlClient
+from .desktop_links import system_environment
 from .local_security import private_directory, private_open
 
 DEFAULT_SERVER = "https://speedtester.cararalab.com.br"
@@ -82,9 +83,9 @@ class DesktopController:
                     win32api.CloseHandle(handle)
             elif system == "Darwin":
                 script = "do shell script " + json.dumps(shlex.join(command)) + " with administrator privileges"
-                code = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True, timeout=600).returncode
+                code = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True, timeout=600, env=system_environment()).returncode
             else:
-                code = subprocess.run(["/usr/bin/pkexec", *command], capture_output=True, timeout=600).returncode
+                code = subprocess.run(["/usr/bin/pkexec", *command], capture_output=True, timeout=600, env=system_environment()).returncode
             if code not in (0, 10):
                 raise RuntimeError("native_operation_failed")
         if operation == "uninstall" and purge:

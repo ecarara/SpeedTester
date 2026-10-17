@@ -18,7 +18,9 @@ curl --fail --location --silent --show-error "$SOURCE_URL" --output "$TMP_SOURCE
 export APP_VERSION="$VERSION"
 export SOURCE_SHA256="$(sha256sum "$TMP_SOURCE" | awk '{print $1}')"
 cd "$ARCH_DIR"
-makepkg --clean --force "$@"
+# Runtime dependencies remain in PKGBUILD and are resolved by pacman on the
+# target host. The build container only needs to assemble the package payload.
+makepkg --nodeps --clean --force "$@"
 if [[ -n "$OUTPUT_DIR" ]]; then
   mkdir -p "$OUTPUT_DIR"
   shopt -s nullglob

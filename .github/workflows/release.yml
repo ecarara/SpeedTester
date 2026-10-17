@@ -109,6 +109,15 @@ jobs:
           python-version: '3.13'
       - name: Install packaging dependencies
         run: python -m pip install -r app/requirements.txt pyinstaller==6.16.0
+      - name: Add Windows SDK packaging tools to PATH
+        shell: pwsh
+        run: |
+          $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\\10\\bin'
+          $makeAppx = Get-ChildItem $sdkRoot -Filter MakeAppx.exe -Recurse -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $makeAppx) { throw 'MakeAppx.exe não encontrado no Windows SDK do runner' }
+          $makeAppx.DirectoryName | Out-File -FilePath ${env:GITHUB_PATH} -Append -Encoding utf8
+          Write-Host "Using Windows SDK tools from $($makeAppx.DirectoryName)"
       - name: Build unsigned MSIX
         env:
           MSIX_VERSION: ${{ needs.metadata.outputs.msix-version }}

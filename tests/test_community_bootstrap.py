@@ -62,15 +62,21 @@ class BootstrapTests(unittest.TestCase):
         release = self.release(data)
         checksums = (hashlib.sha256(data).hexdigest() + '  ' + release[1] + '\n').encode()
         installer.download_archive(self.root / 'download.tar.gz', release, self.opener(data, checksums))
+        tampered_opener = self.opener(data + b'changed', checksums)
         with self.assertRaises(installer.InstallationError):
-            installer.download_archive(self.root / 'modified.tar.gz', release,
-                                       self.opener(data + b'changed', checksums))
+            installer.download_archive(self.root / 'modified.tar.gz', release, tampered_opener)
+
         foreign = (release[0], release[1], 'http://codeload.github.com/archive', release[3])
+        foreign_opener = self.opener(data, checksums)
         with self.assertRaises(installer.InstallationError):
-            installer.download_archive(self.root / 'foreign.tar.gz', foreign, self.opener(data, checksums))
+            installer.download_archive(self.root / 'foreign.tar.gz', foreign, foreign_opener)
+
         with patch.object(installer, 'MAX_DOWNLOAD_BYTES', 1):
+            oversized_opener = self.opener(data, checksums)
             with self.assertRaises(installer.InstallationError):
-                installer.download_archive(self.root / 'oversized.tar.gz', release, self.opener(data, checksums))
+                installer.download_archive(self.root / 'oversized.tar.gz', release, oversized_opener)
+
+
 
     def test_complete_package_is_extracted_and_keeps_the_existing_installer(self):
         project = installer.extract_archive(self.archive(), self.root / 'source', self.version)

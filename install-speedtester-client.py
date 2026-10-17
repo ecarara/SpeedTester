@@ -89,7 +89,7 @@ def latest_release(opener=None):
         _trusted_url(response.geturl(), api=True)
         payload = json.loads(_read_limited(response, 256 * 1024).decode('utf-8'))
     tag = payload.get('tag_name', '')
-    if not re.fullmatch(r'v[0-9]+\\.[0-9]+\\.[0-9]+', tag):
+    if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag):
         raise InstallationError('A release mais recente não possui uma versão semântica válida.')
     version = tag[1:]
     names = {asset.get('name'): asset.get('browser_download_url') for asset in payload.get('assets', [])}

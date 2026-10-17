@@ -35,6 +35,14 @@ class ReleaseArtifactTests(TestCase):
         self.assertIn("needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, windows-install-smoke, macos-install-smoke, validate]", workflow)
         self.assertIn("gh release create", workflow)
 
+    def test_application_version_is_injected_and_installer_tracks_latest_release(self):
+        version = (ROOT / "app" / "shared" / "version.py").read_text(encoding="utf-8")
+        installer = (ROOT / "install-speedtester-client.py").read_text(encoding="utf-8")
+        images = (ROOT / ".github" / "workflows" / "images.yml").read_text(encoding="utf-8")
+        self.assertIn("os.environ.get", version)
+        self.assertIn("/releases/latest", installer)
+        self.assertNotIn("CLIENT_REVISION", installer)
+        self.assertIn("APP_VERSION=${{ steps.version.outputs.version }}", images)
     def test_sbom_is_spdx_and_contains_direct_dependencies(self):
         document = build_document("0.3.0", "ecarara/SpeedTester", "abc123")
         self.assertEqual(document["spdxVersion"], "SPDX-2.3")

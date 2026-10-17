@@ -251,6 +251,7 @@ jobs:
           Export-PfxCertificate -Cert $certificate -FilePath $pfx -Password $password | Out-Null
           Export-Certificate -Cert $certificate -FilePath $cer | Out-Null
           Import-Certificate -FilePath $cer -CertStoreLocation Cert:\CurrentUser\TrustedPeople | Out-Null
+          Import-Certificate -FilePath $cer -CertStoreLocation Cert:\CurrentUser\Root | Out-Null
           $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
           $signTool = Get-ChildItem $sdkRoot -Filter signtool.exe -Recurse |
             Sort-Object FullName -Descending | Select-Object -First 1

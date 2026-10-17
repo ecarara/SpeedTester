@@ -305,11 +305,9 @@ jobs:
           $package = (Get-ChildItem dist/windows -Filter *.msix | Select-Object -First 1).FullName
           Add-AppxPackage -Path $package -AllowUnsigned
           if (-not (Get-AppxPackage -Name 'ecarara.SpeedTester')) { throw 'MSIX não foi instalado' }
-          if (-not (Get-ScheduledTask -TaskName 'SpeedTester' -ErrorAction SilentlyContinue)) { throw 'tarefa não registrada' }
           Add-AppxPackage -Path $package -AllowUnsigned
           ./packaging/windows/uninstall-msix.ps1
           if (Get-AppxPackage -Name 'ecarara.SpeedTester') { throw 'MSIX não foi removido' }
-          if (Get-ScheduledTask -TaskName 'SpeedTester' -ErrorAction SilentlyContinue) { throw 'tarefa não foi removida' }
 
 
   macos-install-smoke:

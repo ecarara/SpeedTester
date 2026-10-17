@@ -169,3 +169,5 @@ de resolver a pendência no portal, a ativação revalida a autorização no Ser
 novo sucesso remove o aviso anterior. Os testes gráficos percorrem os bloqueios
 com respostas assinadas sintéticas, abertura da conta no endereço configurado,
 preservação do vínculo e agenda futura, com o runner de medições proibido.
+
+Uma recusa explícita por aceite, consentimento, suspensão ou revogação também pausa uma agenda que estava ativa. O usuário vê o bloqueio e encontra a ação de ativação após resolver a pendência, sem perder o vínculo. Falhas transitórias ou sem motivo reconhecido não são tratadas como retirada de consentimento nem pausam a agenda por esse motivo.

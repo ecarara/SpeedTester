@@ -414,7 +414,9 @@ class GraphicalFlows(unittest.TestCase):
         self.provider.approved=True;self.engine.next_poll=0
         self.assertEqual(self.engine.tick(),'paired')
         self.window.poll_pairing();self.settle()
-        self.click('pause')
+        self.engine.record_problem('terms_acceptance_required')
+        self.click('refresh_status')
+        self.assertFalse(self.window.snapshot['measurements_enabled'])
         installed=self.engine.installation()
         for language in ('Português','English','Español'):
             self.window.languages.set(language);self.window.change_language();self.window.update()

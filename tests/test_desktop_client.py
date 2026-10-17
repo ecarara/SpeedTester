@@ -301,6 +301,29 @@ class DesktopTests(unittest.TestCase):
             self.assertFalse(self.engine.dispatch("pair", {})["ok"])
         self.runner.assert_not_called()
 
+    def test_authorization_block_pauses_an_active_schedule_and_keeps_pairing_for_explicit_recovery(self):
+        self.pair()
+        installed=self.queue.state("installation")
+        for code in ("terms_acceptance_required", "legal_acceptance_required", "legal_context_changed",
+                     "consent_required", "consent_withdrawn", "contribution_consent_required",
+                     "account_disabled", "account_suspended", "client_revoked", "token_revoked"):
+            with self.subTest(code=code):
+                self.queue.state(ENABLED,True)
+                self.engine.record_problem(code)
+                status=self.engine.status()
+                self.assertFalse(status['measurements_enabled'])
+                self.assertTrue(status['paired'])
+                self.assertEqual(status['problem']['code'],code)
+                self.assertEqual(self.queue.state("installation"),installed)
+        self.queue.state(ENABLED,True)
+        self.engine.record_problem('unrecognized_or_transient_failure')
+        self.assertTrue(self.engine.status()['measurements_enabled'])
+        self.assertEqual(self.engine.last_code,'server_rejected')
+        self.engine.dispatch('enable',{})
+        self.assertIsNone(self.engine.status()['problem'])
+        self.assertGreater(self.engine.status()['next_due'],int(time.time()))
+        self.runner.assert_not_called()
+
     def test_legacy_interval_migration_pauses_and_preserves_identity_and_schedule(self):
         self.pair()
         original=dict(self.queue.state("installation"))

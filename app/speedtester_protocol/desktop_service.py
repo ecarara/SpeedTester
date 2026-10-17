@@ -132,6 +132,13 @@ class DesktopEngine:
     def record_problem(self, code):
         self.last_code = code if code in DISPLAY_CODES else "server_rejected"
         self.queue.state("desktop:last_problem", {"code": self.last_code, "at": int(self.clock())})
+        # An explicit authorization block also pauses the schedule, so the
+        # displayed recovery action is available. A transient/unknown refusal
+        # must not be mistaken for withdrawn consent or account suspension.
+        if self.last_code in {"account_suspended", "account_disabled", "client_revoked", "token_revoked",
+                              "consent_required", "consent_withdrawn", "contribution_consent_required",
+                              "legal_acceptance_required", "terms_acceptance_required", "legal_context_changed"}:
+            self.queue.state(ENABLED, False)
 
     def configure(self, arguments):
         configuration = DesktopConfiguration.model_validate(arguments)

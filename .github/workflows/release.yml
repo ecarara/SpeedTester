@@ -270,10 +270,7 @@ jobs:
           Write-Host 'Importing certificate into TrustedPeople'
           & certutil.exe -f -user -addstore TrustedPeople $cer
           if ($LASTEXITCODE -ne 0) { throw 'certutil não conseguiu importar TrustedPeople' }
-          Write-Host 'Importing certificate into Root'
-          & certutil.exe -f -user -addstore Root $cer
-          if ($LASTEXITCODE -ne 0) { throw 'certutil não conseguiu importar Root' }
-          Write-Host 'Certificate trust stores updated'
+          Write-Host 'TrustedPeople certificate store updated'
 
       - name: Sign package with SignTool
         shell: pwsh

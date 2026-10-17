@@ -244,6 +244,13 @@ class Installer(tk.Tk):
         canvas.bind("<Configure>", lambda event: canvas.itemconfigure(item, width=event.width))
         form.bind("<Configure>", lambda _event: canvas.configure(scrollregion=canvas.bbox("all")))
         self.form_canvas = canvas
+        def reveal(event):
+            canvas.update_idletasks()
+            y = event.widget.winfo_rooty() - form.winfo_rooty()
+            height = event.widget.winfo_height()
+            top = canvas.canvasy(0)
+            if y < top or y + height > top + canvas.winfo_height():
+                canvas.yview_moveto(max(0, y - 12) / max(1, form.winfo_height()))
         tk.Checkbutton(form, text=self.t("contribute"), variable=self.contribute, bg=BACKGROUND,
             fg=INK, activebackground=BACKGROUND, font=("Helvetica", 12, "bold"), anchor="w").pack(fill="x", pady=(0, 8))
         grid = tk.Frame(form, bg=BACKGROUND)
@@ -258,6 +265,7 @@ class Installer(tk.Tk):
             entry.pack(fill="x")
             bind_dead_keys(entry)
             self.entries[key]=entry
+            entry.bind("<FocusIn>", reveal, add="+")
         for column, (key, variable, choices) in enumerate((("access", self.access, ("fiber", "coaxial", "radio", "satellite", "cellular", "dsl", "other", "unknown")),
                 ("link", self.link, ("ethernet", "wifi")))):
             cell = tk.Frame(grid, bg=BACKGROUND)
@@ -271,6 +279,7 @@ class Installer(tk.Tk):
             entry = ttk.Entry(cell, textvariable=self.fields[key], width=25)
             entry.pack(fill="x")
             self.entries[key] = entry
+            entry.bind("<FocusIn>", reveal, add="+")
         self.label(form, self.t("plan_notice"), color=MUTED, size=10).pack(fill="x")
         self.label(form, self.t("schedule_notice").format(timezone=self.schedule_timezone)+"\n"+self.t("target_notice"), color=MUTED, size=10).pack(fill="x", pady=(6, 10))
 

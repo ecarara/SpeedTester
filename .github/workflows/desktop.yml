@@ -39,7 +39,7 @@ jobs:
           msystem: MSYS
           location: C:\speedtester-msys64
           update: true
-          install: gcc make openssl-devel openssl pkgconf tar zstd
+          install: gcc make diffutils openssl-devel openssl pkgconf tar zstd
       - name: Native macOS OpenSSL
         if: runner.os == 'macOS'
         run: brew install openssl@3

@@ -372,3 +372,7 @@ for _locale, _strings in {
         "metric_download":"Descarga", "metric_upload":"Subida", "plan_result":"{measured} de {contracted} Mbps contratados ({percent}%)", "plan_waiting":"{contracted} Mbps contratados · esperando un resultado aceptado de este perfil"}
 }.items():
     TEXT[_locale].update(_strings)
+
+TEXT["pt-BR"]["invalid"] += " Para Mbps, use números positivos com vírgula ou ponto decimal, sem separador de milhar, ou deixe em branco."
+TEXT["en"]["invalid"] += " For Mbps, use positive numbers with a decimal comma or point, without thousands separators, or leave blank."
+TEXT["es"]["invalid"] += " Para Mbps, usa números positivos con coma o punto decimal, sin separador de miles, o deja el campo vacío."

@@ -286,6 +286,11 @@ class GraphicalFlows(unittest.TestCase):
 
     def test_contracted_plan_speeds_validate_round_trip_and_upgrade_in_all_languages(self):
         self.click('install');self.fill()
+        self.window.geometry('960x780');self.window.update()
+        entry=self.window.entries['contracted_upload'];entry.focus_force();self.window.update()
+        canvas=self.window.form_canvas
+        self.assertGreaterEqual(entry.winfo_rooty(),canvas.winfo_rooty())
+        self.assertLessEqual(entry.winfo_rooty()+entry.winfo_height(),canvas.winfo_rooty()+canvas.winfo_height())
         self.window.fields['contracted_download'].set('1000')
         self.window.fields['contracted_upload'].set('250,5')
         for language in ('Português','English','Español'):

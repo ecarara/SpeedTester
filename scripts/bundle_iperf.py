@@ -102,7 +102,7 @@ def build(bundle, version):
         # package installation. The POSIX runtime itself is independently pinned.
         runtime=fetch(pins['windows_runtime'],work/'runtime.pkg.tar.zst')
         extraction=work/'runtime';extraction.mkdir(exist_ok=True)
-        command='tar -xf '+shlex.quote(runtime.as_posix())+' -C '+shlex.quote(extraction.as_posix())+' usr/bin/msys-2.0.dll usr/share/doc/Cygwin/COPYING usr/share/doc/Cygwin/CYGWIN_LICENSE'
+        command='tar --force-local -xf '+shlex.quote(runtime.as_posix())+' -C '+shlex.quote(extraction.as_posix())+' usr/bin/msys-2.0.dll usr/share/doc/Cygwin/COPYING usr/share/doc/Cygwin/CYGWIN_LICENSE'
         run([str(bash),'-lc',command],env=environment)
         shutil.copy2(extraction/'usr/bin/msys-2.0.dll',tools/'msys-2.0.dll')
         pending=[binary];seen=set()

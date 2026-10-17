@@ -120,7 +120,7 @@ def build(bundle, version):
         license_dir=bundle/'THIRD-PARTY-LICENSES/MSYS2';license_dir.mkdir(exist_ok=True)
         for item in (extraction/'usr/share/doc/Cygwin').iterdir():shutil.copy2(item,license_dir/item.name)
         notice=bundle/'THIRD-PARTY-LICENSES/OpenSSL';notice.mkdir(exist_ok=True)
-        candidates=list((msys/'usr/share/licenses').glob('openssl*/LICENSE*'))
+        candidates=list((msys/'usr/share/licenses').glob('*openssl*/LICENSE*'))
         if not candidates:candidates=list((msys/'usr/share/doc/openssl').glob('LICENSE*'))
         if not candidates:raise ValueError('OpenSSL license required')
         for item in candidates:shutil.copy2(item,notice/item.name)

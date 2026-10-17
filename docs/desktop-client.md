@@ -147,3 +147,5 @@ O CI compila o pacote real de cada plataforma e verifica autenticação RSA, upl
 O formulário permite informar **download contratado** e **upload contratado**, separadamente, em Mbps (1 Gbps = 1.000 Mbps), nos três idiomas. Os campos são opcionais: vazio significa desconhecido; não se presume simetria. Valores decimais usam vírgula ou ponto, sem separadores de milhar. Os valores são enviados em bit/s no perfil versionado, sem perda por arredondamento. Upgrade carrega ambos, preservando o vínculo.
 
 O status compara cada direção do resultado aceito mais recente com o valor declarado no mesmo perfil: medido ÷ contratado × 100. Resultados indisponíveis não viram zero, percentuais acima de 100 são mantidos e uma alteração do plano não recalcula o histórico. As métricas originais e suas assinaturas permanecem intactas.
+
+Ao atualizar apenas as velocidades contratadas ou outros dados da conexão, o Client cria uma nova versão do perfil e preserva tanto o vínculo quanto a escolha de agenda ativa ou pausada. Essa alteração não executa teste nem renova o aceite por conta própria; as autorizações centrais continuam obrigatórias.

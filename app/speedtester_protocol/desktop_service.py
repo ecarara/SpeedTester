@@ -144,8 +144,10 @@ class DesktopEngine:
             and old.origin == configuration.origin
             and old.profile.model_dump(exclude={"version"}) == configuration.profile.model_dump(exclude={"version"}))
         self.queue.state(CONFIGURATION, configuration.model_dump())
-        # Saving an unchanged upgrade form must not reset the participant's choice.
-        if not unchanged:
+        # Connection metadata changes create a new profile, never a new
+        # activation choice. Preserve active/paused when contribution continues.
+        continuing = bool(old and old.contribute and configuration.contribute and old.origin == configuration.origin)
+        if not unchanged and not continuing:
             self.queue.state(ENABLED, False)
         self.pairing = None
         if installed:
@@ -158,7 +160,7 @@ class DesktopEngine:
             installed.pop("host", None)
             installed.pop("port", None)
             self.queue.state("installation", installed)
-        if not unchanged:
+        if not unchanged and not continuing:
             self.queue.state("desktop:last_problem", {})
         self.last_code = "ready" if old else "configured"
         return self.status()

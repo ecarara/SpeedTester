@@ -342,6 +342,24 @@ class DesktopTests(unittest.TestCase):
         self.provider.key = Ed25519PrivateKey.generate()
         self.assertEqual(self.engine.dispatch("pair", {})["code"], "installation_server_changed")
 
+    def test_changing_declared_download_and_upload_preserves_active_or_paused_choice_and_pairing(self):
+        self.pair()
+        client=self.engine.credentials()[0].bundle.client_id
+        calls=list(self.provider.calls)
+        for enabled in (True,False):
+            self.queue.state(ENABLED,enabled)
+            changed=self.engine.configuration().model_dump()
+            changed['profile']['contracted_download_bps']=1_000_000_000 if enabled else 2_000_000_000
+            changed['profile']['contracted_upload_bps']=500_000_000
+            self.engine.dispatch('configure',changed)
+            status=self.engine.status()
+            self.assertEqual(status['measurements_enabled'],enabled)
+            self.assertEqual(self.engine.credentials()[0].bundle.client_id,client)
+            self.assertEqual(self.engine.installation()['profile'],status['configuration']['profile'])
+            self.assertEqual(status['configuration']['profile']['contracted_upload_bps'],500_000_000)
+        self.assertEqual(self.provider.calls,calls)
+        self.runner.assert_not_called()
+
     def test_storage_limit_never_requests_new_grants_or_drops_pending_records(self):
         self.pair()
         self.engine.dispatch("enable", {})

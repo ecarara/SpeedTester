@@ -11,6 +11,7 @@ from pathlib import Path
 import platform
 import tarfile
 import urllib.request
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -24,15 +25,20 @@ def install(name, destination):
         data = response.read(100 * 1024 * 1024 + 1)
     if hashlib.sha256(data).hexdigest() != asset['sha256']:
         raise ValueError('Security tool checksum mismatch')
-    with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as archive:
-        member = next(item for item in archive.getmembers()
-                      if item.isfile() and (item.name == name or item.name.endswith('/bin/' + name)))
-        binary = archive.extractfile(member).read()
+    filename = name + '.exe' if platform.system() == 'Windows' else name
+    if asset['name'].endswith('.zip'):
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            binary = archive.read(filename)
+    else:
+        with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as archive:
+            member = next(item for item in archive.getmembers()
+                          if item.isfile() and (item.name == name or item.name.endswith('/bin/' + name)))
+            binary = archive.extractfile(member).read()
     destination.mkdir(parents=True, exist_ok=True)
     temporary = destination / (name + '.tmp')
     temporary.write_bytes(binary)
     temporary.chmod(0o755)
-    os.replace(temporary, destination / name)
+    os.replace(temporary, destination / filename)
     print(f'{name} {entry["version"]}: checksum verified')
 
 

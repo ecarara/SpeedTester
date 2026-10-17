@@ -1,0 +1,64 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "request_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "client_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Client Id",
+      "type": "string"
+    },
+    "machine_id": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Machine Id",
+      "type": "string"
+    },
+    "timezone": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Timezone",
+      "type": "string"
+    },
+    "seed": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Seed",
+      "type": "string"
+    },
+    "format": {
+      "const": "quadrants-server-v1",
+      "default": "quadrants-server-v1",
+      "title": "Format",
+      "type": "string"
+    },
+    "timezone_database": {
+      "const": "2026.5",
+      "default": "2026.5",
+      "title": "Timezone Database",
+      "type": "string"
+    },
+    "tests_per_quadrant": {
+      "const": 2,
+      "default": 2,
+      "title": "Tests Per Quadrant",
+      "type": "integer"
+    },
+    "tests_per_day": {
+      "const": 8,
+      "default": 8,
+      "title": "Tests Per Day",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "request_id",
+    "client_id",
+    "machine_id",
+    "timezone",
+    "seed"
+  ],
+  "title": "MachinePolicy",
+  "type": "object"
+}

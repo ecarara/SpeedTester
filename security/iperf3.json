@@ -1,0 +1,16 @@
+{
+  "version": "3.22",
+  "source": {
+    "url": "https://github.com/esnet/iperf/releases/download/3.22/iperf-3.22.tar.gz",
+    "sha256": "1c0d0fb02c52626111d6e132db80edfbf27bbaff8bd9245df2a371dcb0b35a92"
+  },
+  "windows_runtime": {
+    "version": "3.6.11-3",
+    "url": "https://mirror.msys2.org/msys/x86_64/msys2-runtime-3.6.11-3-x86_64.pkg.tar.zst",
+    "sha256": "b6478bd1b4cb4b2e07c45db725fee93f9424c19fa248240dcb7b7f4187cd92db"
+  },
+  "windows_source": {
+    "url": "https://mirror.msys2.org/msys/sources/msys2-runtime-3.6.11-3.src.tar.zst",
+    "sha256": "c31b943bacca0fe7f5d8f287b2f2a331c46d04e369f9bde835477f0a25c4e0eb"
+  }
+}

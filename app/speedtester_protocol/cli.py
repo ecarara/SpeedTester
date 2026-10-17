@@ -2,8 +2,8 @@
 # Copyright (C) 2026 Edson Angelo Carara
 
 """Guided headless installation and unattended community synchronization."""
-import argparse,fcntl,json,secrets,shutil,sys,time
-from contextlib import contextmanager
+import argparse,json,secrets,sys,time,unicodedata
+from contextlib import contextmanager,ExitStack
 from pathlib import Path
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,Ed25519PublicKey
 from .crypto import b64,unb64,public_bytes,digest
@@ -14,16 +14,16 @@ from .models import Profile
 from .agent import CommunityAgent
 from .runner import IperfRunner
 from .environment import sync_environment
+from .local_security import process_lock
+from .schedule import DailySchedule, migrate_installation, policy
 
 DEFAULT_STATE=Path.home()/".local/share/speedtester-client"
 
 
 @contextmanager
 def exclusive(queue):
-    import os
-    fd=os.open(queue.directory/"process.lock",os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
-    with os.fdopen(fd,"w") as stream:
-        try:fcntl.flock(stream,fcntl.LOCK_EX|fcntl.LOCK_NB)
+    with ExitStack() as stack:
+        try:stack.enter_context(process_lock(queue.directory/"process.lock"))
         except BlockingIOError as exc:raise ProtocolError("client_already_running") from exc
         yield
 
@@ -47,7 +47,7 @@ def context(queue,config,transport=None):
 
 
 def prompt_profile(input_fn=input):
-    def required(label):return " ".join(input_fn(label+": ").split())
+    def required(label):return unicodedata.normalize("NFC"," ".join(input_fn(label+": ").split()))
     kinds={"1":"fiber","2":"coaxial","3":"radio","4":"satellite","5":"cellular","6":"dsl","7":"other","8":"unknown"}
     operator=required("Operadora");country=required("Código do país (ex.: BR)").upper()
     region=required("Estado/região");city=required("Cidade")
@@ -63,15 +63,10 @@ def installation_config(queue,origin,server,input_fn):
     if config:
         if config["origin"]!=origin or config["server_key"]!=b64(public_bytes(server)):
             raise ProtocolError("installation_server_changed")
-        return config
+        return migrate_installation(queue,config)[0]
     profile=prompt_profile(input_fn)
-    host=input_fn("Destino iPerf3 (o teste é exploratório se não for controlado): ").strip()
-    port=int(input_fn("Porta iPerf3 [5201]: ").strip() or "5201")
-    IperfRunner(host,port) # Reject malformed destinations before persisting.
-    hours=int(input_fn("Intervalo em horas [1, entre 1 e 24]: ").strip() or "1")
-    if not 1<=hours<=24:raise ValueError("invalid_schedule")
     config={"origin":origin,"server_key":b64(public_bytes(server)),"possession_private":Ed25519PrivateKey.generate().private_bytes_raw().hex(),
-        "measurement_private":Ed25519PrivateKey.generate().private_bytes_raw().hex(),"profile":profile.model_dump(),"host":host,"port":port,"interval":hours*3600}
+        "measurement_private":Ed25519PrivateKey.generate().private_bytes_raw().hex(),"profile":profile.model_dump(),"target_mode":"automatic","schedule":policy()}
     queue.state("installation",config)
     return config
 
@@ -92,7 +87,7 @@ def await_pairing(pairing_client,pairing,sleep):
 def setup(queue,origin,*,transport=None,input_fn=input,sleep=time.sleep,repair=False):
     origin=HTTPS(origin).origin
     server=discover(origin,transport)
-    print("Dados enviados após aceite e pareamento: perfil da conexão, métricas separadas e sistema operacional/distribuição/versão/arquitetura. Detalhes: "+origin+"/data")
+    print("Dados enviados após aceite e pareamento: perfil da conexão, métricas separadas, sistema operacional/distribuição/versão/arquitetura, identificação pseudônima da máquina e fuso horário. O identificador bruto do sistema não é enviado. Detalhes: "+origin+"/data")
     config=installation_config(queue,origin,server,input_fn)
     credentials,measurement=context(queue,config,transport)
     if credentials.bundle and not repair:
@@ -104,27 +99,58 @@ def setup(queue,origin,*,transport=None,input_fn=input,sleep=time.sleep,repair=F
         print("Impressão digital: "+digest(credentials.identity))
         print("Revise os termos e confirme apenas esta instalação. Aguardando aprovação…",flush=True)
         await_pairing(pairing_client,pairing,sleep)
-        queue.state("next_due",int(time.time())+config["interval"])
+        DailySchedule(queue,config["schedule"]).refresh(int(time.time()),activate=True)
         print("Pareamento concluído. Tokens guardados na fila cifrada; nenhum token precisa ser copiado.")
+    from .machine import sync_machine
+    config=sync_machine(credentials,measurement,config)
     sync_environment(credentials,measurement)
     return config
 
 
-def cycle(queue,*,transport=None,runner=None,now=None):
+def cycle(queue,*,transport=None,runner=None,now=None,clock=time.time):
     config=queue.state("installation")
     if not config:raise ProtocolError("setup_required")
+    config,_=migrate_installation(queue,config)
+    current=int(clock()) if now is None else int(now)
     credentials,measurement=context(queue,config,transport)
+    from .machine import sync_machine
+    config=sync_machine(credentials,measurement,config)
+    schedule=DailySchedule(queue,config["schedule"])
+    schedule.refresh(current)
     client=credentials.client()
     sync_environment(credentials,measurement)
     agent=CommunityAgent(client,queue,measurement,Profile.model_validate(config["profile"]),"iperf3")
     sent=agent.sync()
-    current=int(time.time()) if now is None else now
-    if agent.state("active_attempt") or current>=(queue.state("next_due") or 0):
-        # Reserve the next slot before running so restart cannot duplicate a due test.
-        queue.state("next_due",current+config["interval"])
-        agent.run_once(runner or IperfRunner(config["host"],config["port"]))
+    if agent.state("active_attempt"):
+        # Recovery may preserve error evidence, but cannot authorize another test.
+        agent.run_once(None,allow_new=False)
+        return "attempt_recovered"
+    slot=schedule.claim(current,agent.destination+":grant_request")
+    if slot is None:
+        return "synchronized" if sent else "waiting"
+    if config["schedule"]["format"] == "quadrants-server-v1":
+        agent.schedule_slot={"local_date":slot["date"],"quadrant":slot["quadrant"],"index":slot["index"]}
+    attempt_id=None
+    try:
+        if config.get("target_mode")=="automatic":
+            from .targets import automatic_runner
+            execute=automatic_runner(client,credentials.bundle.client_id,runner)
+        else:
+            execute=runner or IperfRunner(config["host"],config["port"])
+        def validate(grant):
+            moment=int(clock())
+            if not slot["at"]<=moment<=slot["deadline"] or moment+(grant.max_duration_ms+999)//1000+60>slot["end_at"]:
+                raise ProtocolError("schedule_slot_expired")
+            guard=getattr(execute,"__dict__",{}).get("validate_grant")
+            if guard:guard(grant)
+        def checked(grant):
+            validate(grant)
+            return execute(grant)
+        checked.validate_grant=validate
+        attempt_id=agent.run_once(checked)
         return "attempt_completed"
-    return "synchronized" if sent else "waiting"
+    finally:
+        schedule.finish(slot,attempt_id=attempt_id)
 
 
 def arguments(argv):
@@ -163,7 +189,6 @@ def show_status(queue):
 
 def dispatch(args,queue):
     if args.command=="setup":
-        if not shutil.which("iperf3"):raise ProtocolError("iperf3_required")
         setup(queue,args.server,repair=args.repair)
     elif args.command=="service-file":print(systemd_unit(args.executable,args.state),end="")
     elif args.command=="status":show_status(queue)

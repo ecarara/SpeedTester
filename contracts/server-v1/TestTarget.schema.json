@@ -1,0 +1,84 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Protocol Version",
+      "type": "string"
+    },
+    "request_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "client_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Client Id",
+      "type": "string"
+    },
+    "runner": {
+      "const": "iperf3",
+      "default": "iperf3",
+      "title": "Runner",
+      "type": "string"
+    },
+    "target_id": {
+      "pattern": "^central-[0-9a-f]{64}$",
+      "title": "Target Id",
+      "type": "string"
+    },
+    "target_scope": {
+      "enum": [
+        "unconfirmed",
+        "lan",
+        "external-controlled"
+      ],
+      "title": "Target Scope",
+      "type": "string"
+    },
+    "authentication": {
+      "default": "none",
+      "enum": [
+        "none",
+        "rsa-ephemeral-v1"
+      ],
+      "title": "Authentication",
+      "type": "string"
+    },
+    "host": {
+      "maxLength": 253,
+      "minLength": 1,
+      "title": "Host",
+      "type": "string"
+    },
+    "port": {
+      "maximum": 65535,
+      "minimum": 1,
+      "title": "Port",
+      "type": "integer"
+    },
+    "issued_at": {
+      "minimum": 0,
+      "title": "Issued At",
+      "type": "integer"
+    },
+    "expires_at": {
+      "minimum": 0,
+      "title": "Expires At",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "request_id",
+    "client_id",
+    "target_id",
+    "target_scope",
+    "host",
+    "port",
+    "issued_at",
+    "expires_at"
+  ],
+  "title": "TestTarget",
+  "type": "object"
+}

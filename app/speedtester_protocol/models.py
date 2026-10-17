@@ -4,7 +4,7 @@
 """Strict per-metric records; unavailable values never become zero."""
 from typing import Annotated, Literal
 from uuid import UUID
-import unicodedata
+from .profile_text import normalize_text
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Identifier = Annotated[str, Field(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")]
@@ -33,21 +33,23 @@ class Profile(StrictModel):
     contracted_download_bps: int | None = Field(default=None, gt=0, le=10**12)
     contracted_upload_bps: int | None = Field(default=None, gt=0, le=10**12)
 
-    @field_validator("operator", "region", "city")
+    @field_validator("operator", "country_code", "region", "city", mode="before")
     @classmethod
     def clean_text(cls, value):
-        if any(unicodedata.category(char).startswith("C") for char in value):
-            raise ValueError("control characters are prohibited")
-        normalized = " ".join(unicodedata.normalize("NFC", value).split())
-        if normalized != value:
-            raise ValueError("text must be normalized")
-        return value
+        return normalize_text(value)
+
+
+class ScheduleSlot(StrictModel):
+    local_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    quadrant: Literal["madrugada", "manha", "tarde", "noite"]
+    index: int = Field(ge=1, le=2)
 
 
 class GrantRequest(StrictModel):
     request_id: Identifier
     profile: Profile
     runner: Literal["iperf3", "ookla", "fast"]
+    schedule_slot: ScheduleSlot | None = None
 
 
 class Grant(StrictModel):
@@ -210,3 +212,43 @@ class EnvironmentReceipt(StrictModel):
     client_id: Identifier
     digest: Digest
     accepted_at: int = Field(ge=0)
+
+
+class MachineReport(StrictModel):
+    request_id: Identifier
+    client_id: Identifier
+    machine_id: Digest
+    basis: Literal["linux-machine-id", "windows-machine-guid", "macos-platform-uuid"]
+    timezone: str = Field(min_length=1, max_length=100)
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value):
+        from .central_slots import central_zone
+        central_zone(value)
+        return value
+
+
+class MachinePolicy(StrictModel):
+    request_id: Identifier
+    client_id: Identifier
+    machine_id: Digest
+    timezone: str = Field(min_length=1, max_length=100)
+    seed: Digest
+    format: Literal["quadrants-server-v1"] = "quadrants-server-v1"
+    timezone_database: Literal["2026.5"] = "2026.5"
+    tests_per_quadrant: Literal[2] = 2
+    tests_per_day: Literal[8] = 8
+
+
+class MachinePermissionRequest(StrictModel):
+    request_id: Identifier
+
+
+class MachinePermission(StrictModel):
+    request_id: Identifier
+    client_id: Identifier
+    legal_digest: Digest
+    privacy_version: str = Field(min_length=1, max_length=120)
+    issued_at: int = Field(ge=0)
+    expires_at: int = Field(ge=0)

@@ -32,6 +32,9 @@ class EncryptedQueue:
                 status TEXT NOT NULL DEFAULT 'pending', receipt BLOB);
                 CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY,value BLOB NOT NULL);""")
         os.chmod(self.path, 0o600)
+        if os.name == "nt":
+            from .local_security import windows_acl
+            windows_acl(self.path, apply=True)
 
     @contextmanager
     def connection(self):
@@ -66,15 +69,17 @@ class EncryptedQueue:
             for key,value in (state_updates or {}).items():
                 self._write_state(conn,key,value)
 
-    def pending(self, destination):
-        return self.records(destination, "pending")
+    def pending(self, destination, limit=256):
+        return self.records(destination, "pending", limit=limit)
 
     def quarantined(self, destination):
         return self.records(destination, "quarantined")
 
-    def records(self, destination, status):
+    def records(self, destination, status, limit=256):
+        if type(limit) is not int or not 1 <= limit <= 1000:
+            raise ValueError("invalid_queue_batch_limit")
         with self.connection() as conn:
-            rows = conn.execute("SELECT id,ciphertext FROM entries WHERE status=? AND destination=? ORDER BY rowid", (status,destination)).fetchall()
+            rows = conn.execute("SELECT id,ciphertext FROM entries WHERE status=? AND destination=? ORDER BY rowid LIMIT ?", (status,destination,limit)).fetchall()
         return [self.open(row[1], row[0]+":"+destination) for row in rows]
 
     def _write_state(self,conn,key,value):

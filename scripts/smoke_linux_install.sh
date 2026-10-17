@@ -17,6 +17,7 @@ export XDG_DATA_HOME="$SMOKE_ROOT/data"
 export XDG_CONFIG_HOME="$SMOKE_ROOT/config"
 export SPEEDTESTER_SOURCE_DIR="$SOURCE_DIR"
 export SPEEDTESTER_INSTALL_ROOT="$XDG_DATA_HOME/speedtester"
+export SPEEDTESTER_SKIP_SYSTEMD=1
 mkdir -p "$HOME"
 
 "$SCRIPT_DIR/install-user.sh"

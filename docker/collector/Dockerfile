@@ -15,6 +15,8 @@ RUN tar -xzf /tmp/iperf.tar.gz -C /tmp \
 FROM python:3.11.17-slim-trixie@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce
 
 ARG TARGETARCH
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
 
 # The collector includes the fast.com runner, official Ookla CLI and iperf3.
 RUN apt-get update \

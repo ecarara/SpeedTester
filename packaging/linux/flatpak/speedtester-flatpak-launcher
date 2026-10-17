@@ -1,0 +1,15 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+set -eu
+
+URL="${SPEEDTESTER_DASHBOARD_URL:-http://127.0.0.1:8000/}"
+case "${1:-open}" in
+  open)
+    exec xdg-open "$URL"
+    ;;
+  *)
+    echo "O Flatpak é o launcher do dashboard; instale o cliente systemd para controlar medições." >&2
+    exit 2
+    ;;
+esac

@@ -171,8 +171,16 @@ class Collector:
             server_name=result.server_name,
             server_location=result.server_location,
             country=result.country,
+            country_code=getattr(result, "country_code", None),
+            city=getattr(result, "city", None),
+            public_ip=getattr(result, "public_ip", None),
             interface=result.interface,
             isp=result.isp,
+            isp_organization=getattr(result, "isp_organization", None),
+            asn=getattr(result, "asn", None),
+            isp_source=getattr(result, "isp_source", None),
+            isp_confidence=getattr(result, "isp_confidence", None),
+            isp_observed_at=getattr(result, "isp_observed_at", None),
             bandwidth_contracted_mbps=result.bandwidth_contracted_mbps,
             test_duration_sec=round(result.duration_sec, 1),
             slot_id=slot["id"],
@@ -208,7 +216,9 @@ class Collector:
         metrics = {name: getattr(result, name, None) for name in (
             "download_mbps", "upload_mbps", "ping_ms", "jitter_ms", "duration_sec",
             "latency_min_ms", "latency_max_ms", "packet_loss_pct", "tcp_retransmits",
-            "server_name", "interface", "isp", "transfer_bytes")}
+            "server_name", "interface", "isp", "country", "country_code", "city",
+            "public_ip", "isp_organization", "asn", "isp_source", "isp_confidence",
+            "isp_observed_at", "transfer_bytes")}
         self._record_attempt("candidate", None, metrics)
         return result
 

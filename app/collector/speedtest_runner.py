@@ -38,6 +38,7 @@ from typing import Optional
 import aiohttp
 
 from collector.network_metrics import measure_ping
+from collector.network_identity import resolve_network_identity
 
 # fast.com constants (kept local so we can stop the test early if the operator
 # requests a shorter run or hit a wall-clock budget).
@@ -76,6 +77,14 @@ class SpeedTestResult:
     isp: Optional[str]
     duration_sec: float
     transfer_bytes: Optional[int] = None
+    city: Optional[str] = None
+    public_ip: Optional[str] = None
+    country_code: Optional[str] = None
+    isp_organization: Optional[str] = None
+    asn: Optional[str] = None
+    isp_source: Optional[str] = None
+    isp_confidence: Optional[str] = None
+    isp_observed_at: Optional[str] = None
 
 
 def run_speedtest(
@@ -146,6 +155,14 @@ def run_speedtest(
         isp=result["isp"],
         bandwidth_contracted_mbps=bandwidth_contracted_mbps,
         duration_sec=duration_sec,
+        city=result.get("city"),
+        public_ip=result.get("public_ip"),
+        country_code=result.get("country_code"),
+        isp_organization=result.get("isp_organization"),
+        asn=result.get("asn"),
+        isp_source=result.get("isp_source"),
+        isp_confidence=result.get("isp_confidence"),
+        isp_observed_at=result.get("isp_observed_at"),
     )
 
 
@@ -191,8 +208,16 @@ async def _run_async(
 
     # --- ISP ---------------------------------------------------------------
     isp = None
+    identity = {}
     if isp_lookup_enabled:
         isp = await _resolve_isp(isp_lookup_timeout_seconds)
+        # The legacy helper is retained for compatibility with integrations
+        # and tests.  The structured lookup adds city/country/ASN metadata.
+        identity = await asyncio.to_thread(
+            resolve_network_identity,
+            isp_lookup_timeout_seconds,
+            isp_hint=isp,
+        )
 
     return {
         "download_mbps": download_mbps,
@@ -205,8 +230,16 @@ async def _run_async(
         "tcp_retransmits": None,
         "server_id": None,
         "server_name": "fast.com",
-        "country": None,
-        "isp": isp,
+        "country": identity.get("country"),
+        "isp": identity.get("isp") or isp,
+        "city": identity.get("city"),
+        "public_ip": identity.get("public_ip"),
+        "country_code": identity.get("country_code"),
+        "isp_organization": identity.get("isp_organization"),
+        "asn": identity.get("asn"),
+        "isp_source": identity.get("isp_source"),
+        "isp_confidence": identity.get("isp_confidence"),
+        "isp_observed_at": identity.get("isp_observed_at"),
     }
 
 

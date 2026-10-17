@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from collector.network_metrics import measure_ping
+from collector.network_identity import resolve_network_identity
 from collector.speedtest_runner import SpeedTestResult, _detect_interface
 
 
@@ -40,7 +41,7 @@ def run_iperf3(
     timeout_seconds: float = 60.0,
 ) -> SpeedTestResult:
     """Run upload and reverse/download iperf3 tests against one server."""
-    del share, server_ids, max_bytes, isp_lookup_enabled, isp_lookup_timeout_seconds
+    del share, server_ids, max_bytes
     if not server:
         raise RuntimeError("IPERF3_SERVER não está configurado")
     if duration_seconds < 1 or parallel_streams < 1:
@@ -81,6 +82,15 @@ def run_iperf3(
     retransmits = _sum_optional(
         upload_metrics.retransmits, download_metrics.retransmits
     )
+    identity = {}
+    if isp_lookup_enabled:
+        # Metadata enrichment is optional and must not extend the 60s
+        # measurement budget.  Skip it when the budget has already elapsed.
+        remaining_for_identity = max(deadline - time.monotonic(), 0.0)
+        if remaining_for_identity > 0.1:
+            identity = resolve_network_identity(
+                min(isp_lookup_timeout_seconds, remaining_for_identity)
+            )
     return SpeedTestResult(
         download_mbps=download_metrics.speed_mbps,
         upload_mbps=upload_metrics.speed_mbps,
@@ -93,13 +103,21 @@ def run_iperf3(
         server_id=None,
         server_name=f"iperf3:{server}:{port}",
         server_location=None,
-        country=None,
+        country=identity.get("country"),
         interface=_detect_interface(),
         bandwidth_contracted_mbps=bandwidth_contracted_mbps,
-        isp=None,
+        isp=identity.get("isp"),
         duration_sec=time.monotonic() - started,
         transfer_bytes=(upload_metrics.transfer_bytes + download_metrics.transfer_bytes
                         if upload_metrics.transfer_bytes is not None and download_metrics.transfer_bytes is not None else None),
+        city=identity.get("city"),
+        public_ip=identity.get("public_ip"),
+        country_code=identity.get("country_code"),
+        isp_organization=identity.get("isp_organization"),
+        asn=identity.get("asn"),
+        isp_source=identity.get("isp_source"),
+        isp_confidence=identity.get("isp_confidence"),
+        isp_observed_at=identity.get("isp_observed_at"),
     )
 
 

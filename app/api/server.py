@@ -37,6 +37,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 
 from api.store import SampleStore
+from api.network_map import build_network_map
 from api import auth
 from api.request_limits import RequestSizeLimit, allow_request
 from shared.observation import report as observation_report
@@ -305,6 +306,24 @@ def api_series(local_date: Optional[str] = Query(None, alias="date"),
     return {"rows": series, "count": count, "aggregated": True}
 
 
+@app.get("/api/network-map", responses=API_ERRORS)
+def api_network_map(
+    local_date: Optional[str] = Query(None, alias="date"),
+    from_date: Optional[str] = Query(None, alias="from"),
+    to_date: Optional[str] = Query(None, alias="to"),
+    runner: Optional[str] = None,
+):
+    """Return privacy-preserving operator/city/country aggregates.
+
+    The endpoint deliberately omits public IP addresses. Coordinates are
+    deterministic centroids used only to place the aggregate on the map; the
+    response identifies whether the point represents a known city, a country
+    fallback, or an unmapped location.
+    """
+    rows = store.query_samples(**_query_filters(local_date, from_date, to_date, runner))
+    return build_network_map(rows)
+
+
 @app.get("/api/export", responses=API_ERRORS)
 def api_export(format: str = Query("json", pattern="^(json|csv)$"),
                local_date: Optional[str] = Query(None, alias="date"),
@@ -460,6 +479,10 @@ def api_summary(
             "packet_loss_avg_pct": None,
             "tcp_retransmits_avg": None,
             "latest_isp": None,
+            "latest_isp_organization": None,
+            "latest_country": None,
+            "latest_country_code": None,
+            "latest_city": None,
             "bandwidth_contracted_mbps": None,
             "failure_count": 0,
             "failure_rate_pct": None,
@@ -505,6 +528,10 @@ def api_summary(
 
     # Latest ISP and contracted-bandwidth (may be NULL on older / failed rows).
     latest_isp = latest.get("isp")
+    latest_isp_organization = latest.get("isp_organization")
+    latest_country = latest.get("country")
+    latest_country_code = latest.get("country_code")
+    latest_city = latest.get("city")
     latest_contracted = latest.get("bandwidth_contracted_mbps")
 
     summary = {
@@ -513,6 +540,10 @@ def api_summary(
         "last": last,
         "latest": latest,
         "latest_isp": latest_isp,
+        "latest_isp_organization": latest_isp_organization,
+        "latest_country": latest_country,
+        "latest_country_code": latest_country_code,
+        "latest_city": latest_city,
         "bandwidth_contracted_mbps": latest_contracted,
         "download_avg_mbps": download_avg,
         "upload_avg_mbps": upload_avg,
@@ -965,7 +996,8 @@ def _compute_outliers(df: pd.DataFrame) -> dict:
         mask = (s < lo) | (s > hi)
         out = []
         for i, v in s[mask].items():
-            out.append({"i": int(i), "value": round(float(v), 2), "zscore": round(float(z.iloc[i]), 2)})
+            # Filtering failures/null metrics preserves row labels, not positions.
+            out.append({"i": int(i), "value": round(float(v), 2), "zscore": round(float(z.loc[i]), 2)})
         return out
 
     return {"download": _series("download_mbps"), "upload": _series("upload_mbps")}

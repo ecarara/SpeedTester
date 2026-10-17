@@ -34,11 +34,15 @@ IP, hostname ou credencial do ambiente interno foi usado. Veja como executar a
   runners coletam, quando possível, ping mediano, jitter, latência
   mínima/máxima e perda de pacotes.
 - **Persistência:** SQLite em `/data/speedtester.db` no Compose.
+- **Identidade da conexão:** cada medição bem-sucedida pode persistir operadora,
+  país, cidade, ASN e IP público observados; a consulta é cacheada e não
+  invalida uma medição quando o serviço externo não responde.
 - **API:** FastAPI para saúde, amostras, resumo, gráfico PNG e limpeza dos
   dados, comparação histórica, alertas e eventos de disponibilidade.
 - **Dashboard:** gráficos SVG interativos, filtros de 7/30/90 dias, medianas e
   percentis p10/p95, cobertura de slots devidos/classificados/futuros e
-  exportação completa CSV/JSON.
+  exportação completa CSV/JSON, além de atlas interativo por operadora, cidade
+  e país sem expor IP público no mapa.
 - **Interface:** HTML/JavaScript servido pela própria API, atualizado a cada
   10 segundos.
 - **Deploy:** Docker Compose com os serviços `db`, `api`, `collector` e
@@ -226,11 +230,13 @@ Veja
 .
 ├── app/
 │   ├── api/server.py                 # FastAPI e geração do gráfico atual
+│   ├── api/network_map.py            # agregação geográfica sem IP público
 │   ├── api/store.py                  # schema e acesso SQLite
 │   ├── collector/collector.py        # laço atual de coleta
 │   ├── collector/iperf3_runner.py    # runner principal
 │   ├── collector/runner_dispatch.py  # seleção de runner
 │   ├── dashboard/index.html          # dashboard responsivo
+│   ├── dashboard/network-map.js      # atlas SVG interativo
 │   └── shared/settings.py            # configuração por ambiente
 ├── docker/
 │   ├── api/Dockerfile

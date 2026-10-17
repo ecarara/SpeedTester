@@ -24,6 +24,35 @@ from fixtures import IntegrationFixture, server
 
 
 class IntegrationTests(IntegrationFixture):
+    def test_summary_outliers_keep_row_labels_after_failures_and_missing_metrics(self):
+        start = datetime(2026, 10, 8, 12, tzinfo=timezone.utc)
+        # The failed row and absent upload leave gaps in the metric indices.
+        speeds = [900, None, 910, 920, 930, 940, 950, 960, 200]
+        self.store.add_samples([
+            Sample(
+                started_at=(start + timedelta(days=i)).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                local_date=(start + timedelta(days=i)).date().isoformat(),
+                quadrant='tarde', runner='iperf3', is_failure=speed is None,
+                download_mbps=speed, upload_mbps=speed if i != 2 else None,
+            )
+            for i, speed in enumerate(speeds)
+        ])
+        for query in ('date=2026-10-16',
+                      'from=2026-10-10&to=2026-10-16',
+                      'from=2026-09-17&to=2026-10-16',
+                      'from=2026-07-19&to=2026-10-16', ''):
+            with self.subTest(query=query):
+                response = self.client.get('/api/summary?runner=iperf3&' + query)
+                self.assertEqual(response.status_code, 200)
+        summary = self.client.get('/api/summary?runner=iperf3').json()
+        self.assertEqual(summary['failure_count'], 1)
+        self.assertEqual(summary['outliers']['download'], [
+            {'i': 8, 'value': 200.0, 'zscore': -2.64},
+        ])
+        self.assertEqual(summary['outliers']['upload'], [
+            {'i': 8, 'value': 200.0, 'zscore': -2.44},
+        ])
+
     def test_filters_precede_pagination_and_newest_is_present(self):
         self.add_many()
         all_rows = self.client.get('/api/samples').json()
@@ -41,6 +70,29 @@ class IntegrationTests(IntegrationFixture):
         csv = self.client.get('/api/export?format=csv&runner=iperf3').text
         self.assertEqual(len(csv.strip().splitlines()), 8)
         self.assertEqual(len(self.client.get('/api/export?format=json&runner=iperf3').json()), 7)
+
+    def test_network_map_aggregates_operator_city_country_without_public_ip(self):
+        self.store.add_samples([
+            Sample('2026-10-01T12:00:00Z', runner='iperf3', download_mbps=900,
+                   upload_mbps=450, isp='Operadora A', isp_organization='Grupo A',
+                   country='Brasil', country_code='BR', city='Curitiba',
+                   public_ip='203.0.113.10', local_date='2026-10-01', quadrant='tarde'),
+            Sample('2026-10-01T13:00:00Z', runner='iperf3', is_failure=True,
+                   failure_origin='OPERATOR', isp='Operadora A', country='Brasil',
+                   country_code='BR', city='Curitiba', public_ip='203.0.113.10',
+                   local_date='2026-10-01', quadrant='tarde'),
+        ])
+        response = self.client.get('/api/network-map?date=2026-10-01&runner=iperf3')
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body['totals'], {'samples': 2, 'operators': 1, 'cities': 1, 'countries': 1, 'unmapped': 0})
+        point = body['points'][0]
+        self.assertEqual(point['operator'], 'Operadora A')
+        self.assertEqual(point['city'], 'Curitiba')
+        self.assertEqual(point['country'], 'Brasil')
+        self.assertEqual(point['coordinate_source'], 'city-centroid')
+        self.assertNotIn('public_ip', point)
+        self.assertEqual(point['failure_count'], 1)
 
     def test_invalid_filters_return_422(self):
         for query in ('date=invalid', 'from=2026-10-02&to=2026-10-01', 'runner=unknown',
@@ -154,7 +206,7 @@ class IntegrationTests(IntegrationFixture):
             self.assertEqual(store.count(),1)
             self.assertIn('runner',store.all_samples()[0])
             with closing(sqlite3.connect(path)) as conn, conn:
-                self.assertEqual(conn.execute("SELECT value FROM schema_meta WHERE key='version'").fetchone()[0],'9')
+                self.assertEqual(conn.execute("SELECT value FROM schema_meta WHERE key='version'").fetchone()[0],'10')
             store.close()
 
     def test_downtime_clips_to_period_and_merges_same_origin(self):

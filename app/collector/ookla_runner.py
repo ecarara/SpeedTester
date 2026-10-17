@@ -80,6 +80,8 @@ def run_ookla(
         server_name=server.get("name"),
         server_location=server.get("location"),
         country=client.get("country") or server.get("country"),
+        city=client.get("city") or server.get("city"),
+        country_code=client.get("countryCode") or client.get("country_code") or server.get("countryCode"),
         interface=interface.get("name") or _detect_interface(),
         bandwidth_contracted_mbps=bandwidth_contracted_mbps,
         isp=payload.get("isp"),

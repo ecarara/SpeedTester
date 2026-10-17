@@ -91,6 +91,9 @@ rtt min/avg/max/mdev = 4.000/5.600/8.000/1.356 ms
         with patch("collector.iperf3_runner.subprocess.run", return_value=completed), patch(
             "collector.iperf3_runner.measure_ping",
             return_value=PingMetrics(5, 1, 4, 8, 0),
+        ), patch(
+            "collector.iperf3_runner.resolve_network_identity",
+            return_value={"isp": "Vivo", "country": "Brazil", "city": "Curitiba"},
         ):
             result = run_iperf3(server="example")
 
@@ -98,6 +101,9 @@ rtt min/avg/max/mdev = 4.000/5.600/8.000/1.356 ms
         self.assertEqual(result.jitter_ms, 1)
         self.assertEqual(result.packet_loss_pct, 0)
         self.assertEqual(result.tcp_retransmits, 6)
+        self.assertEqual(result.isp, "Vivo")
+        self.assertEqual(result.country, "Brazil")
+        self.assertEqual(result.city, "Curitiba")
 
     def test_iperf3_timeout_uses_total_budget(self):
         with patch(

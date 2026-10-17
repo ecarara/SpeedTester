@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+set -euo pipefail
+
+export PYTHONPATH="/usr/lib/speedtester/app${PYTHONPATH:+:$PYTHONPATH}"
+exec /usr/bin/python3 -m desktop_launcher "$@"

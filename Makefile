@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
 
-.PHONY: test compile docs dashboard license-check publication-check check compose-config
+.PHONY: test compile docs dashboard license-check publication-check source-tarball macos-package check compose-config
 
 PYTHON ?= python3
 
@@ -22,6 +22,12 @@ license-check:
 
 publication-check:
 	$(PYTHON) scripts/check_publication.py
+
+source-tarball:
+	./scripts/build-source-tarball.sh
+
+macos-package:
+	./packaging/macos/build-app.sh
 
 check: test compile docs dashboard license-check publication-check
 	git diff --check

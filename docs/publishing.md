@@ -53,6 +53,13 @@ uma publicação. O screenshot usa exclusivamente o banco fictício gerado por
 
 ## Primeiro release
 
+Cada release deve preservar o source archive `SpeedTester-<versão>.tar.gz`,
+além dos instaladores nativos. O arquivo é gerado a partir do Git com:
+
+```bash
+make source-tarball APP_VERSION=0.3.0
+```
+
 1. Faça merge do código em `main` com o CI verde.
 2. Atualize a seção correspondente em `CHANGELOG.md`.
 3. Crie uma tag anotada, por exemplo `v0.1.0`.
@@ -60,6 +67,15 @@ uma publicação. O screenshot usa exclusivamente o banco fictício gerado por
 5. Não inclua banco de produção, `.env`, token, backup ou capturas com dados
    reais no artefato da release. A captura sintética documentada pode ser incluída.
 6. Publique checksums dos artefatos distribuídos e a licença aplicável.
+
+O workflow [`Release artifacts`](../.github/workflows/release.yml) automatiza
+essa sequência quando uma tag `v<major>.<minor>.<patch>` é enviada. Ele bloqueia
+a publicação se `make check` falhar, gera o SBOM SPDX 2.3, recalcula
+`SHA256SUMS` sobre o conjunto final e publica o source archive, os pacotes
+Linux `.deb`/`.rpm`, Flatpak, pacman, o MSIX Windows e os bundles macOS. Os
+artefatos Windows/macOS ainda são unsigned até que o projeto configure
+certificados e secrets de assinatura. O AppImage permanece bloqueado até a
+fixação verificável do `appimagetool` e do runtime utilizado por ele.
 
 ## Pós-publicação
 

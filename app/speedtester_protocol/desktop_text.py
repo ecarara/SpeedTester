@@ -441,6 +441,7 @@ def problem_text(locale, key, *, compact=False):
 # Keep the persistent status readable at the minimum window size.
 for _locale, _strings in {
     "pt-BR": {
+        "update_notice_summary": "Atualização necessária. Baixe o instalador atual no site do Server, escolha «{upgrade}» e tente «{enable}». O vínculo e os dados serão preservados.",
         "acceptance_notice_summary": "Novo aceite necessário. Em «{account}», revise os documentos, marque as três caixas e clique em «{accept}». Depois volte e clique em «{enable}». Nenhum teste imediato.",
         "consent_notice_summary": "Contribuição sem autorização ou com consentimento retirado. Se quiser contribuir, abra «{account}», revise os documentos e registre sua autorização. Depois clique em «{enable}».",
         "revocation_notice_summary": "Autorização desta instalação revogada. Confira «{account}» ou contate fale.conosco@cararalab.com.br. Reparar não restaura a autorização.",
@@ -448,6 +449,7 @@ for _locale, _strings in {
         "authorization_notice_summary": "Autorização não confirmada. Confira a conexão e «{account}». Se persistir, use «{copy_info}» e contate fale.conosco@cararalab.com.br.",
     },
     "en": {
+        "update_notice_summary": "Update required. Download the current installer from the Server website, choose “{upgrade}” and try “{enable}”. Your pairing and data will be preserved.",
         "acceptance_notice_summary": "New acceptance required. In “{account}”, review the documents, select all three checkboxes and click “{accept}”. Then return and click “{enable}”. No immediate test.",
         "consent_notice_summary": "Contribution authorization is missing or withdrawn. If you want to contribute, open “{account}”, review the documents and record authorization. Then click “{enable}”.",
         "revocation_notice_summary": "Installation authorization revoked. Check “{account}” or contact fale.conosco@cararalab.com.br. Repair does not restore authorization.",
@@ -455,6 +457,7 @@ for _locale, _strings in {
         "authorization_notice_summary": "Authorization not confirmed. Check your connection and “{account}”. If it persists, use “{copy_info}” and contact fale.conosco@cararalab.com.br.",
     },
     "es": {
+        "update_notice_summary": "Actualización necesaria. Descarga el instalador actual del sitio del Server, elige «{upgrade}» e intenta «{enable}». Se conservarán el vínculo y los datos.",
         "acceptance_notice_summary": "Nueva aceptación necesaria. En «{account}», revisa los documentos, marca las tres casillas y haz clic en «{accept}». Después vuelve y haz clic en «{enable}». Ninguna prueba inmediata.",
         "consent_notice_summary": "Falta autorización para contribuir o se ha retirado. Si quieres contribuir, abre «{account}», revisa los documentos y registra tu autorización. Después haz clic en «{enable}».",
         "revocation_notice_summary": "Autorización de esta instalación revocada. Revisa «{account}» o contacta con fale.conosco@cararalab.com.br. Reparar no restablece la autorización.",

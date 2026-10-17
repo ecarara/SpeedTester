@@ -284,12 +284,33 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $rootCer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-root.cer'
           $leafCer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-leaf.cer'
-          Write-Host 'Importing CA into Root'
-          & certutil.exe -f -user -addstore Root $rootCer
-          if ($LASTEXITCODE -ne 0) { throw 'certutil não conseguiu importar a CA em Root' }
-          Write-Host 'Importing signing certificate into TrustedPeople'
-          & certutil.exe -f -user -addstore TrustedPeople $leafCer
-          if ($LASTEXITCODE -ne 0) { throw 'certutil não conseguiu importar o certificado em TrustedPeople' }
+
+          function Install-UserCertificate {
+            param(
+              [Parameter(Mandatory = $true)][string]$CertificatePath,
+              [Parameter(Mandatory = $true)][string]$StoreName
+            )
+
+            $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($CertificatePath)
+            $thumbprint = $certificate.Thumbprint.Replace(' ', '')
+            $registryPath = "Software\Microsoft\SystemCertificates\$StoreName\Certificates\$thumbprint"
+            $registryKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($registryPath)
+            if (-not $registryKey) {
+              throw "Não foi possível abrir a store CurrentUser\\$StoreName"
+            }
+            try {
+              $registryKey.SetValue('Blob', $certificate.RawData, [Microsoft.Win32.RegistryValueKind]::Binary)
+            }
+            finally {
+              $registryKey.Dispose()
+            }
+            Write-Host "Certificate $thumbprint registered in CurrentUser\\$StoreName"
+          }
+
+          Write-Host 'Registering CA in CurrentUser Root without certutil'
+          Install-UserCertificate -CertificatePath $rootCer -StoreName 'Root'
+          Write-Host 'Registering signing certificate in CurrentUser TrustedPeople without certutil'
+          Install-UserCertificate -CertificatePath $leafCer -StoreName 'TrustedPeople'
           Write-Host 'Certificate chain trust stores updated'
 
       - name: Sign package with SignTool

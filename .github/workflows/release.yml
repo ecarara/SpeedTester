@@ -241,36 +241,56 @@ jobs:
         with:
           name: release-windows-x64
           path: dist/windows
-      - name: Generate ephemeral Windows signing certificate
+      - name: Generate ephemeral Windows signing CA and certificate
         shell: pwsh
         timeout-minutes: 2
         run: |
           $ErrorActionPreference = 'Stop'
           $openssl = (Get-Command openssl.exe -ErrorAction Stop).Source
-          $key = Join-Path $env:RUNNER_TEMP 'speedtester-ci-test.key'
-          $pem = Join-Path $env:RUNNER_TEMP 'speedtester-ci-test.pem'
-          $cer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-test.cer'
+          $rootKey = Join-Path $env:RUNNER_TEMP 'speedtester-ci-root.key'
+          $rootPem = Join-Path $env:RUNNER_TEMP 'speedtester-ci-root.pem'
+          $rootCer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-root.cer'
+          $leafKey = Join-Path $env:RUNNER_TEMP 'speedtester-ci-leaf.key'
+          $leafCsr = Join-Path $env:RUNNER_TEMP 'speedtester-ci-leaf.csr'
+          $leafPem = Join-Path $env:RUNNER_TEMP 'speedtester-ci-leaf.pem'
+          $leafCer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-leaf.cer'
           $pfx = Join-Path $env:RUNNER_TEMP 'speedtester-ci-test.pfx'
-          Write-Host "Generating certificate with $openssl"
-          & $openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 1 -subj '/CN=Edson Angelo Carara' -addext 'keyUsage=digitalSignature' -addext 'extendedKeyUsage=codeSigning' -keyout $key -out $pem
-          if ($LASTEXITCODE -ne 0) { throw 'OpenSSL não conseguiu criar o certificado' }
-          & $openssl x509 -in $pem -outform DER -out $cer
-          if ($LASTEXITCODE -ne 0) { throw 'OpenSSL não conseguiu converter o certificado para DER' }
-          & $openssl pkcs12 -export -out $pfx -inkey $key -in $pem -passout 'pass:speedtester-ci-only'
-          if ($LASTEXITCODE -ne 0) { throw 'OpenSSL não conseguiu criar o PFX' }
-          Write-Host 'Certificate files generated'
+          $extensions = Join-Path $env:RUNNER_TEMP 'speedtester-ci-leaf.cnf'
+          @'
+          basicConstraints=critical,CA:FALSE
+          keyUsage=critical,digitalSignature
+          extendedKeyUsage=critical,codeSigning
+          subjectKeyIdentifier=hash
+          authorityKeyIdentifier=keyid,issuer
+          '@ | Set-Content -Path $extensions -Encoding ascii
+          function Invoke-OpenSsl {
+            param([string[]]$Arguments, [string]$Failure)
+            & $openssl @Arguments
+            if ($LASTEXITCODE -ne 0) { throw $Failure }
+          }
+          Write-Host "Generating CA with $openssl"
+          Invoke-OpenSsl -Arguments @('req','-x509','-newkey','rsa:2048','-sha256','-nodes','-days','1','-subj','/CN=SpeedTester CI Root','-addext','basicConstraints=critical,CA:TRUE,pathlen:0','-addext','keyUsage=critical,keyCertSign,cRLSign','-keyout',$rootKey,'-out',$rootPem) -Failure 'OpenSSL não conseguiu criar a CA raiz'
+          Invoke-OpenSsl -Arguments @('x509','-in',$rootPem,'-outform','DER','-out',$rootCer) -Failure 'OpenSSL não conseguiu converter a CA raiz'
+          Invoke-OpenSsl -Arguments @('req','-newkey','rsa:2048','-sha256','-nodes','-subj','/CN=Edson Angelo Carara','-keyout',$leafKey,'-out',$leafCsr) -Failure 'OpenSSL não conseguiu criar o CSR de assinatura'
+          Invoke-OpenSsl -Arguments @('x509','-req','-in',$leafCsr,'-CA',$rootPem,'-CAkey',$rootKey,'-CAcreateserial','-days','1','-sha256','-extfile',$extensions,'-out',$leafPem) -Failure 'OpenSSL não conseguiu assinar o certificado de código'
+          Invoke-OpenSsl -Arguments @('x509','-in',$leafPem,'-outform','DER','-out',$leafCer) -Failure 'OpenSSL não conseguiu converter o certificado de código'
+          Invoke-OpenSsl -Arguments @('pkcs12','-export','-out',$pfx,'-inkey',$leafKey,'-in',$leafPem,'-certfile',$rootPem,'-passout','pass:speedtester-ci-only') -Failure 'OpenSSL não conseguiu criar o PFX'
+          Write-Host 'Ephemeral CA and code-signing certificate generated'
 
-      - name: Trust ephemeral Windows signing certificate
+      - name: Trust ephemeral Windows CA and certificate
         shell: pwsh
-        timeout-minutes: 1
+        timeout-minutes: 2
         run: |
           $ErrorActionPreference = 'Stop'
-          $cer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-test.cer'
-          if (-not (Test-Path $cer)) { throw 'certificado DER não encontrado' }
-          Write-Host 'Importing certificate into TrustedPeople'
-          & certutil.exe -f -user -addstore TrustedPeople $cer
-          if ($LASTEXITCODE -ne 0) { throw 'certutil não conseguiu importar TrustedPeople' }
-          Write-Host 'TrustedPeople certificate store updated'
+          $rootCer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-root.cer'
+          $leafCer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-leaf.cer'
+          Write-Host 'Importing CA into Root'
+          & certutil.exe -f -user -addstore Root $rootCer
+          if ($LASTEXITCODE -ne 0) { throw 'certutil não conseguiu importar a CA em Root' }
+          Write-Host 'Importing signing certificate into TrustedPeople'
+          & certutil.exe -f -user -addstore TrustedPeople $leafCer
+          if ($LASTEXITCODE -ne 0) { throw 'certutil não conseguiu importar o certificado em TrustedPeople' }
+          Write-Host 'Certificate chain trust stores updated'
 
       - name: Sign package with SignTool
         shell: pwsh

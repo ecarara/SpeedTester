@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+set -e
+if [ "${1:-}" = remove ] && command -v systemctl >/dev/null 2>&1 && [ -n "${SUDO_USER:-}" ]; then
+    runuser -u "$SUDO_USER" -- systemctl --user disable --now speedtester-client.service speedtester-api.service >/dev/null 2>&1 || true
+fi
+exit 0

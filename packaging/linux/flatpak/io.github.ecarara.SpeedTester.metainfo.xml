@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 Edson Angelo Carara -->
+<component type="desktop-application">
+  <id>io.github.ecarara.SpeedTester</id>
+  <name>SpeedTester</name>
+  <summary>Dashboard local para medições de banda larga</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <url type="homepage">https://github.com/ecarara/SpeedTester</url>
+  <url type="bugtracker">https://github.com/ecarara/SpeedTester/issues</url>
+  <description>
+    <p>Abre o dashboard local do SpeedTester para acompanhar medições por quadrante, runner, operadora, cidade e país.</p>
+  </description>
+  <launchable type="desktop-id">io.github.ecarara.SpeedTester.desktop</launchable>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.3.0" date="2026-10-17"/>
+  </releases>
+</component>

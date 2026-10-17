@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+set -euo pipefail
+
+INSTALL_ROOT="${SPEEDTESTER_INSTALL_ROOT:-/usr/lib/speedtester}"
+export PYTHONPATH="$INSTALL_ROOT/app${PYTHONPATH:+:$PYTHONPATH}"
+exec "$INSTALL_ROOT/venv/bin/python" -m desktop_launcher "$@"

@@ -22,6 +22,8 @@ interna ou pelo próprio sistema de medição.
 | [API](api.md) | Endpoints existentes e contratos necessários para a evolução |
 | [Métricas e gráficos](analytics-and-charts.md) | Como calcular e apresentar velocidade, cobertura e indisponibilidade |
 | [Operação](operations.md) | Instalação, configuração, logs, backup e diagnóstico |
+| [Empacotamento desktop](desktop-packaging.md) | Plano para launcher, ícones e instaladores Windows, Linux e macOS |
+| [Instalação desktop](desktop-installation.md) | Procedimentos de instalação, atualização, remoção e verificação por sistema |
 | [Desenvolvimento](development.md) | Ambiente local, testes, schema e releases |
 | [Referência de código](code-reference.md) | Módulos, invariantes e contratos internos |
 | [Dependências](third-party.md) | Componentes externos e licenças a revisar |

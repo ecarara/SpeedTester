@@ -1,0 +1,8 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 Edson Angelo Carara -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">SpeedTester</title>
+  <desc id="desc">Símbolo geométrico de fluxo bidirecional em verde e lima.</desc>
+  <path fill="#123d32" d="M145 350 300 195h350v-92l260 247-260 247v-92H365l-94 94-126-126 126-126h279v-103H360l-89 89z"/>
+  <path fill="#d9ef97" d="m879 674-155 155H374v92L114 674l260-247v92h285l94-94 126 126-126 126H474v103h189l89-89z"/>
+</svg>

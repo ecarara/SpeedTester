@@ -103,8 +103,46 @@ conexão.
 
 ## Configuração e scripts
 
+### `app/desktop_launcher.py`
+
+Implementa o contrato inicial do launcher desktop do épico E-01. A interface
+CLI oferece as ações `open`, `status`, `start`, `stop` e `restart`. A ação
+`open` valida a URL do dashboard antes de delegar a abertura ao navegador; as
+demais ações usam o mecanismo nativo da plataforma para controlar o serviço
+configurado, sem concatenar comandos recebidos por entrada externa.
+
+`SPEEDTESTER_DASHBOARD_URL` e `SPEEDTESTER_SERVICE_NAME` permitem ajustar a
+instalação sem alterar o código. O nome padrão do serviço é
+`speedtester-client.service`, que será fornecido pelos pacotes desktop; a
+instalação atual pode informar outro nome durante a transição.
+
 - `app/shared/settings.py`: lê ambiente, valida tipos simples e monta
   `Settings` imutável;
+- `scripts/build_brand_assets.py`: monta ICO e ICNS usando somente PNGs
+  versionados e a biblioteca padrão do Python;
+- `packaging/linux/install-user.sh` e `uninstall-user.sh`: instalam ou removem
+  o cliente Linux no escopo do usuário, preservando dados por padrão;
+- `packaging/linux/build-deb.sh`, `build-rpm.sh` e `build-appimage.sh`:
+  constroem os artefatos Linux a partir de uma virtualenv explícita;
+- `packaging/linux/build-flatpak.sh`: gera o launcher Flatpak sandboxed e seu
+  bundle com ID estável `io.github.ecarara.SpeedTester`;
+- `packaging/linux/build-pacman.sh` e `packaging/linux/arch/PKGBUILD`:
+  constroem o pacote Arch com `makepkg` e remoção pelo ciclo do pacman;
+- `packaging/windows/build-launchers.ps1` e `build-msix.ps1`: produzem os
+  executáveis Windows e o MSIX; `install-msix.ps1`/`uninstall-msix.ps1`
+  controlam a instalação e a tarefa do cliente;
+- `packaging/macos/build-app.sh`: produz o bundle `.app`, o `.app.zip` e o
+  `.dmg` por arquitetura; `install-dmg.sh`/`uninstall-app.sh` controlam o
+  aplicativo e o LaunchAgent do usuário;
+- `scripts/build-source-tarball.sh`: preserva o source archive `.tar.gz` como
+  artefato de release reproduzível a partir do Git;
+- `scripts/build_sbom.py` e `scripts/generate_checksums.py`: geram SBOM SPDX
+  2.3 e manifesto SHA-256 para a release;
+- `scripts/validate_release_artifacts.py`: verifica checksums e o conteúdo
+  mínimo de source archive, SBOM, pacotes nativos, MSIX e bundles macOS antes
+  da publicação;
+- `scripts/smoke_linux_install.sh`: executa instalação, upgrade e remoção do
+  pacote por usuário Linux em um HOME temporário;
 - `scripts/backup.sh`: cria cópia consistente do SQLite, verifica integridade
   e aplica retenção somente aos arquivos gerados pelo script;
 - `scripts/compare_runners.py`: compara runners sem gravar amostras;

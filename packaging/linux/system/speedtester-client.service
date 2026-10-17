@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+[Unit]
+Description=SpeedTester broadband measurement client
+Wants=network-online.target
+After=network-online.target speedtester-api.service
+Requires=speedtester-api.service
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/lib/speedtester/app
+EnvironmentFile=-%h/.config/speedtester/speedtester.env
+Environment=PYTHONPATH=/usr/lib/speedtester/app
+ExecStart=/usr/lib/speedtester/venv/bin/python -u -m collector.collector
+Restart=on-failure
+RestartSec=10s
+UMask=0077
+
+[Install]
+WantedBy=default.target

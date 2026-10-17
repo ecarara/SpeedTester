@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+id: io.github.ecarara.SpeedTester
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: speedtester-flatpak-launcher
+rename-desktop-file: speedtester.desktop
+rename-icon: speedtester
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --talk-name=org.freedesktop.portal.Desktop
+
+modules:
+  - name: speedtester-launcher
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 packaging/linux/flatpak/speedtester-flatpak-launcher /app/bin/speedtester-flatpak-launcher
+      - install -Dm644 packaging/linux/flatpak/speedtester.desktop /app/share/applications/speedtester.desktop
+      - install -Dm644 assets/icons/hicolor/512/apps/speedtester.png /app/share/icons/hicolor/512x512/apps/speedtester.png
+      - install -Dm644 packaging/linux/flatpak/io.github.ecarara.SpeedTester.metainfo.xml /app/share/metainfo/io.github.ecarara.SpeedTester.metainfo.xml
+    sources:
+      - type: dir
+        path: ../../..

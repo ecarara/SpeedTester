@@ -99,6 +99,29 @@ O requisito estará atendido quando todos os itens forem verdadeiros:
 - [x] ampliar testes de falhas de rede, runners, acesso e operação;
 - [ ] concluir observação contínua de 21 dias no staging.
 
+## Épico aprovado — E-01: empacotamento desktop multiplataforma
+
+- [x] E-01.1 contrato do launcher e controle do serviço;
+- [x] E-01.2 identidade visual e formatos de ícone;
+- [ ] E-01.3 integração FreeDesktop e pacotes Linux (FreeDesktop, `systemd --user`,
+  instalação por usuário e builders `.deb`, `.rpm`, AppImage, Flatpak e pacman
+  implementados; validação dos artefatos pendente);
+- [ ] E-01.4 MSIX e integração com o Menu Iniciar do Windows (manifesto,
+  assets e scripts implementados; build/validação Windows pendentes);
+- [ ] E-01.5 bundle `.app`, `.dmg`, instalação/remoção e LaunchAgent para macOS
+      (implementação inicial concluída; build em runner macOS pendente);
+- [ ] E-01.6 pipeline de builds, checksums, SBOM e GitHub Releases (workflow
+      implementado para source, `.deb`, `.rpm`, Flatpak, pacman, Windows e
+      macOS; AppImage pendente por fixação do appimagetool/runtime);
+- [ ] E-01.7 validação de artefatos e smoke tests de instalação, atualização e
+      remoção para Linux, Windows e macOS implementados; reparo em execução
+      real ainda pendente;
+- [ ] E-01.8 guia de instalação por sistema implementado; troubleshooting
+      ampliado ainda pendente.
+
+O escopo e os critérios desse épico estão detalhados em
+[Empacotamento desktop multiplataforma](desktop-packaging.md).
+
 O destino iPerf3 existente será mantido: não há servidor externo sob controle
 confirmado. As medições não comprovam SLA. O tráfego reportado inclui tentativas
 com contadores disponíveis; timeouts e runners sem contador ficam explicitamente

@@ -277,41 +277,11 @@ jobs:
           Invoke-OpenSsl -Arguments @('pkcs12','-export','-out',$pfx,'-inkey',$leafKey,'-in',$leafPem,'-certfile',$rootPem,'-passout','pass:speedtester-ci-only') -Failure 'OpenSSL não conseguiu criar o PFX'
           Write-Host 'Ephemeral CA and code-signing certificate generated'
 
-      - name: Trust ephemeral Windows CA and certificate
+      - name: Prepare Windows MSIX smoke install
         shell: pwsh
-        timeout-minutes: 2
         run: |
-          $ErrorActionPreference = 'Stop'
-          $rootCer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-root.cer'
-          $leafCer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-leaf.cer'
-
-          function Install-UserCertificate {
-            param(
-              [Parameter(Mandatory = $true)][string]$CertificatePath,
-              [Parameter(Mandatory = $true)][string]$StoreName
-            )
-
-            $certificate = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($CertificatePath)
-            $thumbprint = $certificate.Thumbprint.Replace(' ', '')
-            $registryPath = "Software\Microsoft\SystemCertificates\$StoreName\Certificates\$thumbprint"
-            $registryKey = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($registryPath)
-            if (-not $registryKey) {
-              throw "Não foi possível abrir a store CurrentUser\\$StoreName"
-            }
-            try {
-              $registryKey.SetValue('Blob', $certificate.RawData, [Microsoft.Win32.RegistryValueKind]::Binary)
-            }
-            finally {
-              $registryKey.Dispose()
-            }
-            Write-Host "Certificate $thumbprint registered in CurrentUser\\$StoreName"
-          }
-
-          Write-Host 'Registering CA in CurrentUser Root without certutil'
-          Install-UserCertificate -CertificatePath $rootCer -StoreName 'Root'
-          Write-Host 'Registering signing certificate in CurrentUser TrustedPeople without certutil'
-          Install-UserCertificate -CertificatePath $leafCer -StoreName 'TrustedPeople'
-          Write-Host 'Certificate chain trust stores updated'
+          Write-Host 'Skipping runner certificate-store mutation; install smoke uses Add-AppxPackage -AllowUnsigned'
+          Write-Host 'The package is still signed in the previous step and the release artifact remains signed'
 
       - name: Sign package with SignTool
         shell: pwsh
@@ -333,13 +303,14 @@ jobs:
         shell: pwsh
         run: |
           $package = (Get-ChildItem dist/windows -Filter *.msix | Select-Object -First 1).FullName
-          ./packaging/windows/install-msix.ps1 $package
+          Add-AppxPackage -Path $package -AllowUnsigned
           if (-not (Get-AppxPackage -Name 'ecarara.SpeedTester')) { throw 'MSIX não foi instalado' }
           if (-not (Get-ScheduledTask -TaskName 'SpeedTester' -ErrorAction SilentlyContinue)) { throw 'tarefa não registrada' }
-          ./packaging/windows/install-msix.ps1 $package
+          Add-AppxPackage -Path $package -AllowUnsigned
           ./packaging/windows/uninstall-msix.ps1
           if (Get-AppxPackage -Name 'ecarara.SpeedTester') { throw 'MSIX não foi removido' }
           if (Get-ScheduledTask -TaskName 'SpeedTester' -ErrorAction SilentlyContinue) { throw 'tarefa não foi removida' }
+
 
   macos-install-smoke:
     name: macOS app install smoke test

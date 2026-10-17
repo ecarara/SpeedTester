@@ -120,6 +120,24 @@ def validate_pacman_package(path: Path) -> None:
     ))
 
 
+def validate_artifact(artifact: Path) -> None:
+    """Dispatch validation for one supported release artifact."""
+    if artifact.name.endswith(".tar.gz"):
+        validate_source_archive(artifact)
+    elif artifact.name.endswith(".spdx.json"):
+        validate_spdx(artifact)
+    elif artifact.suffix in {".deb", ".rpm"}:
+        validate_native_package(artifact)
+    elif artifact.name.endswith(".pkg.tar.zst"):
+        validate_pacman_package(artifact)
+    elif artifact.suffix == ".flatpak" and artifact.stat().st_size == 0:
+        raise ValueError(f"empty Flatpak bundle: {artifact.name}")
+    elif artifact.suffix in {".msix", ".zip"}:
+        validate_zip(artifact)
+    elif artifact.suffix == ".dmg" and artifact.stat().st_size == 0:
+        raise ValueError(f"empty disk image: {artifact.name}")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Validate all supported release files in a directory."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -133,22 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     if not artifacts:
         raise ValueError("release directory has no artifacts")
     for artifact in artifacts:
-        if artifact.name.endswith(".tar.gz"):
-            validate_source_archive(artifact)
-        elif artifact.name.endswith(".spdx.json"):
-            validate_spdx(artifact)
-        elif artifact.suffix in {".deb", ".rpm"}:
-            validate_native_package(artifact)
-        elif artifact.name.endswith(".pkg.tar.zst"):
-            validate_pacman_package(artifact)
-        elif artifact.suffix == ".flatpak":
-            if artifact.stat().st_size == 0:
-                raise ValueError(f"empty Flatpak bundle: {artifact.name}")
-        elif artifact.suffix in {".msix", ".zip"}:
-            validate_zip(artifact)
-        elif artifact.suffix == ".dmg":
-            if artifact.stat().st_size == 0:
-                raise ValueError(f"empty disk image: {artifact.name}")
+        validate_artifact(artifact)
     print(f"release-artifacts-ok ({len(artifacts)} files)")
     return 0
 

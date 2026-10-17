@@ -15,7 +15,7 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-REQUIREMENT_LINE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9_.-]*)(?:\[[^]]+\])?\s*(.*)$")
+REQUIREMENT_NAME = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9_.-]*)")
 
 
 def current_commit() -> str:
@@ -35,9 +35,16 @@ def parse_requirements(path: Path) -> list[tuple[str, str]]:
         line = raw_line.split("#", 1)[0].strip()
         if not line or line.startswith(("-", "--")):
             continue
-        match = REQUIREMENT_LINE.match(line)
-        if match:
-            dependencies.append((match.group(1), match.group(2).strip() or "NOASSERTION"))
+        match = REQUIREMENT_NAME.match(line)
+        if not match:
+            continue
+        remainder = line[match.end():].lstrip()
+        if remainder.startswith("["):
+            closing = remainder.find("]")
+            if closing < 0:
+                continue
+            remainder = remainder[closing + 1:].lstrip()
+        dependencies.append((match.group(1), remainder or "NOASSERTION"))
     return dependencies
 
 

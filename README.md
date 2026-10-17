@@ -18,7 +18,7 @@ SQLite e disponibiliza uma API e um dashboard web.
 
 ## Instalador gráfico em desenvolvimento
 
-A [prévia do Client gráfico](docs/desktop-client.md) inicia o suporte a Windows, Linux e macOS, com serviço independente da interface, vínculo opcional, reparo e desinstalação. Ainda não é um pacote certificado para workstations de produção; o instalador Linux publicado permanece disponível. A agenda da prévia começa pausada, e sua instalação não executa medições.
+A [prévia do Client gráfico](docs/desktop-client.md) inicia o suporte a Windows, Linux e macOS, com serviço independente da interface, vínculo opcional, reparo e desinstalação. Ainda não é um pacote certificado para workstations de produção; o instalador Linux publicado permanece disponível. Após aceite vigente e pareamento, a agenda ativa oito testes por dia, sempre em horários futuros; a instalação não executa um teste imediato. A consulta **Minhas medições** apresenta gráficos locais, filtros e a situação de envio ao Server, sem exigir login.
 
 ## Client comunitário: baixar e instalar
 

@@ -171,3 +171,20 @@ com respostas assinadas sintéticas, abertura da conta no endereço configurado,
 preservação do vínculo e agenda futura, com o runner de medições proibido.
 
 Uma recusa explícita por aceite, consentimento, suspensão ou revogação também pausa uma agenda que estava ativa. O usuário vê o bloqueio e encontra a ação de ativação após resolver a pendência, sem perder o vínculo. Falhas transitórias ou sem motivo reconhecido não são tratadas como retirada de consentimento nem pausam a agenda por esse motivo.
+
+
+## Consulta local sem login — 0.3.0.dev14
+
+Abra **Minhas medições** na barra lateral do aplicativo instalado. A consulta não pede conta ou senha do participante e funciona sem conexão com o Server, desde que o serviço local esteja em execução. A comunicação entre aplicativo e serviço continua restrita a loopback e autenticada automaticamente pela chave protegida da instalação; os dados não são publicados na rede local.
+
+A aba **Medições locais** oferece gráfico e tabela para download, upload, latência, jitter, perda de pacotes, duração, tráfego medido e retransmissões TCP. Escolha últimas 24 horas, 7 dias, 30 dias ou todo o histórico e filtre recebidos, aguardando envio ou em revisão. Valores indisponíveis aparecem como indisponíveis, sem serem convertidos em zero. Gráficos usam os resultados da página atual, com datas no fuso salvo da instalação. Há até 25 resultados por página; a leitura limita também quantos registros são examinados, portanto filtros restritivos podem exigir várias páginas, inclusive uma página vazia antes de resultados mais antigos.
+
+**Recebido** significa que existe um recibo assinado do Server, vinculado àquela métrica. **Teste completo: Integrado** exige também um recibo válido de fechamento do mesmo teste e a correspondência da métrica com esse fechamento. Receber uma métrica isoladamente não confirma a integração de todo o teste. A tabela verifica assinaturas e recibos; as três contagens gerais são os estados registrados na fila local, incluindo métricas e fechamentos, e não o número de testes bem-sucedidos. Registros ilegíveis não são alterados nem apresentados como integração confirmada.
+
+A aba **Integração com o Server** apresenta o vínculo salvo, endereço configurado, agenda ativa/pausada, última confirmação local e eventuais exigências de novo aceite, revogação ou suspensão. Isso descreve o último estado conhecido; não é uma verificação de disponibilidade atual do Server. Para instalações anteriores que ainda não salvaram o marcador de última confirmação, o texto informa que o recibo exibido foi encontrado na consulta atual. Um vínculo salvo não garante que o token continue autorizado no Server.
+
+Abrir a tela, alterar filtros, paginar e **Atualizar consulta** apenas leem o SQLite cifrado. Não fazem descoberta de servidor, login, renovação de tokens, reenvio ou solicitação de medição e não acordam a agenda. Nenhuma consulta inicia teste imediato. Os dados são os registros comunitários desta instalação e deste destino do Server; não importam o banco do coletor Docker/standalone de outra instalação.
+
+Atualize o runtime/serviço usando o fluxo de upgrade para habilitar a consulta em uma instalação anterior; o vínculo, as configurações e o histórico são preservados. O aplicativo informa quando o serviço ainda não suporta essa operação. A consulta está disponível em português por padrão, inglês e espanhol.
+
+As regressões verificam SQLite sem alterações, assinaturas adulteradas, recibos incorretos, fechamento ausente, isolamento entre destinos, filtros, paginação, respostas limitadas ao tamanho do IPC, serviço indisponível e navegação gráfica nos três idiomas. O executor de medições é proibido nesses testes; fixtures sintéticas não medem a conexão de ninguém.

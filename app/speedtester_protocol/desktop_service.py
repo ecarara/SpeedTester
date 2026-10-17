@@ -229,7 +229,7 @@ class DesktopEngine:
             return self._dispatch(operation, arguments)
         finally:
             self.lock.release()
-            if operation != "status":
+            if operation not in {"status", "history"}:
                 self.wake.set()
 
     def _dispatch(self, operation, arguments):
@@ -237,6 +237,17 @@ class DesktopEngine:
             try:
                 if operation == "configure":
                     return self.configure(arguments)
+                if operation == "history":
+                    from .local_history import read_history
+                    result = read_history(self.queue, self.installation(), arguments, now=int(self.clock()))
+                    installed = self.installation()
+                    credentials, _ = self.credentials()
+                    result["integration"] = {"paired": bool(credentials and credentials.bundle),
+                        "origin": installed["origin"] if installed else None,
+                        "enabled": bool(self.queue.state(ENABLED)) and not self.maintenance,
+                        "problem": (self.queue.state("desktop:last_problem") or {}).get("code"),
+                        "observed_at": int(self.clock()), "timezone": installed["schedule"]["timezone"] if installed else "UTC"}
+                    return {"ok": True, **result}
                 if arguments:
                     raise ProtocolError("invalid_local_arguments")
                 if operation == "status":

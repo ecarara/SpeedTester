@@ -603,3 +603,103 @@ class GraphicalFlows(unittest.TestCase):
         self.click('account');self.assertTrue(self.window.portal_window.winfo_exists())
         self.click('close',self.window.portal_window)
         self.assertFalse(self.window.busy)
+
+    def seed_history(self, count=1):
+        from test_local_history import add_attempt
+        self.engine.dispatch('configure',configuration())
+        self.engine.dispatch('pair',{})
+        self.provider.approved=True;self.engine.next_poll=0
+        self.assertEqual(self.engine.tick(),'paired')
+        installed=self.engine.installation();_,measurement=self.engine.credentials()
+        for index in range(count):
+            add_attempt(self.engine.queue,installed,self.provider.key,measurement,
+                at=int(time.time())-index*60,
+                delivery=('accepted','pending','quarantined')[index%3],closed=index!=0)
+        self.engine.wake.clear()
+        return installed
+
+    def choose_history_filter(self, attribute, index):
+        control=self.window.history_filters[attribute]
+        control.current(index);control.event_generate('<<ComboboxSelected>>');self.settle()
+
+    def test_local_history_all_metrics_languages_and_integration_are_read_only_without_login(self):
+        import hashlib
+        from speedtester_protocol.models import METRICS
+        from speedtester_protocol.history_text import COPY
+        from speedtester_protocol.desktop_history import HistoryScreen
+        self.seed_history(3)
+        before=hashlib.sha256(self.engine.queue.path.read_bytes()).digest()
+        calls=list(self.provider.calls)
+        self.click('history')
+        for language,locale in (('Português','pt-BR'),('English','en'),('Español','es')):
+            self.window.languages.set(language);self.window.change_language();self.window.update()
+            self.assertEqual(set(COPY[locale]),set(COPY['pt-BR']))
+            for index,metric in enumerate(METRICS):
+                self.choose_history_filter('history_metric',index)
+                rows=self.window.history_data['rows']
+                self.assertEqual(len(rows),3)
+                self.assertTrue(all(row['metric']==metric for row in rows))
+                self.assertEqual(len(self.window.history_tree.get_children()),3)
+                points=[item for item in self.window.history_chart.find_all() if self.window.history_chart.type(item)=='oval']
+                if metric in ('latency','jitter','packet_loss'):
+                    self.assertEqual(points,[])
+                    self.assertTrue(all(HistoryScreen.history_value(row)=='—' for row in rows))
+                else:
+                    self.assertEqual(len(points),3)
+            self.window.history_tabs.select(1);self.window.update()
+            self.click('history_refresh');self.assertEqual(self.window.history_tabs.index('current'),1)
+            labels=[w.cget('text') for w in self.widgets(self.window.content) if isinstance(w,self.tk.Label)]
+            self.assertIn(self.window.t('history_linked'),labels)
+            self.assertIn('https://server.example',labels)
+            self.assertIn(self.window.t('history_scope'),labels)
+            self.window.history_tabs.select(0);self.window.update()
+        self.assertEqual(self.provider.calls,calls)
+        self.assertEqual(hashlib.sha256(self.engine.queue.path.read_bytes()).digest(),before)
+        self.assertFalse(self.engine.wake.is_set())
+        self.assertFalse(self.browser.called);self.assertEqual(self.native_calls,[])
+        self.assertEqual(self.dialogs,[])
+
+    def test_local_history_paging_filters_and_controls_fit_minimum_window(self):
+        self.seed_history(60);self.window.geometry('960x780')
+        self.click('history');first=self.window.history_data['rows']
+        self.assertEqual(len(first),25)
+        self.click('history_older');self.assertNotEqual(self.window.history_data['rows'],first)
+        self.click('history_newer');self.assertEqual(self.window.history_data['rows'],first)
+        for index,state in ((1,'accepted'),(2,'pending'),(3,'quarantined')):
+            self.choose_history_filter('history_delivery',index)
+            self.assertTrue(all(row['delivery']==state for row in self.window.history_data['rows']))
+            found=list(self.window.history_data['rows'])
+            while self.window.history_data['next_cursor']:
+                self.click('history_older');found+=self.window.history_data['rows']
+            self.assertEqual(len(found),20)
+            self.assertEqual(len({row['at'] for row in found}),20)
+        for index,days in enumerate((1,7,30,0)):
+            self.choose_history_filter('history_days',index)
+            self.assertEqual(self.window.history_data['query']['days'],days)
+        for language in ('English','Español','Português'):
+            self.window.languages.set(language);self.window.change_language();self.window.update()
+            self.assertGreaterEqual(self.window.history_tree.winfo_height(),65)
+            for widget in self.widgets(self.window.content):
+                if widget.winfo_ismapped() and isinstance(widget,self.tk.Button):
+                    self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(),self.window.winfo_rooty()+self.window.winfo_height(),widget.cget('text'))
+                    self.assertLessEqual(widget.winfo_rootx()+widget.winfo_width(),self.window.winfo_rootx()+self.window.winfo_width(),widget.cget('text'))
+            self.window.history_tabs.select(1);self.window.update()
+            self.window.history_tabs.select(0);self.window.update()
+        self.assertEqual(self.dialogs,[])
+
+    def test_local_history_empty_offline_and_older_service_have_actionable_translated_states(self):
+        self.click('history');self.assertEqual(self.window.history_data['rows'],[])
+        self.assertFalse(self.window.history_data['integration']['paired'])
+        original=self.controller.call
+        for language in ('Português','English','Español'):
+            self.window.languages.set(language);self.window.change_language();self.window.update()
+            for fail,expected in ((lambda *a:(_ for _ in ()).throw(OSError('offline')),'history_failed'),
+                                  (lambda *a:{'ok':False,'code':'unknown_local_operation'},'history_upgrade')):
+                self.controller.call=fail;self.click('history_refresh')
+                labels=[w.cget('text') for w in self.widgets(self.window.content) if isinstance(w,self.tk.Label)]
+                self.assertIn(self.window.t(expected),labels)
+                self.assertFalse(self.window.busy)
+        self.controller.call=original;self.click('history_refresh')
+        self.assertNotIn('history_error',self.window.history_data)
+        self.assertEqual(self.provider.calls,[]);self.assertFalse(self.browser.called)
+        self.assertEqual(self.native_calls,[]);self.assertEqual(self.dialogs,[])

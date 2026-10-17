@@ -36,6 +36,9 @@ class CommunityAgent:
                 quarantined.add(attempt_id)
                 continue
             self.queue.acknowledge(record["id"],receipt,previous_receipt_key=self.destination+":previous_receipt")
+            confirmed_at = receipt["payload"].get("accepted_at")
+            if type(confirmed_at) is int:
+                self.state("last_confirmed_at", max(self.state("last_confirmed_at") or 0, confirmed_at))
             completed+=1
         return completed
 

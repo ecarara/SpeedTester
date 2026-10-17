@@ -104,6 +104,9 @@ class PreviewController:
             "quarantined": 0, "database_bytes": 0, "last_tick": 0}
 
     def call(self, operation, arguments=None):
+        if operation == "history":
+            return {"ok": True, "rows": [], "counts": {}, "next_cursor": None,
+                "integration": {"paired": False, "enabled": False, "timezone": "UTC"}}
         if operation == "configure":
             self.state.update(configured=True, contribute=arguments["contribute"])
         elif operation == "pair":

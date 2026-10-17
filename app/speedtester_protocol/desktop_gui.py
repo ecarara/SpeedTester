@@ -17,15 +17,20 @@ from .disclosure import DISCLOSURE_CATALOG
 from .desktop_links import portal_url, pairing_url, request_browser
 from .profile_text import uppercase_text
 from .plan import parse_mbps, format_mbps
+from .desktop_history import HistoryScreen
 
 BACKGROUND, PAPER, INK, MUTED, ACCENT = "#f2f1e9", "#ffffff", "#112b2a", "#49615c", "#c1ef55"
 
 
-class Installer(tk.Tk):
+class Installer(HistoryScreen, tk.Tk):
     def __init__(self, controller):
         super().__init__()
         self.controller = controller
         self.locale, self.page, self.operation = "pt-BR", "welcome", "install"
+        self.history_data = None
+        self.history_metric, self.history_days, self.history_delivery = "download", 7, "all"
+        self.history_cursor, self.history_stack = None, []
+        self.history_tab = 0
         self.form_locale = self.locale
         self.snapshot, self.pairing = {}, None
         self.pairing_state, self.pair_poll = "idle", None
@@ -145,6 +150,10 @@ class Installer(tk.Tk):
         self.label(rail, self.t("navigation"), color="#94b6a7", size=9, width=200).pack(anchor="w", padx=25)
         for number, key in (("01", "install"), ("02", "repair"), ("03", "uninstall")):
             self.label(rail, number + "   " + self.t(key), color=PAPER, size=11, width=205).pack(anchor="w", padx=25, pady=(18, 0))
+        for key, command in (("status", self.load_status), ("history", self.open_history)):
+            navigation = self.button(rail, key, command)
+            navigation.configure(bg=INK, fg=ACCENT if self.page == ("history" if key == "history" else "status") else PAPER, font=("Helvetica",11,"bold"), padx=10, pady=9)
+            navigation.pack(fill="x",padx=15,pady=(8,0))
         self.label(rail, self.t("footer")+"\n"+build_label(), color="#94b6a7", size=10, width=200).pack(side="bottom", anchor="w", padx=25, pady=25)
         shell = tk.Frame(self, bg=BACKGROUND)
         shell.pack(side="left", fill="both", expand=True, padx=30, pady=24)
@@ -159,7 +168,7 @@ class Installer(tk.Tk):
         self.content = tk.Frame(shell, bg=BACKGROUND)
         self.content.pack(fill="both", expand=True, pady=(14, 0))
         getattr(self, "page_" + self.page)()
-        self.feedback = self.label(shell, self.t("busy") if self.busy else "", color=MUTED, size=10)
+        self.feedback = self.label(shell, self.t(getattr(self, "busy_key", "busy")) if self.busy else "", color=MUTED, size=10)
         self.feedback.pack(fill="x", pady=(12, 0))
 
     def change_language(self, _event=None):
@@ -191,7 +200,6 @@ class Installer(tk.Tk):
             card.pack(fill="x", pady=(0, 12))
             self.button(card, operation, lambda action=operation: self.choose(action), primary=operation == "install").pack(anchor="w")
             self.label(card, self.t(detail), color=MUTED, size=11, width=610).pack(anchor="w", pady=(8, 0))
-        self.button(self.content, "status", self.load_status).pack(anchor="w", pady=10)
 
     def choose(self, operation):
         if self.busy:
@@ -706,11 +714,12 @@ class Installer(tk.Tk):
             self.show("welcome")
         self.work(lambda: self.controller.native("uninstall", purge), completed)
 
-    def work(self, operation, completed):
+    def work(self, operation, completed, *, busy_key="busy"):
         if self.busy:
             return
         self.busy = True
-        self.feedback.configure(text=self.t("busy"))
+        self.busy_key = busy_key
+        self.feedback.configure(text=self.t(busy_key))
         def worker():
             try:
                 self.events.put((True, operation(), completed))
@@ -779,7 +788,7 @@ class Installer(tk.Tk):
             self.after(20, dismiss_confirmation)
             assert not self.ask_confirmation("enable", "enable_confirm")
             assert not confirmation_errors, confirmation_errors
-            for page in ("welcome", "configure", "pair", "status", "remove"):
+            for page in ("welcome", "configure", "pair", "status", "history", "remove"):
                 self.show(page)
                 self.update()
                 assert self.winfo_exists()

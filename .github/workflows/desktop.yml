@@ -52,7 +52,9 @@ jobs:
       - name: Portable service and maintenance contract, no measurements
         env:
           PYTHONPATH: app
-        run: python -m unittest discover -s tests -p 'test_desktop_*.py' -v
+        run: |
+          python -m unittest discover -s tests -p 'test_desktop_*.py' -v
+          python -m unittest discover -s tests -p 'test_local_history.py' -v
       - name: Graphical smoke and packaged runtime (Linux)
         id: build_linux
         if: runner.os == 'Linux'

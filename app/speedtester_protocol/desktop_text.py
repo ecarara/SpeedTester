@@ -466,3 +466,7 @@ for _locale, _strings in {
     },
 }.items():
     TEXT[_locale].update(_strings)
+
+from .history_text import COPY as _HISTORY_COPY
+for _locale, _strings in _HISTORY_COPY.items():
+    TEXT[_locale].update(_strings)

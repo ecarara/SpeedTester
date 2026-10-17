@@ -193,7 +193,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install pinned build utilities
-        run: pacman -Sy --noconfirm --needed curl git iperf3 python-aiohttp python-fastapi python-matplotlib python-pandas python-pydantic python-uvicorn
+        run: pacman -Sy --noconfirm --needed curl git
       - name: Build package as an unprivileged user
         env:
           APP_VERSION: ${{ needs.metadata.outputs.version }}

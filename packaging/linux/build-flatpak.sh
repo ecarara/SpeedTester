@@ -22,5 +22,5 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
-flatpak-builder --force-clean --repo="$REPO_DIR" "$BUILD_DIR" "$MANIFEST"
+flatpak-builder --force-clean --default-branch=stable --repo="$REPO_DIR" "$BUILD_DIR" "$MANIFEST"
 flatpak build-bundle "$REPO_DIR" "$OUTPUT_DIR/${APP_ID}-${VERSION}.flatpak" "$APP_ID" stable

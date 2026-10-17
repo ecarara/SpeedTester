@@ -407,7 +407,10 @@ class GraphicalFlows(unittest.TestCase):
 
     def test_authorization_failures_show_specific_localized_actions_without_losing_pairing(self):
         from speedtester_protocol.desktop_text import problem_text
-        self.click('install');self.fill();self.click('continue')
+        self.click('install');self.fill()
+        self.window.fields['contracted_download'].set('1000')
+        self.window.fields['contracted_upload'].set('500')
+        self.click('continue')
         self.provider.approved=True;self.engine.next_poll=0
         self.assertEqual(self.engine.tick(),'paired')
         self.window.poll_pairing();self.settle()
@@ -437,6 +440,8 @@ class GraphicalFlows(unittest.TestCase):
                         if isinstance(widget,self.tk.Button):
                             self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(),
                                 self.window.winfo_rooty()+self.window.winfo_height(),widget.cget('text'))
+                    self.window.status_canvas.yview_moveto(1);self.window.update()
+                    self.assertGreater(self.window.status_canvas.yview()[1],0)
                     if key=='acceptance_notice':
                         self.click('account')
                         self.assertEqual(self.window.portal_entry.get(),

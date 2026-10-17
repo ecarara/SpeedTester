@@ -548,6 +548,21 @@ class Installer(tk.Tk):
 
     def page_status(self):
         self.heading("status", "status_detail")
+        # Notices and plan rows may grow; account/activation actions must stay visible.
+        actions = tk.Frame(self.content, bg=BACKGROUND)
+        actions.pack(side="bottom", fill="x")
+        viewport = tk.Frame(self.content, bg=BACKGROUND)
+        viewport.pack(fill="both", expand=True)
+        canvas = tk.Canvas(viewport, bg=BACKGROUND, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(viewport, orient="vertical", command=canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        body = tk.Frame(canvas, bg=BACKGROUND)
+        item = canvas.create_window((0, 0), window=body, anchor="nw")
+        canvas.bind("<Configure>", lambda event: canvas.itemconfigure(item, width=event.width))
+        body.bind("<Configure>", lambda _event: canvas.configure(scrollregion=canvas.bbox("all")))
+        self.status_canvas = canvas
         paired = self.snapshot.get("paired", False)
         enabled = self.snapshot.get("measurements_enabled", False)
         if not self.snapshot:
@@ -564,7 +579,7 @@ class Installer(tk.Tk):
             state, detail = "tests_active", "tests_active_detail"
         else:
             state, detail = "setup_complete", "setup_complete_detail"
-        panel = tk.Frame(self.content, bg=PAPER, padx=16, pady=12)
+        panel = tk.Frame(body, bg=PAPER, padx=16, pady=12)
         panel.pack(fill="x", pady=(0, 12))
         self.label(panel, self.t(state), bold=True, size=15).pack(fill="x")
         problem = self.snapshot.get("problem") or {}
@@ -576,7 +591,7 @@ class Installer(tk.Tk):
         self.label(panel, explanation, size=11, width=580,
             color="#705016" if problem_key else MUTED).pack(fill="x", pady=(6, 0))
         zone = (self.snapshot.get("configuration") or {}).get("timezone", self.schedule_timezone)
-        self.label(self.content, self.t("schedule_short").format(timezone=zone),
+        self.label(body, self.t("schedule_short").format(timezone=zone),
             color=MUTED, size=10).pack(fill="x", pady=(0, 8))
         if self.snapshot and self.snapshot.get("service") != "unavailable":
             next_test = self.status_time(self.snapshot.get("next_due")) if enabled else self.t("next_paused")
@@ -588,7 +603,7 @@ class Installer(tk.Tk):
             if self.snapshot.get("quarantined"):
                 rows.append(("quarantined", str(self.snapshot["quarantined"])))
             for key, value in rows:
-                row = tk.Frame(self.content, bg=PAPER, padx=12, pady=6)
+                row = tk.Frame(body, bg=PAPER, padx=12, pady=6)
                 row.pack(fill="x", pady=(0, 4))
                 self.label(row, self.t(key), size=10, width=270).pack(side="left")
                 self.label(row, value, bold=True, size=10, width=360).pack(side="right")
@@ -602,8 +617,8 @@ class Installer(tk.Tk):
                     measured=format_mbps(measured), percent=format(item["percent"], ".1f")) if measured is not None else self.t("plan_waiting").format(contracted=format_mbps(item["contracted_bps"]))
                 plan_rows.append(self.t("metric_" + metric) + ": " + value)
         if plan_rows:
-            self.label(self.content, "\n".join(plan_rows), size=10, color=MUTED).pack(fill="x", pady=(2, 0))
-        primary = tk.Frame(self.content, bg=BACKGROUND)
+            self.label(body, "\n".join(plan_rows), size=10, color=MUTED).pack(fill="x", pady=(2, 0))
+        primary = tk.Frame(actions, bg=BACKGROUND)
         primary.pack(fill="x", pady=(10, 0))
         if self.snapshot.get("contribute") and not paired:
             self.button(primary, "resume_pair", self.begin_pairing, primary=True).pack(side="left")
@@ -614,7 +629,7 @@ class Installer(tk.Tk):
                 activate.configure(state="disabled")
             activate.pack(side="left")
         self.button(primary, "refresh_status", self.load_status).pack(side="right")
-        secondary = tk.Frame(self.content, bg=BACKGROUND)
+        secondary = tk.Frame(actions, bg=BACKGROUND)
         secondary.pack(fill="x", pady=(10, 0))
         for key, command in (("manage", self.configure_existing), ("account", self.open_account),
                              ("copy_info", self.copy_information), ("home", lambda: self.show("welcome"))):

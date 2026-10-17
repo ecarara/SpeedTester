@@ -11,7 +11,7 @@ concurrency:
 jobs:
   analyze:
     # Community Edition analyzes the default branch. Fork PRs never receive secrets.
-    if: vars.SONAR_ENABLED == 'true' && github.ref == 'refs/heads/main'
+    if: vars.SONAR_ENABLED == 'true' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -42,3 +42,32 @@ jobs:
           args: >-
             -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY || 'speedtester' }}
             -Dsonar.qualitygate.wait=true
+      - name: Report quality gate conditions
+        if: always()
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY || 'speedtester' }}
+        run: |
+          response=$(curl --silent --show-error --fail --user "${SONAR_TOKEN}:" \
+            "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=${SONAR_PROJECT_KEY}" || true)
+          RESPONSE="${response}" python - <<'PY'
+          import json
+          import os
+
+          raw = os.environ.get("RESPONSE", "")
+          if not raw:
+              print("quality-gate-diagnostics-unavailable")
+              raise SystemExit(0)
+          project = json.loads(raw).get("projectStatus", {})
+          print(f"quality-gate-status={project.get('status')}")
+          for condition in project.get("conditions", []):
+              print(
+                  "condition: metric={} status={} actual={} threshold={}".format(
+                      condition.get("metricKey"),
+                      condition.get("status"),
+                      condition.get("actualValue"),
+                      condition.get("errorThreshold"),
+                  )
+              )
+          PY

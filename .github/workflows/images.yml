@@ -80,6 +80,8 @@ jobs:
         with:
           context: .
           file: docker/${{ matrix.service }}/Dockerfile
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.version }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |

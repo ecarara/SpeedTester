@@ -149,3 +149,23 @@ O formulário permite informar **download contratado** e **upload contratado**, 
 O status compara cada direção do resultado aceito mais recente com o valor declarado no mesmo perfil: medido ÷ contratado × 100. Resultados indisponíveis não viram zero, percentuais acima de 100 são mantidos e uma alteração do plano não recalcula o histórico. As métricas originais e suas assinaturas permanecem intactas.
 
 Ao atualizar apenas as velocidades contratadas ou outros dados da conexão, o Client cria uma nova versão do perfil e preserva tanto o vínculo quanto a escolha de agenda ativa ou pausada. Essa alteração não executa teste nem renova o aceite por conta própria; as autorizações centrais continuam obrigatórias.
+
+
+## Avisos de autorização e próximos passos
+
+O diálogo de erro e o painel de status distinguem novo aceite de documentos,
+consentimento retirado, conta suspensa, instalação revogada, falha de identificação
+da máquina e necessidade de atualização. Cada motivo mostra a ação correspondente
+no idioma selecionado, com português como padrão. A ausência de aceite orienta a
+abrir a conta no Server, revisar os documentos, marcar as três caixas, registrar
+aceite e autorização e voltar para ativar os testes automáticos. Isso preserva o
+vínculo e habilita apenas os horários futuros, sem teste imediato.
+
+Suspensão e revogação indicam o suporte; não sugerem reparar ou reinstalar como
+forma de recuperar permissão. Uma recusa sem motivo reconhecido não é apresentada
+como suspensão nem como falta de aceite. Atualizar o status consulta o serviço
+local; não aceita documentos, não renova permissões e não executa medições. Depois
+de resolver a pendência no portal, a ativação revalida a autorização no Server; um
+novo sucesso remove o aviso anterior. Os testes gráficos percorrem os bloqueios
+com respostas assinadas sintéticas, abertura da conta no endereço configurado,
+preservação do vínculo e agenda futura, com o runner de medições proibido.

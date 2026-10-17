@@ -405,6 +405,55 @@ class GraphicalFlows(unittest.TestCase):
         self.assertEqual(self.dialogs[-1][0],'showerror')
         self.assertFalse(self.engine.status()['measurements_enabled'])
 
+    def test_authorization_failures_show_specific_localized_actions_without_losing_pairing(self):
+        from speedtester_protocol.desktop_text import problem_text
+        self.click('install');self.fill();self.click('continue')
+        self.provider.approved=True;self.engine.next_poll=0
+        self.assertEqual(self.engine.tick(),'paired')
+        self.window.poll_pairing();self.settle()
+        self.click('pause')
+        installed=self.engine.installation()
+        for language in ('Português','English','Español'):
+            self.window.languages.set(language);self.window.change_language();self.window.update()
+            for code,key in (('terms_acceptance_required','acceptance_notice'),
+                             ('contribution_consent_required','consent_notice'),
+                             ('account_suspended','suspension_notice'),
+                             ('client_revoked','revocation_notice'),
+                             ('machine_identity_changed','machine_notice'),
+                             ('schedule_update_required','update_notice'),
+                             ('server_rejected','authorization_notice')):
+                with self.subTest(locale=self.window.locale,code=code):
+                    self.provider.blocked=code
+                    self.click('enable')
+                    self.assertEqual(self.dialogs[-1],('showerror',(
+                        self.window.t('title'),problem_text(self.window.locale,key))))
+                    self.click('refresh_status')
+                    labels=[w.cget('text') for w in self.widgets() if isinstance(w,self.tk.Label)]
+                    self.assertIn(self.window.t('last_notice')+' '+problem_text(self.window.locale,key,compact=True),labels)
+                    self.assertFalse(self.engine.status()['measurements_enabled'])
+                    self.assertEqual(self.engine.installation(),installed)
+                    self.window.geometry('960x780');self.window.update()
+                    for widget in self.widgets(self.window.content):
+                        if isinstance(widget,self.tk.Button):
+                            self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(),
+                                self.window.winfo_rooty()+self.window.winfo_height(),widget.cget('text'))
+                    if key=='acceptance_notice':
+                        self.click('account')
+                        self.assertEqual(self.window.portal_entry.get(),
+                            'https://server.example/account?locale='+self.window.locale)
+                        self.click('close',self.window.portal_window)
+            # A later successful authorization clears the obsolete notice without a runner.
+            self.provider.blocked=None
+            self.click('enable')
+            self.assertTrue(self.window.snapshot['measurements_enabled'])
+            self.assertIsNone(self.window.snapshot['problem'])
+            self.assertEqual(self.engine.installation(),installed)
+            self.assertGreater(self.window.snapshot['next_due'],int(time.time()))
+            self.click('pause')
+        self.window.work(lambda: {'ok':False,'code':'unknown_future_failure'},lambda _: None)
+        self.settle()
+        self.assertEqual(self.dialogs[-1],('showerror',(self.window.t('title'),self.window.t('error'))))
+
     def test_opt_out_install_disconnects_an_existing_installation(self):
         self.engine.dispatch('configure',configuration())
         self.window.contribute.set(False)

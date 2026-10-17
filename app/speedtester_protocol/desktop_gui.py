@@ -9,7 +9,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from .desktop_controller import DEFAULT_SERVER
 from .desktop_service import DesktopConfiguration
-from .desktop_text import TEXT, LANGUAGES
+from .desktop_text import TEXT, LANGUAGES, AUTHORIZATION_PROBLEMS, problem_text
 from .version import CLIENT_VERSION, build_label, diagnostic_text
 from .input_methods import bind_dead_keys
 from .schedule import local_timezone
@@ -572,7 +572,7 @@ class Installer(tk.Tk):
         problem_key = self.status_problem(code)
         if not problem_key and paired and not enabled and self.snapshot.get("runner_available") is False:
             problem_key = "no_runner"
-        explanation = self.t("last_notice") + " " + self.t(problem_key) if problem_key else self.t(detail)
+        explanation = self.t("last_notice") + " " + problem_text(self.locale, problem_key, compact=True) if problem_key else self.t(detail)
         self.label(panel, explanation, size=11, width=580,
             color="#705016" if problem_key else MUTED).pack(fill="x", pady=(6, 0))
         zone = (self.snapshot.get("configuration") or {}).get("timezone", self.schedule_timezone)
@@ -633,14 +633,7 @@ class Installer(tk.Tk):
             return "connection_notice"
         if code == "storage_limit":
             return "storage_notice"
-        if code in {"account_suspended", "account_disabled", "client_revoked", "consent_required", "consent_withdrawn",
-                    "contribution_consent_required", "terms_acceptance_required", "legal_context_changed",
-                    "legal_acceptance_required", "acceptance_required", "documents_changed", "server_rejected",
-                    "machine_privacy_not_ready", "invalid_machine_policy", "invalid_machine_permission",
-                    "machine_identity_unavailable", "machine_identity_required", "machine_identity_changed",
-                    "schedule_update_required", "credential_expired", "invalid_token", "token_revoked"}:
-            return "blocked"
-        return None
+        return AUTHORIZATION_PROBLEMS.get(code)
 
     def copy_information(self):
         text=diagnostic_text(self.snapshot)+"\nTk: "+self.tk.call("package","provide","Tk")
@@ -729,8 +722,8 @@ class Installer(tk.Tk):
                     self.pairing_state = "failed"
                     self.render()
                 code = result.get("code") if isinstance(result, dict) else None
-                key = "no_target" if code in {"test_target_unavailable", "invalid_test_target", "test_target_changed"} else "no_runner" if code == "iperf3_required" else "blocked" if code else "error"
-                messagebox.showerror(self.t("title"), self.t(key), parent=self)
+                key = self.status_problem(code) or "error"
+                messagebox.showerror(self.t("title"), problem_text(self.locale, key), parent=self)
         try:
             while True:
                 origin = self.portal_requests.get_nowait()

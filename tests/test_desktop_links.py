@@ -52,6 +52,44 @@ class PortalLinksTests(unittest.TestCase):
                 self.assertTrue(TEXT[locale][key])
             self.assertTrue(all(catalog['publication'].values()))
 
+    def test_authorization_reasons_have_specific_instructions_in_all_languages(self):
+        from speedtester_protocol.desktop_text import AUTHORIZATION_PROBLEMS, problem_text
+        expected={
+            'terms_acceptance_required':'acceptance_notice',
+            'legal_acceptance_required':'acceptance_notice',
+            'legal_context_changed':'acceptance_notice',
+            'consent_withdrawn':'consent_notice',
+            'contribution_consent_required':'consent_notice',
+            'account_suspended':'suspension_notice',
+            'account_disabled':'suspension_notice',
+            'client_revoked':'revocation_notice',
+            'token_revoked':'revocation_notice',
+            'credential_expired':'credential_notice',
+            'machine_identity_changed':'machine_notice',
+            'schedule_update_required':'update_notice',
+            'server_rejected':'authorization_notice',
+        }
+        self.assertIsNone(AUTHORIZATION_PROBLEMS.get('unknown_future_code'))
+        for code,key in expected.items():
+            self.assertEqual(AUTHORIZATION_PROBLEMS[code],key)
+        for locale,copy in TEXT.items():
+            messages=[problem_text(locale,key) for key in set(AUTHORIZATION_PROBLEMS.values())]
+            self.assertEqual(len(messages),len(set(messages)))
+            for message in messages:
+                self.assertNotIn('{',message)
+            acceptance=problem_text(locale,'acceptance_notice')
+            for label in ('account','accept_action','enable'):
+                self.assertIn(copy[label],acceptance)
+            self.assertTrue(all(step in acceptance for step in ('1.','2.','3.')))
+            for key in ('suspension_notice','revocation_notice'):
+                self.assertIn('fale.conosco@cararalab.com.br',problem_text(locale,key))
+                self.assertNotIn(copy['accept_action'],problem_text(locale,key))
+            self.assertNotIn(copy['blocked'],messages)
+            for key in set(AUTHORIZATION_PROBLEMS.values()):
+                summary=problem_text(locale,key,compact=True)
+                self.assertNotIn('{',summary)
+                self.assertTrue(summary)
+
     def test_pairing_url_preserves_query_without_duplicate_locale(self):
         self.assertEqual(pairing_url('https://server.example/pair?locale=en&flow=device','es'),
             'https://server.example/pair?flow=device&locale=es')

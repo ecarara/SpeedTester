@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "speedtester-client-protocol"
-version = "0.3.0.dev11"
+version = "0.3.0.dev12"
 requires-python = ">=3.11"
 description = "Public SpeedTester Client/Server protocol"
 license = "GPL-3.0-or-later"

@@ -376,3 +376,90 @@ for _locale, _strings in {
 TEXT["pt-BR"]["invalid"] += " Para Mbps, use números positivos com vírgula ou ponto decimal, sem separador de milhar, ou deixe em branco."
 TEXT["en"]["invalid"] += " For Mbps, use positive numbers with a decimal comma or point, without thousands separators, or leave blank."
 TEXT["es"]["invalid"] += " Para Mbps, usa números positivos con coma o punto decimal, sin separador de miles, o deja el campo vacío."
+
+
+# Stable protocol codes select the reason; never infer suspension from an unknown error.
+AUTHORIZATION_PROBLEMS = {
+    **dict.fromkeys(("terms_acceptance_required", "legal_acceptance_required", "acceptance_required",
+                     "documents_changed", "legal_context_changed"), "acceptance_notice"),
+    **dict.fromkeys(("consent_required", "consent_withdrawn", "contribution_consent_required"), "consent_notice"),
+    **dict.fromkeys(("account_suspended", "account_disabled"), "suspension_notice"),
+    **dict.fromkeys(("client_revoked", "token_revoked"), "revocation_notice"),
+    **dict.fromkeys(("credential_expired", "invalid_token"), "credential_notice"),
+    **dict.fromkeys(("machine_privacy_not_ready", "invalid_machine_policy", "invalid_machine_permission",
+                     "machine_identity_unavailable", "machine_identity_required", "machine_identity_changed"), "machine_notice"),
+    "schedule_update_required": "update_notice",
+    "server_rejected": "authorization_notice",
+}
+
+for _locale, _strings in {
+    "pt-BR": {
+        "accept_action": "Registrar aceite e autorização",
+        "acceptance_notice": "Falta aceitar os termos de uso e a política de privacidade vigentes.\n\n1. Clique em «{account}» e entre na sua conta.\n2. Revise os documentos, marque as três caixas e clique em «{accept}».\n3. Volte ao Client e clique em «{enable}».\n\nSeu vínculo está preservado. A ativação vale para os próximos horários; nenhum teste imediato.",
+        "consent_notice": "A autorização para contribuir está ausente ou foi retirada.\n\nSe quiser voltar a contribuir, clique em «{account}», revise os documentos, marque as três caixas e clique em «{accept}». Depois volte ao Client e clique em «{enable}». Seu vínculo está preservado; nenhum teste imediato.",
+        "suspension_notice": "Sua conta está suspensa. As medições, os envios e a criação de novos tokens estão bloqueados.\n\nSolicite uma revisão pelo e-mail fale.conosco@cararalab.com.br. Reinstalar ou reparar o Client não remove a suspensão.",
+        "revocation_notice": "A autorização desta instalação foi revogada. O Client não pode renovar tokens nem enviar medições.\n\nClique em «{account}» para conferir a situação. Se precisar de ajuda, contate fale.conosco@cararalab.com.br. Reparar ou reinstalar não restaura a autorização.",
+        "credential_notice": "O Server não aceitou o token desta instalação.\n\nClique em «{account}» para verificar o aceite dos documentos e a situação da instalação. Resolva as pendências e tente «{enable}» novamente. Se continuar bloqueado, use «{copy_info}» e contate fale.conosco@cararalab.com.br. Não envie senhas ou tokens.",
+        "machine_notice": "Não foi possível validar a identificação desta máquina ou a permissão da agenda.\n\nUse «{copy_info}» e contate fale.conosco@cararalab.com.br. Seu vínculo e os dados locais estão preservados; não é necessário apagar a instalação.",
+        "update_notice": "Esta versão do Client precisa ser atualizada para usar a agenda autorizada.\n\nBaixe o instalador atual no site do Server e escolha «{upgrade}», preservando seus dados e vínculo. Depois tente «{enable}» novamente.",
+        "authorization_notice": "Não foi possível confirmar a autorização com o Server.\n\nVerifique sua conexão e a situação em «{account}». Se o problema persistir, use «{copy_info}» e contate fale.conosco@cararalab.com.br. Não envie senhas ou tokens.",
+    },
+    "en": {
+        "accept_action": "Record acceptance and authorization",
+        "acceptance_notice": "Acceptance of the current Terms of Use and Privacy Policy is required.\n\n1. Click “{account}” and sign in.\n2. Review the documents, select all three checkboxes and click “{accept}”.\n3. Return to the Client and click “{enable}”.\n\nYour pairing is preserved. Activation applies to future scheduled times; no immediate test.",
+        "consent_notice": "Contribution authorization is missing or has been withdrawn.\n\nIf you want to contribute again, click “{account}”, review the documents, select all three checkboxes and click “{accept}”. Then return to the Client and click “{enable}”. Your pairing is preserved; no immediate test.",
+        "suspension_notice": "Your account is suspended. Measurements, uploads and new tokens are blocked.\n\nRequest a review at fale.conosco@cararalab.com.br. Repairing or reinstalling the Client does not remove the suspension.",
+        "revocation_notice": "Authorization for this installation has been revoked. The Client cannot renew tokens or send measurements.\n\nClick “{account}” to check its status. For help, contact fale.conosco@cararalab.com.br. Repairing or reinstalling does not restore authorization.",
+        "credential_notice": "The Server did not accept this installation's token.\n\nClick “{account}” to check document acceptance and installation status. Resolve any pending actions and try “{enable}” again. If still blocked, use “{copy_info}” and contact fale.conosco@cararalab.com.br. Do not send passwords or tokens.",
+        "machine_notice": "The machine identity or schedule permission could not be validated.\n\nUse “{copy_info}” and contact fale.conosco@cararalab.com.br. Your pairing and local data are preserved; you do not need to delete the installation.",
+        "update_notice": "This Client version must be updated to use the authorized schedule.\n\nDownload the current installer from the Server website and choose “{upgrade}”, preserving your data and pairing. Then try “{enable}” again.",
+        "authorization_notice": "Authorization could not be confirmed with the Server.\n\nCheck your connection and status in “{account}”. If the problem persists, use “{copy_info}” and contact fale.conosco@cararalab.com.br. Do not send passwords or tokens.",
+    },
+    "es": {
+        "accept_action": "Registrar aceptación y autorización",
+        "acceptance_notice": "Falta aceptar los Términos de Uso y la Política de Privacidad vigentes.\n\n1. Haz clic en «{account}» e inicia sesión.\n2. Revisa los documentos, marca las tres casillas y haz clic en «{accept}».\n3. Vuelve al Client y haz clic en «{enable}».\n\nTu vínculo se conserva. La activación se aplica a horarios futuros; ninguna prueba inmediata.",
+        "consent_notice": "Falta la autorización para contribuir o se ha retirado.\n\nSi quieres volver a contribuir, haz clic en «{account}», revisa los documentos, marca las tres casillas y haz clic en «{accept}». Después vuelve al Client y haz clic en «{enable}». Tu vínculo se conserva; ninguna prueba inmediata.",
+        "suspension_notice": "Tu cuenta está suspendida. Las mediciones, los envíos y los nuevos tokens están bloqueados.\n\nSolicita una revisión en fale.conosco@cararalab.com.br. Reparar o reinstalar el Client no elimina la suspensión.",
+        "revocation_notice": "Se ha revocado la autorización de esta instalación. El Client no puede renovar tokens ni enviar mediciones.\n\nHaz clic en «{account}» para comprobar su estado. Si necesitas ayuda, contacta con fale.conosco@cararalab.com.br. Reparar o reinstalar no restablece la autorización.",
+        "credential_notice": "El Server no aceptó el token de esta instalación.\n\nHaz clic en «{account}» para comprobar la aceptación de documentos y el estado de la instalación. Resuelve las acciones pendientes e intenta «{enable}» de nuevo. Si sigue bloqueado, usa «{copy_info}» y contacta con fale.conosco@cararalab.com.br. No envíes contraseñas ni tokens.",
+        "machine_notice": "No se pudo validar la identidad de esta máquina o el permiso de la agenda.\n\nUsa «{copy_info}» y contacta con fale.conosco@cararalab.com.br. Tu vínculo y los datos locales se conservan; no es necesario eliminar la instalación.",
+        "update_notice": "Debes actualizar esta versión del Client para usar la agenda autorizada.\n\nDescarga el instalador actual del sitio del Server y elige «{upgrade}», conservando tus datos y vínculo. Después intenta «{enable}» de nuevo.",
+        "authorization_notice": "No se pudo confirmar la autorización con el Server.\n\nComprueba la conexión y el estado en «{account}». Si el problema persiste, usa «{copy_info}» y contacta con fale.conosco@cararalab.com.br. No envíes contraseñas ni tokens.",
+    },
+}.items():
+    TEXT[_locale].update(_strings)
+
+
+def problem_text(locale, key, *, compact=False):
+    """Use the selected language and the exact current button labels."""
+    copy = TEXT[locale]
+    selected = key + "_summary" if compact and key + "_summary" in copy else key
+    return copy[selected].format(account=copy["account"], accept=copy["accept_action"],
+                                 enable=copy["enable"], copy_info=copy["copy_info"], upgrade=copy["upgrade"])
+
+
+# Keep the persistent status readable at the minimum window size.
+for _locale, _strings in {
+    "pt-BR": {
+        "acceptance_notice_summary": "Novo aceite necessário. Em «{account}», revise os documentos, marque as três caixas e clique em «{accept}». Depois volte e clique em «{enable}». Nenhum teste imediato.",
+        "consent_notice_summary": "Contribuição sem autorização ou com consentimento retirado. Se quiser contribuir, abra «{account}», revise os documentos e registre sua autorização. Depois clique em «{enable}».",
+        "revocation_notice_summary": "Autorização desta instalação revogada. Confira «{account}» ou contate fale.conosco@cararalab.com.br. Reparar não restaura a autorização.",
+        "credential_notice_summary": "Token não aceito. Confira as pendências em «{account}» e tente «{enable}». Se persistir, use «{copy_info}» e contate fale.conosco@cararalab.com.br. Não envie senhas ou tokens.",
+        "authorization_notice_summary": "Autorização não confirmada. Confira a conexão e «{account}». Se persistir, use «{copy_info}» e contate fale.conosco@cararalab.com.br.",
+    },
+    "en": {
+        "acceptance_notice_summary": "New acceptance required. In “{account}”, review the documents, select all three checkboxes and click “{accept}”. Then return and click “{enable}”. No immediate test.",
+        "consent_notice_summary": "Contribution authorization is missing or withdrawn. If you want to contribute, open “{account}”, review the documents and record authorization. Then click “{enable}”.",
+        "revocation_notice_summary": "Installation authorization revoked. Check “{account}” or contact fale.conosco@cararalab.com.br. Repair does not restore authorization.",
+        "credential_notice_summary": "Token not accepted. Check pending actions in “{account}” and try “{enable}”. If it persists, use “{copy_info}” and contact fale.conosco@cararalab.com.br. Do not send passwords or tokens.",
+        "authorization_notice_summary": "Authorization not confirmed. Check your connection and “{account}”. If it persists, use “{copy_info}” and contact fale.conosco@cararalab.com.br.",
+    },
+    "es": {
+        "acceptance_notice_summary": "Nueva aceptación necesaria. En «{account}», revisa los documentos, marca las tres casillas y haz clic en «{accept}». Después vuelve y haz clic en «{enable}». Ninguna prueba inmediata.",
+        "consent_notice_summary": "Falta autorización para contribuir o se ha retirado. Si quieres contribuir, abre «{account}», revisa los documentos y registra tu autorización. Después haz clic en «{enable}».",
+        "revocation_notice_summary": "Autorización de esta instalación revocada. Revisa «{account}» o contacta con fale.conosco@cararalab.com.br. Reparar no restablece la autorización.",
+        "credential_notice_summary": "Token no aceptado. Revisa las acciones pendientes en «{account}» e intenta «{enable}». Si persiste, usa «{copy_info}» y contacta con fale.conosco@cararalab.com.br. No envíes contraseñas ni tokens.",
+        "authorization_notice_summary": "Autorización no confirmada. Comprueba la conexión y «{account}». Si persiste, usa «{copy_info}» y contacta con fale.conosco@cararalab.com.br.",
+    },
+}.items():
+    TEXT[_locale].update(_strings)

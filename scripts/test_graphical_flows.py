@@ -24,4 +24,4 @@ report={'layer':'real Tk and authenticated IPC; signed synthetic Server; simulat
     'skipped':len(result.skipped),'checks':cases,'measurements':0}
 directory=ROOT/'dist/desktop';directory.mkdir(parents=True,exist_ok=True)
 (directory/'acceptance-gui.json').write_text(json.dumps(report,indent=2)+'\n')
-raise SystemExit(0 if result.wasSuccessful() and result.testsRun>=18 and not result.skipped else 1)
+raise SystemExit(0 if result.wasSuccessful() and result.testsRun>=19 and not result.skipped else 1)

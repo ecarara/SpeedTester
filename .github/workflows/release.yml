@@ -241,9 +241,9 @@ jobs:
         with:
           name: release-windows-x64
           path: dist/windows
-      - name: Sign package with an ephemeral test certificate
+      - name: Generate ephemeral Windows signing certificate
         shell: pwsh
-        timeout-minutes: 5
+        timeout-minutes: 2
         run: |
           $ErrorActionPreference = 'Stop'
           $openssl = (Get-Command openssl.exe -ErrorAction Stop).Source
@@ -251,22 +251,46 @@ jobs:
           $pem = Join-Path $env:RUNNER_TEMP 'speedtester-ci-test.pem'
           $cer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-test.cer'
           $pfx = Join-Path $env:RUNNER_TEMP 'speedtester-ci-test.pfx'
+          Write-Host "Generating certificate with $openssl"
           & $openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 1 -subj '/CN=Edson Angelo Carara' -addext 'keyUsage=digitalSignature' -addext 'extendedKeyUsage=codeSigning' -keyout $key -out $pem
           if ($LASTEXITCODE -ne 0) { throw 'OpenSSL não conseguiu criar o certificado' }
           & $openssl x509 -in $pem -outform DER -out $cer
           if ($LASTEXITCODE -ne 0) { throw 'OpenSSL não conseguiu converter o certificado para DER' }
           & $openssl pkcs12 -export -out $pfx -inkey $key -in $pem -passout 'pass:speedtester-ci-only'
           if ($LASTEXITCODE -ne 0) { throw 'OpenSSL não conseguiu criar o PFX' }
-          Import-Certificate -FilePath $cer -CertStoreLocation Cert:\CurrentUser\TrustedPeople | Out-Null
-          Import-Certificate -FilePath $cer -CertStoreLocation Cert:\CurrentUser\Root | Out-Null
+          Write-Host 'Certificate files generated'
+
+      - name: Trust ephemeral Windows signing certificate
+        shell: pwsh
+        timeout-minutes: 1
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-test.cer'
+          if (-not (Test-Path $cer)) { throw 'certificado DER não encontrado' }
+          Write-Host 'Importing certificate into TrustedPeople'
+          & certutil.exe -f -user -addstore TrustedPeople $cer
+          if ($LASTEXITCODE -ne 0) { throw 'certutil não conseguiu importar TrustedPeople' }
+          Write-Host 'Importing certificate into Root'
+          & certutil.exe -f -user -addstore Root $cer
+          if ($LASTEXITCODE -ne 0) { throw 'certutil não conseguiu importar Root' }
+          Write-Host 'Certificate trust stores updated'
+
+      - name: Sign package with SignTool
+        shell: pwsh
+        timeout-minutes: 2
+        run: |
+          $ErrorActionPreference = 'Stop'
           $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
           $signTool = Get-ChildItem (Join-Path $sdkRoot '*\x64\signtool.exe') -File -ErrorAction SilentlyContinue |
             Sort-Object FullName -Descending | Select-Object -First 1
           if (-not $signTool) { throw 'SignTool.exe não encontrado' }
+          $pfx = Join-Path $env:RUNNER_TEMP 'speedtester-ci-test.pfx'
           $package = Get-ChildItem dist/windows -Filter *.msix -File | Select-Object -First 1
           if (-not $package) { throw 'pacote MSIX não encontrado' }
+          Write-Host "Signing $($package.FullName) with $($signTool.FullName)"
           & $signTool.FullName sign /fd SHA256 /f $pfx /p speedtester-ci-only $package.FullName
           if ($LASTEXITCODE -ne 0) { throw 'SignTool não conseguiu assinar o MSIX' }
+          Write-Host 'MSIX signed'
       - name: Install, upgrade and remove the MSIX
         shell: pwsh
         run: |

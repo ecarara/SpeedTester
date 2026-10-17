@@ -17,12 +17,16 @@ class WindowsPackagingTests(TestCase):
         ns = {
             "appx": "http://schemas.microsoft.com/appx/manifest/foundation/windows10",
             "uap": "http://schemas.microsoft.com/appx/manifest/uap/windows10",
+            "rescap": "http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities",
         }
         identity = manifest.find("appx:Identity", ns)
         visuals = manifest.find(".//uap:VisualElements", ns)
         self.assertEqual(identity.attrib["Name"], "ecarara.SpeedTester")
         self.assertEqual(visuals.attrib["Square44x44Logo"], "Assets\\Square44x44Logo.png")
         self.assertEqual(visuals.attrib["Square150x150Logo"], "Assets\\Square150x150Logo.png")
+        capability = manifest.find("appx:Capabilities/rescap:Capability", ns)
+        self.assertIsNotNone(capability)
+        self.assertEqual(capability.attrib["Name"], "runFullTrust")
 
     def test_windows_scripts_have_install_and_uninstall_paths(self):
         install = (WINDOWS / "install-msix.ps1").read_text(encoding="utf-8")

@@ -71,3 +71,23 @@ jobs:
                   )
               )
           PY
+          issues=$(curl --silent --show-error --fail --user "${SONAR_TOKEN}:" \
+            "${SONAR_HOST_URL}/api/issues/search?componentKeys=${SONAR_PROJECT_KEY}&resolved=false&in_new_code_period=true&ps=100" || true)
+          ISSUES="${issues}" python - <<'PY'
+          import json
+          import os
+
+          raw = os.environ.get("ISSUES", "")
+          if not raw:
+              raise SystemExit(0)
+          for issue in json.loads(raw).get("issues", []):
+              print(
+                  "issue: rule={} severity={} file={} line={} message={}".format(
+                      issue.get("rule"),
+                      issue.get("severity"),
+                      issue.get("component"),
+                      issue.get("line"),
+                      issue.get("message"),
+                  )
+              )
+          PY

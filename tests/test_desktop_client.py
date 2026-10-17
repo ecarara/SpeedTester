@@ -175,7 +175,7 @@ class DesktopTests(unittest.TestCase):
 
     def test_pairing_missing_runner_preserves_binding_and_reports_blocked_auto_activation(self):
         self.engine.runner = None
-        with patch("speedtester_protocol.desktop_service.shutil.which", return_value=None):
+        with patch("speedtester_protocol.desktop_service.iperf_binary", return_value=None):
             self.pair()
         self.assertTrue(self.engine.status()["paired"])
         self.assertFalse(self.queue.state(ENABLED))

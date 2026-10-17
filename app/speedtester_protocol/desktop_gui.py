@@ -16,6 +16,7 @@ from .schedule import local_timezone
 from .disclosure import DISCLOSURE_CATALOG
 from .desktop_links import portal_url, pairing_url, request_browser
 from .profile_text import uppercase_text
+from .plan import parse_mbps, format_mbps
 
 BACKGROUND, PAPER, INK, MUTED, ACCENT = "#f2f1e9", "#ffffff", "#112b2a", "#49615c", "#c1ef55"
 
@@ -38,7 +39,8 @@ class Installer(tk.Tk):
         self.configure(bg=BACKGROUND)
         self.schedule_timezone = local_timezone()
         self.fields = {key: tk.StringVar(value=value) for key, value in {
-            "origin": DEFAULT_SERVER, "operator": "", "country": "BR", "region": "", "city": ""}.items()}
+            "origin": DEFAULT_SERVER, "operator": "", "country": "BR", "region": "", "city": "",
+            "contracted_download": "", "contracted_upload": ""}.items()}
         # Preserve spaces/cursor while typing; collapse whitespace on validation.
         for field in ("operator", "country", "region", "city"):
             variable = self.fields[field]
@@ -155,7 +157,7 @@ class Installer(tk.Tk):
         banner = "preview" if self.controller.preview else "experimental"
         self.label(shell, self.t(banner), size=10, color="#705016", width=680).pack(anchor="w", pady=(18, 0))
         self.content = tk.Frame(shell, bg=BACKGROUND)
-        self.content.pack(fill="both", expand=True, pady=(24, 0))
+        self.content.pack(fill="both", expand=True, pady=(14, 0))
         getattr(self, "page_" + self.page)()
         self.feedback = self.label(shell, self.t("busy") if self.busy else "", color=MUTED, size=10)
         self.feedback.pack(fill="x", pady=(12, 0))
@@ -224,14 +226,14 @@ class Installer(tk.Tk):
         self.entries={}
         self.heading("upgrade" if self.operation == "upgrade" else "configure", "upgrade_detail" if self.operation == "upgrade" else "configure_detail")
         tk.Checkbutton(self.content, text=self.t("contribute"), variable=self.contribute, bg=BACKGROUND,
-            fg=INK, activebackground=BACKGROUND, font=("Helvetica", 12, "bold"), anchor="w").pack(fill="x", pady=(0, 16))
+            fg=INK, activebackground=BACKGROUND, font=("Helvetica", 12, "bold"), anchor="w").pack(fill="x", pady=(0, 8))
         grid = tk.Frame(self.content, bg=BACKGROUND)
         grid.pack(fill="x")
         for column in (0, 1):
             grid.columnconfigure(column, weight=1)
         for index, key in enumerate(("origin", "operator", "country", "region", "city")):
             cell = tk.Frame(grid, bg=BACKGROUND)
-            cell.grid(row=index // 2, column=index % 2, columnspan=2 if key=="city" else 1, sticky="ew", padx=(0, 14), pady=(0, 10))
+            cell.grid(row=index // 2, column=index % 2, columnspan=2 if key=="city" else 1, sticky="ew", padx=(0, 14), pady=(0, 6))
             self.label(cell, self.t(key), size=10, color=MUTED).pack(anchor="w", pady=(0, 4))
             entry=ttk.Entry(cell, textvariable=self.fields[key], width=25)
             entry.pack(fill="x")
@@ -240,9 +242,17 @@ class Installer(tk.Tk):
         for column, (key, variable, choices) in enumerate((("access", self.access, ("fiber", "coaxial", "radio", "satellite", "cellular", "dsl", "other", "unknown")),
                 ("link", self.link, ("ethernet", "wifi")))):
             cell = tk.Frame(grid, bg=BACKGROUND)
-            cell.grid(row=3, column=column, sticky="ew", padx=(0, 14), pady=(0, 10))
+            cell.grid(row=3, column=column, sticky="ew", padx=(0, 14), pady=(0, 6))
             self.label(cell, self.t(key), size=10, color=MUTED).pack(anchor="w", pady=(0, 4))
             ttk.Combobox(cell, values=[self.t(choice) for choice in choices], textvariable=variable, state="readonly", width=25).pack(fill="x")
+        for column, key in enumerate(("contracted_download", "contracted_upload")):
+            cell = tk.Frame(grid, bg=BACKGROUND)
+            cell.grid(row=4, column=column, sticky="ew", padx=(0, 14), pady=(0, 6))
+            self.label(cell, self.t(key), size=10, color=MUTED).pack(anchor="w", pady=(0, 3))
+            entry = ttk.Entry(cell, textvariable=self.fields[key], width=25)
+            entry.pack(fill="x")
+            self.entries[key] = entry
+        self.label(self.content, self.t("plan_notice"), color=MUTED, size=10).pack(fill="x")
         self.label(self.content, self.t("schedule_notice").format(timezone=self.schedule_timezone)+"\n"+self.t("target_notice"), color=MUTED, size=10).pack(fill="x", pady=(6, 10))
         self.data_button = self.button(self.content, "data", self.show_disclosure)
         self.data_button.pack(anchor="w")
@@ -260,7 +270,9 @@ class Installer(tk.Tk):
         value = lambda key: unicodedata.normalize("NFC", " ".join(self.fields[key].get().split()))
         return DesktopConfiguration(origin=value("origin"), profile={"version": 1, "operator": value("operator"),
             "country_code": value("country").upper(), "region": value("region"), "city": value("city"),
-            "access_type": access, "link_type": link},
+            "access_type": access, "link_type": link,
+            "contracted_download_bps": parse_mbps(self.fields["contracted_download"].get()),
+            "contracted_upload_bps": parse_mbps(self.fields["contracted_upload"].get())},
             timezone=self.schedule_timezone, contribute=True).model_dump()
 
     def install(self):
@@ -558,6 +570,17 @@ class Installer(tk.Tk):
                 row.pack(fill="x", pady=(0, 4))
                 self.label(row, self.t(key), size=10, width=270).pack(side="left")
                 self.label(row, value, bold=True, size=10, width=360).pack(side="right")
+        comparison = self.snapshot.get("plan_comparison") or {}
+        plan_rows = []
+        for metric in ("download", "upload"):
+            item = comparison.get(metric) or {}
+            if item.get("contracted_bps"):
+                measured = item.get("measured_bps")
+                value = self.t("plan_result").format(contracted=format_mbps(item["contracted_bps"]),
+                    measured=format_mbps(measured), percent=format(item["percent"], ".1f")) if measured is not None else self.t("plan_waiting").format(contracted=format_mbps(item["contracted_bps"]))
+                plan_rows.append(self.t("metric_" + metric) + ": " + value)
+        if plan_rows:
+            self.label(self.content, "\n".join(plan_rows), size=10, color=MUTED).pack(fill="x", pady=(2, 0))
         primary = tk.Frame(self.content, bg=BACKGROUND)
         primary.pack(fill="x", pady=(10, 0))
         if self.snapshot.get("contribute") and not paired:
@@ -610,6 +633,8 @@ class Installer(tk.Tk):
         if stored:
             profile = stored["profile"]
             values = {**profile, "origin": stored["origin"], "country": profile["country_code"]}
+            for metric in ("download", "upload"):
+                values["contracted_" + metric] = format_mbps(profile.get("contracted_" + metric + "_bps"))
             self.schedule_timezone = stored.get("timezone", self.schedule_timezone)
             for key, variable in self.fields.items():
                 variable.set(values[key])

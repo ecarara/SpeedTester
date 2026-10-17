@@ -3,7 +3,7 @@
 """GUI-independent agent: optional enrollment and a persistent future-only schedule."""
 import json
 from pathlib import Path
-import shutil
+from .bundled_tools import iperf_binary
 import threading
 import time
 from pydantic import Field, field_validator
@@ -17,6 +17,7 @@ from .machine import sync_machine
 from .installation import protected_queue
 from .local_control import ControlServer, serve_in_thread
 from .models import Profile, StrictModel
+from .plan import comparison
 from .runner import IperfRunner
 from .schedule import DailySchedule, local_timezone, migrate_installation, policy
 from zoneinfo import ZoneInfo
@@ -115,10 +116,11 @@ class DesktopEngine:
             "measurements_enabled": bool(self.queue.state(ENABLED)) and not self.maintenance,
             "next_due": self.queue.state("next_due"), "pending": counts.get("pending", 0),
             "accepted": counts.get("accepted", 0), "observed_at": int(self.clock()),
-            "runner_available": self.runner is not None or shutil.which("iperf3") is not None,
+            "runner_available": self.runner is not None or iperf_binary() is not None,
             "last_attempt_at": self.queue.state("desktop:last_attempt_at"),
             "problem": self.queue.state("desktop:last_problem") or None,
             "quarantined": counts.get("quarantined", 0), "database_bytes": self.queue.path.stat().st_size,
+            "plan_comparison": comparison(self.queue, self.installation()),
             "last_tick": self.last_tick, "configuration": configuration.model_dump() if configuration else None}
         if self.pairing and self.pairing.expires_at > int(self.clock()):
             result["pairing"] = {"user_code": self.pairing.user_code,
@@ -151,7 +153,7 @@ class DesktopEngine:
             profile = configuration.profile.model_copy(update={"version": installed["profile"]["version"] + 1}) if changed else Profile.model_validate(installed["profile"])
             installed.update(profile=profile.model_dump(), target_mode="automatic")
             installed.pop("interval", None)
-            configuration=configuration.model_copy(update={"timezone":installed["schedule"]["timezone"]})
+            configuration=configuration.model_copy(update={"timezone":installed["schedule"]["timezone"], "profile": profile})
             self.queue.state(CONFIGURATION, configuration.model_dump())
             installed.pop("host", None)
             installed.pop("port", None)
@@ -203,7 +205,7 @@ class DesktopEngine:
         self.queue.state(CONFIGURATION, configuration.model_copy(update={"timezone": installed["schedule"]["timezone"]}).model_dump())
         from .targets import obtain_target
         obtain_target(credentials.client(), credentials.bundle.client_id)
-        if self.runner is None and not shutil.which("iperf3"):
+        if self.runner is None and not iperf_binary():
             raise ProtocolError("iperf3_required")
         self.maintenance = False
         DailySchedule(self.queue, installed["schedule"]).refresh(int(self.clock()), activate=True)

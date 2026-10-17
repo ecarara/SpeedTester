@@ -56,15 +56,15 @@ A interface guarda somente sua chave de controle local na configuração privada
 ## Antes de disponibilizar aos participantes
 
 1. Certificar elevação gráfica, logout, boot e manutenção nas máquinas/arquiteturas suportadas. O CI executa instalação, reinício, reparo, reinstalação e remoção reais em VMs descartáveis, além dos testes unitários com adaptadores simulados. Isso não certifica reinicialização física, diálogos UAC/polkit/macOS nem todas as distribuições.
-2. Distribuir e verificar o runner nativo aprovado. **iPerf3 não está incluído nesta prévia**, e o upstream não oferece suporte oficial em Windows. Não anunciar coleta pronta nessa plataforma antes da validação do adaptador e da distribuição escolhida.
+2. Distribuir e verificar o runner nativo aprovado. O pacote incorpora iPerf3 3.22 compilado da fonte oficial fixada, com autenticação RSA e dependências inventariadas. O upstream não oferece suporte oficial em Windows; a compilação MSYS2 e as duas direções de transferência devem passar no CI nativo.
 3. Produzir MSI/EXE, PKG e DEB/RPM, registrar desinstalação no sistema, resolver manutenção do aplicativo instalado e assinar/notarizar os pacotes. Os primeiros builds geram bundles ZIP/TAR experimentais com checksums e lista de componentes, sem assinatura de release.
 4. Validar restauração/rollback completo, ACLs, restrições do helper e fila grande/disco cheio; implementar a retenção configurável sem descartar pendências silenciosamente.
 5. Aprovar a integração privada com pareamento, renovação, suspensão/revogação, retirada de consentimento e nova versão legal; preservar os testes existentes e limitar o runner a fixtures descartáveis.
-6. Somente então anunciar um instalador estável para participantes. Downloads de teste continuam explicitamente experimentais e sem coleta habilitada.
+6. Somente então anunciar um instalador estável para participantes. Downloads de teste continuam explicitamente experimentais; contribuições exigem aceite e pareamento.
 
 ## Atualização em desenvolvimento: 0.3.0.dev2
 
-O assistente e os novos pareamentos de terminal deixam de pedir host/porta iPerf3. O serviço central é responsável pelo destino; a configuração chega autenticada e assinada, vinculada à instalação, a uma solicitação e a um prazo de até cinco minutos. A identidade do destino vincula host, porta e classificação. O runner confere a correspondência com a autorização antes de executar. Não há sondagem do destino ao instalar ou parear, fallback para host informado pelo usuário, nem início automático da agenda.
+O assistente e os novos pareamentos de terminal deixam de pedir host/porta iPerf3. O serviço central é responsável pelo destino; a configuração chega autenticada e assinada, vinculada à instalação, a uma solicitação e a um prazo de até cinco minutos. A identidade do destino vincula host, porta e classificação. O runner confere a correspondência com a autorização antes de executar. Não há sondagem do destino ao instalar ou parear, fallback para host informado pelo usuário, nem teste imediato. Após aceite e pareamento, a agenda futura é ativada conforme as verificações de autorização.
 
 Sem destino central disponível, a instalação pode ser vinculada e manter a renovação normal com a agenda pausada. Ativar medições exige autorização vigente, destino válido e ferramenta disponível. O Server padrão bloqueia grants quando não há destino administrativo; compatibilidade manual antiga precisa de opção administrativa explícita. O coletor standalone existente não é alterado.
 
@@ -131,3 +131,19 @@ A ausência local da ferramenta de medição é informada antes de tentar ativar
 Ao escolher Instalar, o assistente consulta o serviço local e carrega operadora, país, região, cidade, tecnologia, enlace, endereço do Server e fuso existentes. O upgrade substitui o runtime e preserva SQLite cifrado, chaves, credenciais de vínculo, filas, recibos e cotas consumidas. Um vínculo existente não exige novo pareamento. A escolha anterior de agenda ativa ou pausada é mantida; horários vencidos durante a atualização não são compensados, e a primeira execução só pode ocorrer em um horário futuro, com pelo menos um minuto de antecedência após o reinício. Se o serviço só responder após o upgrade, seus dados existentes prevalecem sobre o formulário inicialmente vazio.
 
 Reparar continua sendo uma operação distinta: preserva os dados e pausa a agenda para revisão. Uma revogação, suspensão ou exigência de novo aceite não é removida por upgrade, reparo ou reinstalação.
+
+## Ferramenta incorporada e destino autenticado
+
+A prévia 0.3.0.dev11 inclui iPerf3 3.22 nos três sistemas, sem pedir que o participante instale ferramentas ou informe destinos. A fonte oficial tem checksum fixo; os binários, bibliotecas criptográficas, licenças, inventário de componentes e hashes acompanham os pacotes. No Windows, o runtime MSYS2 e seu código-fonte correspondente são identificados por checksum; o arquivo de fontes é distribuído no mesmo release. A assinatura/notarização Apple permanece pendente.
+
+O Server assina a política de destino. Depois de validar token, prova de posse, consentimento, documentos vigentes, cota e início autorizado da tentativa, ele emite acesso efêmero de uso único para upload e download. A identidade do destino vincula também o modo de autenticação. Credenciais RSA de cada tentativa ficam apenas em memória/arquivos temporários protegidos e não aparecem no SQLite, nos argumentos dos processos ou nos diagnósticos. Não há fallback para um servidor público não autorizado.
+
+Cada tentativa tem até 30 segundos e até 100.000.000 bytes de payload total (metade por direção, arredondada em blocos de 1.024). Até oito tentativas completas podem usar aproximadamente 800 MB/dia de payload, além de cabeçalhos, controle e retransmissões. Conexões rápidas podem completar o orçamento em pouco tempo: esse resultado não comprova SLA nem substitui uma campanha metrológica. Latência, jitter e perda não fornecidos por esse método permanecem explicitamente não suportados.
+
+O CI compila o pacote real de cada plataforma e verifica autenticação RSA, upload/download, inventário e encerramento dos endpoints contra fixtures descartáveis em 127.0.0.1, com apenas 8.192 bytes de payload. A integração do Server repete o fluxo completo no Linux descartável e rejeita parâmetros fora do grant antes de criar fluxos de dados. Essas verificações não medem a conexão do usuário nem chamam destinos operacionais.
+
+## Velocidade contratada
+
+O formulário permite informar **download contratado** e **upload contratado**, separadamente, em Mbps (1 Gbps = 1.000 Mbps), nos três idiomas. Os campos são opcionais: vazio significa desconhecido; não se presume simetria. Valores decimais usam vírgula ou ponto, sem separadores de milhar. Os valores são enviados em bit/s no perfil versionado, sem perda por arredondamento. Upgrade carrega ambos, preservando o vínculo.
+
+O status compara cada direção do resultado aceito mais recente com o valor declarado no mesmo perfil: medido ÷ contratado × 100. Resultados indisponíveis não viram zero, percentuais acima de 100 são mantidos e uma alteração do plano não recalcula o histórico. As métricas originais e suas assinaturas permanecem intactas.

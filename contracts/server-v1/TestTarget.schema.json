@@ -37,6 +37,15 @@
       "title": "Target Scope",
       "type": "string"
     },
+    "authentication": {
+      "default": "none",
+      "enum": [
+        "none",
+        "rsa-ephemeral-v1"
+      ],
+      "title": "Authentication",
+      "type": "string"
+    },
     "host": {
       "maxLength": 253,
       "minLength": 1,

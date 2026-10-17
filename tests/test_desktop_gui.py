@@ -206,7 +206,7 @@ class GraphicalFlows(unittest.TestCase):
         self.engine.runner=None
         self.engine.queue.state('desktop:last_problem',{})
         calls=list(self.provider.calls)
-        with patch('speedtester_protocol.desktop_service.shutil.which',return_value=None):
+        with patch('speedtester_protocol.desktop_service.iperf_binary',return_value=None):
             self.click('refresh_status')
         labels=[w.cget('text') for w in self.widgets() if isinstance(w,self.tk.Label)]
         self.assertIn(self.window.t('last_notice')+' '+self.window.t('no_runner'),labels)
@@ -284,6 +284,32 @@ class GraphicalFlows(unittest.TestCase):
         self.assertEqual(self.provider.calls.count(('POST','/api/v1/pairings')),before)
         self.assertFalse(self.engine.status()['measurements_enabled'])
 
+    def test_contracted_plan_speeds_validate_round_trip_and_upgrade_in_all_languages(self):
+        self.click('install');self.fill()
+        self.window.fields['contracted_download'].set('1000')
+        self.window.fields['contracted_upload'].set('250,5')
+        for language in ('Português','English','Español'):
+            self.window.languages.set(language);self.window.change_language();self.window.update()
+            config=self.window.configuration()
+            self.assertEqual(config['profile']['contracted_download_bps'],1_000_000_000)
+            self.assertEqual(config['profile']['contracted_upload_bps'],250_500_000)
+        self.click('continue')
+        self.provider.approved=True;self.engine.next_poll=0
+        self.assertEqual(self.engine.tick(),'paired')
+        self.window.poll_pairing();self.settle()
+        self.window.show('welcome');self.click('install')
+        self.assertEqual(self.window.fields['contracted_download'].get(),'1000')
+        self.assertEqual(self.window.fields['contracted_upload'].get(),'250.5')
+        self.click('upgrade')
+        self.assertTrue(self.window.snapshot['paired'])
+        self.assertTrue(self.window.snapshot['measurements_enabled'])
+        self.window.configure_existing()
+        self.window.fields['contracted_download'].set('1.000,50')
+        self.click('save')
+        self.assertTrue(self.dialogs)
+        self.assertEqual(self.window.page,'configure')
+        self.assertEqual(self.engine.configuration().profile.contracted_download_bps,1_000_000_000)
+
     def test_expired_code_is_removed_and_only_explicit_retry_generates_a_new_one(self):
         self.click('install');self.fill();self.click('continue')
         device_code=self.engine.pairing.device_code
@@ -357,7 +383,7 @@ class GraphicalFlows(unittest.TestCase):
         self.provider.target_available=True
         runner=self.engine.runner
         self.engine.runner=None
-        with patch('speedtester_protocol.desktop_service.shutil.which',return_value=None):
+        with patch('speedtester_protocol.desktop_service.iperf_binary',return_value=None):
             self.click('enable')
         self.assertIn(self.window.t('no_runner'),self.dialogs[-1][1])
         self.assertFalse(self.engine.status()['measurements_enabled'])

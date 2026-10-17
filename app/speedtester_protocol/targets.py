@@ -12,8 +12,11 @@ from .models import Identifier, StrictModel
 from .runner import IperfRunner
 
 
-def target_identifier(host, port, scope):
-    return "central-"+digest({"runner":"iperf3","host":host,"port":port,"scope":scope})
+def target_identifier(host, port, scope, authentication="none"):
+    value = {"runner":"iperf3","host":host,"port":port,"scope":scope}
+    if authentication != "none":
+        value["authentication"] = authentication
+    return "central-" + digest(value)
 
 
 class TargetRequest(StrictModel):
@@ -27,6 +30,7 @@ class TestTarget(StrictModel):
     runner: Literal['iperf3'] = 'iperf3'
     target_id: str = Field(pattern=r'^central-[0-9a-f]{64}$')
     target_scope: Literal['unconfirmed', 'lan', 'external-controlled']
+    authentication: Literal['none', 'rsa-ephemeral-v1'] = 'none'
     host: str = Field(min_length=1, max_length=253)
     port: int = Field(ge=1, le=65535)
     issued_at: int = Field(ge=0)
@@ -41,7 +45,7 @@ class TestTarget(StrictModel):
 
     @model_validator(mode='after')
     def bounded_lifetime(self):
-        if self.target_id!=target_identifier(self.host,self.port,self.target_scope):
+        if self.target_id!=target_identifier(self.host,self.port,self.target_scope,self.authentication):
             raise ValueError('target_binding_mismatch')
         if not 1 <= self.expires_at-self.issued_at <= 300:
             raise ValueError('invalid_target_lifetime')
@@ -69,7 +73,8 @@ def obtain_target(client, client_id):
 def automatic_runner(client, client_id, execute=None):
     target=obtain_target(client, client_id)
     bound=IperfRunner(target.host, target.port, target_id=target.target_id,
-        target_scope=target.target_scope, expires_at=target.expires_at)
+        target_scope=target.target_scope, expires_at=target.expires_at,
+        authorize=(lambda grant: obtain_access(client, target, grant)) if target.authentication == "rsa-ephemeral-v1" else None)
     def validate(grant):
         try:
             bound.check_policy(grant)
@@ -83,3 +88,39 @@ def automatic_runner(client, client_id, execute=None):
         return execute(grant)
     checked.validate_grant=validate
     return checked
+
+
+class TargetAccess(StrictModel):
+    request_id: Identifier
+    attempt_id: Identifier
+    client_id: Identifier
+    target_id: str = Field(pattern=r'^central-[0-9a-f]{64}$')
+    host: str = Field(min_length=1, max_length=253)
+    upload_port: int = Field(ge=1, le=65535)
+    download_port: int = Field(ge=1, le=65535)
+    username: Identifier
+    password: str = Field(min_length=32, max_length=128, repr=False)
+    rsa_public_key: str = Field(min_length=200, max_length=4096)
+    expires_at: int = Field(ge=0)
+
+
+def obtain_access(client, target, grant):
+    """Obtain per-attempt, one-use endpoints only after the signed start receipt."""
+    request_id = str(uuid4())
+    body = client.request("POST", "/api/v1/attempts/" + grant.attempt_id + "/target-access", {"request_id": request_id})
+    try:
+        access = TargetAccess.model_validate(verify(body, client.server_key, "target-access-v1"))
+        from cryptography.hazmat.primitives.serialization import load_pem_public_key
+        from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+        key = load_pem_public_key(access.rsa_public_key.encode())
+        if not isinstance(key, RSAPublicKey) or key.key_size < 2048:
+            raise ValueError("invalid RSA public key")
+        if (access.request_id != request_id or access.client_id != grant.client_id
+                or access.attempt_id != grant.attempt_id or access.username != grant.attempt_id
+                or access.target_id != grant.target_id or target.target_id != grant.target_id
+                or access.host != target.host or access.upload_port == access.download_port
+                or not int(time.time()) < access.expires_at <= int(time.time()) + 30):
+            raise ValueError("target access binding mismatch")
+        return access
+    except Exception as exc:
+        raise ProtocolError("invalid_target_access") from exc

@@ -89,6 +89,8 @@ def build(smoke=True):
     system = platform.system()
     bundle = output / "raw" / ("SpeedTesterClient.app" if system == "Darwin" else "SpeedTesterClient")
     notices(bundle)
+    from bundle_iperf import build as build_iperf
+    build_iperf(bundle, CLIENT_VERSION)
     if system=="Linux":
         notice=Path("/usr/share/doc/libx11-6/copyright")
         if notice.is_file():
@@ -98,10 +100,10 @@ def build(smoke=True):
     (bundle/"build-info.json").write_text(json.dumps({"version":CLIENT_VERSION,"revision":revision,"experimental":True},indent=2)+"\n")
     (bundle / "PREVIEW.txt").write_text(
         "EXPERIMENTAL DEVELOPER PREVIEW — not a certified production installer.\n"
-        "CI exercises native service maintenance on disposable VMs; interactive elevation/reboot certification and iPerf3 distribution remain pending.\n"
+        "CI exercises native service maintenance on disposable VMs; interactive elevation/reboot certification remains pending; iPerf3 3.22 is included.\n"
         "Code signing/notarization, MSI/PKG/DEB/RPM integration and native uninstall registration are pending.\n"
-        "Installation and pairing do not run measurements. The schedule starts disabled.\n"
-        "The measurement tool is not bundled in this preview; do not enable it on a production workstation.\n")
+        "Pairing after current legal acceptance enables future scheduled slots, never an immediate test. Upgrades retain existing data, pairing and active/paused choice.\n"
+        "Measurements require a centrally signed destination, valid credentials and authorization for the scheduled attempt.\n")
     manifest(bundle)
     executable = bundle / ("Contents/MacOS/SpeedTesterClient" if system == "Darwin" else "SpeedTesterClient.exe" if system == "Windows" else "SpeedTesterClient")
     if smoke:

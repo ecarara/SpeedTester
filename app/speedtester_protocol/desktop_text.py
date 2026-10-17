@@ -359,3 +359,16 @@ for _locale, _copy in {
     },
 }.items():
     TEXT[_locale].update(_copy)
+
+for _locale, _strings in {
+    "pt-BR": {"contracted_download":"Download contratado (Mbps, opcional)", "contracted_upload":"Upload contratado (Mbps, opcional)",
+        "plan_notice":"Informe as velocidades do seu plano, separadamente. 1 Gbps = 1.000 Mbps. Deixe em branco se não souber. A comparação não comprova SLA.",
+        "metric_download":"Download", "metric_upload":"Upload", "plan_result":"{measured} de {contracted} Mbps contratados ({percent}%)", "plan_waiting":"{contracted} Mbps contratados · aguardando resultado aceito deste perfil"},
+    "en": {"contracted_download":"Contracted download (Mbps, optional)", "contracted_upload":"Contracted upload (Mbps, optional)",
+        "plan_notice":"Enter each speed from your plan separately. 1 Gbps = 1,000 Mbps. Leave blank if unknown. This comparison does not establish an SLA.",
+        "metric_download":"Download", "metric_upload":"Upload", "plan_result":"{measured} of {contracted} contracted Mbps ({percent}%)", "plan_waiting":"{contracted} contracted Mbps · waiting for an accepted result for this profile"},
+    "es": {"contracted_download":"Descarga contratada (Mbps, opcional)", "contracted_upload":"Subida contratada (Mbps, opcional)",
+        "plan_notice":"Indica cada velocidad de tu plan por separado. 1 Gbps = 1.000 Mbps. Déjalo vacío si no lo sabes. La comparación no demuestra un SLA.",
+        "metric_download":"Descarga", "metric_upload":"Subida", "plan_result":"{measured} de {contracted} Mbps contratados ({percent}%)", "plan_waiting":"{contracted} Mbps contratados · esperando un resultado aceptado de este perfil"}
+}.items():
+    TEXT[_locale].update(_strings)

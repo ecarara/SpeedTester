@@ -244,15 +244,7 @@ jobs:
       - name: Sign package with an ephemeral test certificate
         shell: pwsh
         run: |
-          $certificate = New-SelfSignedCertificate \
-            -Type Custom \
-            -Subject 'CN=Edson Angelo Carara' \
-            -KeyAlgorithm RSA \
-            -KeyLength 2048 \
-            -HashAlgorithm SHA256 \
-            -KeyUsage DigitalSignature \
-            -NotAfter (Get-Date).AddHours(1) \
-            -CertStoreLocation Cert:\CurrentUser\My
+          $certificate = New-SelfSignedCertificate -Type Custom -Subject 'CN=Edson Angelo Carara' -KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 -KeyUsage DigitalSignature -NotAfter (Get-Date).AddHours(1) -CertStoreLocation Cert:\CurrentUser\My
           $password = ConvertTo-SecureString 'speedtester-ci-only' -AsPlainText -Force
           $pfx = Join-Path $env:RUNNER_TEMP 'speedtester-ci-test.pfx'
           $cer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-test.cer'

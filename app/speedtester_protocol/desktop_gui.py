@@ -225,9 +225,28 @@ class Installer(tk.Tk):
     def page_configure(self):
         self.entries={}
         self.heading("upgrade" if self.operation == "upgrade" else "configure", "upgrade_detail" if self.operation == "upgrade" else "configure_detail")
-        tk.Checkbutton(self.content, text=self.t("contribute"), variable=self.contribute, bg=BACKGROUND,
+        # Keep the actions visible on small displays and Linux font metrics.
+        actions = tk.Frame(self.content, bg=BACKGROUND)
+        actions.pack(side="bottom", fill="x", pady=(12, 0))
+        self.button(actions, "back", lambda: self.show("welcome")).pack(side="left")
+        self.button(actions, "upgrade" if self.operation == "upgrade" else "save" if self.operation == "configure" else "continue", self.install, primary=True).pack(side="right")
+        self.data_button = self.button(self.content, "data", self.show_disclosure)
+        self.data_button.pack(side="bottom", anchor="w", pady=(8, 0))
+        viewport = tk.Frame(self.content, bg=BACKGROUND)
+        viewport.pack(fill="both", expand=True)
+        canvas = tk.Canvas(viewport, bg=BACKGROUND, highlightthickness=0, height=450)
+        scrollbar = ttk.Scrollbar(viewport, orient="vertical", command=canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        form = tk.Frame(canvas, bg=BACKGROUND)
+        item = canvas.create_window((0, 0), window=form, anchor="nw")
+        canvas.bind("<Configure>", lambda event: canvas.itemconfigure(item, width=event.width))
+        form.bind("<Configure>", lambda _event: canvas.configure(scrollregion=canvas.bbox("all")))
+        self.form_canvas = canvas
+        tk.Checkbutton(form, text=self.t("contribute"), variable=self.contribute, bg=BACKGROUND,
             fg=INK, activebackground=BACKGROUND, font=("Helvetica", 12, "bold"), anchor="w").pack(fill="x", pady=(0, 8))
-        grid = tk.Frame(self.content, bg=BACKGROUND)
+        grid = tk.Frame(form, bg=BACKGROUND)
         grid.pack(fill="x")
         for column in (0, 1):
             grid.columnconfigure(column, weight=1)
@@ -252,14 +271,8 @@ class Installer(tk.Tk):
             entry = ttk.Entry(cell, textvariable=self.fields[key], width=25)
             entry.pack(fill="x")
             self.entries[key] = entry
-        self.label(self.content, self.t("plan_notice"), color=MUTED, size=10).pack(fill="x")
-        self.label(self.content, self.t("schedule_notice").format(timezone=self.schedule_timezone)+"\n"+self.t("target_notice"), color=MUTED, size=10).pack(fill="x", pady=(6, 10))
-        self.data_button = self.button(self.content, "data", self.show_disclosure)
-        self.data_button.pack(anchor="w")
-        actions = tk.Frame(self.content, bg=BACKGROUND)
-        actions.pack(fill="x", pady=(18, 0))
-        self.button(actions, "back", lambda: self.show("welcome")).pack(side="left")
-        self.button(actions, "upgrade" if self.operation == "upgrade" else "save" if self.operation == "configure" else "continue", self.install, primary=True).pack(side="right")
+        self.label(form, self.t("plan_notice"), color=MUTED, size=10).pack(fill="x")
+        self.label(form, self.t("schedule_notice").format(timezone=self.schedule_timezone)+"\n"+self.t("target_notice"), color=MUTED, size=10).pack(fill="x", pady=(6, 10))
 
     def configuration(self):
         if not self.contribute.get():

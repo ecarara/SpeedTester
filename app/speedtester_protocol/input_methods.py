@@ -123,8 +123,9 @@ def smoke_dead_keys(window):
     if fallback:
         # Establish that this display/input mode reproduces the actual failure.
         # Only this synthetic CI control widget has the fallback absent.
-        control = ttk.Entry(window.content)
-        control.pack()
+        control = ttk.Entry(window)
+        # A synthetic control must remain visible regardless of form height.
+        control.place(x=270, y=170, width=230, height=32)
         window.update()
         type_keys(control, keys)
         assert control.get() == "S~ao", "Control did not reproduce raw dead keys: " + repr(control.get())

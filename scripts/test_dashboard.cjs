@@ -69,6 +69,12 @@ const reports = require('istanbul-reports');
     await page.locator('#runnerFilter').selectOption('iperf3');
     await page.waitForFunction(()=>document.querySelector('#coverageTitle').textContent==='56 concluídos'&&document.querySelectorAll('#chart circle').length===112);
     await page.waitForSelector('#networkMap .map-marker');
+    const geography = await request.get(base+'/dashboard/world-map.svg');
+    assert.equal(geography.status(),200,'Offline world geography must be served locally');
+    const geographySvg = await geography.text();
+    assert.match(geographySvg,/data-country="Brazil"/);
+    assert((geographySvg.match(/<path /g)||[]).length>150,'Use country contours instead of illustrative polygons');
+    assert.equal(await page.locator('#networkMap image.map-geography').getAttribute('href'),'/dashboard/world-map.svg');
     assert.equal(await page.locator('#networkMap .map-marker').count(),1);
     await page.locator('#networkMap .map-marker').first().focus();
     assert.match(await page.locator('.network-map-detail h4').textContent(),/Operadora de demonstração/);
@@ -76,6 +82,14 @@ const reports = require('istanbul-reports');
     await page.waitForSelector('#networkMap .network-map-list-item');
     await page.locator('#networkMap .network-map-list-item').first().click();
     await page.locator('#mapResetBtn').click();
+    if(process.env.NETWORK_MAP_SCREENSHOT) {
+      await page.locator('#networkMap .map-marker').first().focus();
+      await page.locator('#networkMap').screenshot({path:process.env.NETWORK_MAP_SCREENSHOT});
+      await page.setViewportSize({width:390,height:844});
+      assert.equal(await page.locator('#networkMap').evaluate(node=>node.scrollWidth<=node.clientWidth),true,'Map must fit the mobile viewport');
+      await page.locator('#networkMap').screenshot({path:process.env.NETWORK_MAP_SCREENSHOT.replace(/\.png$/,'-mobile.png')});
+      await page.setViewportSize({width:1440,height:1100});
+    }
     await page.evaluate(() => {
       const target = document.querySelector('#networkMap');
       window.SpeedTesterNetworkMap.render(target, { points: [

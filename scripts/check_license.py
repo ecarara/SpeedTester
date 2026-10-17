@@ -42,7 +42,7 @@ def source_files() -> list[Path]:
         for path in (ROOT / "docker").rglob("*")
         if path.is_file() and (path.name.startswith("Dockerfile") or path.name.endswith(".yaml"))
     )
-    files.extend((ROOT / "install.sh", ROOT / "Makefile"))
+    files.extend((ROOT / "install.sh", ROOT / "install-community.sh", ROOT / "Makefile"))
     return sorted(set(files))
 
 

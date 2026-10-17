@@ -84,6 +84,21 @@ IP público em sua resposta e não depende de tiles externos. Quando não existe
 coordenada exata no histórico, o ponto usa um centro visual conhecido e
 informa essa aproximação no detalhe.
 
+O fundo é um SVG local com contornos e fronteiras reais do
+[Natural Earth v5.1.2, escala 1:110m](https://github.com/nvkelso/natural-earth-vector/blob/v5.1.2/geojson/ne_110m_admin_0_countries.geojson).
+Esses dados são [de domínio público](https://www.naturalearthdata.com/about/terms-of-use/).
+O asset usa a mesma projeção e coordenadas dos marcadores, não consulta tiles
+nem envia localizações a terceiros. Para reproduzir o SVG, baixe o GeoJSON
+da versão indicada e execute:
+
+```bash
+python3 scripts/build_world_map.py ne_110m_admin_0_countries.geojson
+```
+
+O gerador verifica o SHA-256 da fonte antes de produzir o asset.
+
+![Mapa de rede com dados de demonstração](images/network-map.png)
+
 ## Dashboard atual versus alvo
 
 O dashboard atual mostra download/upload atual, média, pico, um PNG de até 24

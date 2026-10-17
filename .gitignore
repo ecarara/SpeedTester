@@ -35,3 +35,8 @@ security-reports/
 *.conf
 operations-state/
 backup-outbox/
+
+# Build metadata for the public protocol package.
+*.egg-info/
+/build/
+/dist/

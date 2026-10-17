@@ -1,4 +1,4 @@
-# SpeedTester
+# SpeedTester Client
 
 [![CI](https://github.com/ecarara/SpeedTester/actions/workflows/ci.yml/badge.svg)](https://github.com/ecarara/SpeedTester/actions/workflows/ci.yml)
 [![License: GPL v3 or later](https://img.shields.io/badge/License-GPL_v3_or_later-blue.svg)](LICENSE)
@@ -15,6 +15,31 @@ SQLite e disponibiliza uma API e um dashboard web.
 > dashboard e a classificação operacional estão implementados. Antes de usar
 > os dados como evidência de SLA, valide o ambiente e mantenha uma cópia
 > externa do banco.
+
+## Client comunitário: baixar e instalar
+
+A consulta ao [SpeedTester Server](https://speedtester.cararalab.com.br/) é pública.
+Para contribuir com seu servidor Linux, baixe o
+[instalador autônomo](https://speedtester.cararalab.com.br/downloads/install-speedtester-client.py)
+e execute no diretório em que salvou o arquivo:
+
+```bash
+python3 install-speedtester-client.py
+```
+
+O instalador baixa uma revisão fixa deste repositório público, verifica o
+SHA-256 e abre o assistente. Não é necessário clonar o projeto nem copiar tokens.
+Entre no portal, aceite os documentos de produção e confirme o código e a
+impressão digital da instalação. Depois do pareamento, o client mantém suas
+credenciais protegidas e as renova automaticamente enquanto autorizado.
+
+Requisitos: Linux amd64/arm64, usuário normal com sessão systemd, Python
+3.11–3.13 com venv e iPerf3. O assistente pede o perfil da conexão, o destino e
+a agenda antes de habilitar o serviço. O download sozinho não inicia medições.
+Para um Server próprio, use `python3 install-speedtester-client.py --server https://seu-server`.
+O código do instalador está em [install-speedtester-client.py](install-speedtester-client.py).
+
+Antes de autorizar, consulte o [inventário de dados enviados](https://speedtester.cararalab.com.br/data). Depois do aceite e do pareamento, Servers que anunciam `client-environment-v1` podem receber sistema operacional, distribuição, versão e arquitetura. Hostname, nome do usuário, número de série e conteúdo de arquivos pessoais não fazem parte desse registro. As métricas e o perfil da conexão continuam separados; os detalhes estão em [docs/client-environment.md](docs/client-environment.md).
 
 ## Dashboard
 
@@ -264,3 +289,10 @@ expiração de sessões e deploy automático. `API_REQUIRE_LOGIN=false` é reser
 para demonstração local com dados fictícios.
 
 ![Tela de login, sem credenciais preenchidas](docs/images/login.png)
+
+
+## Community integration foundation
+
+The public `speedtester-client-protocol` package provides typed metric observations, signed grants/receipts, DPoP proofs and an encrypted authoritative queue. [Protocol v1](contracts/server-v1/README.md) is exercised by public consumer tests without access to private Server sources.
+
+`CommunityAgent` obtains and starts an authorized attempt before invoking its runner callback, sends metric observations separately and verifies every receipt before acknowledging the queue. Missing measurements remain explicit states. Headless pairing, automatic token rotation and a guided Linux amd64/arm64 installer are implemented in the integration branch. See the [community installation guide](docs/community-client.md). The community service is separate from the standalone collector and requires a configured Server; it is not enabled in staging by default.

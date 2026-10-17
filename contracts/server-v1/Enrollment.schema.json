@@ -1,0 +1,23 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "possession_key": {
+      "maxLength": 43,
+      "minLength": 43,
+      "title": "Possession Key",
+      "type": "string"
+    },
+    "measurement_key": {
+      "maxLength": 43,
+      "minLength": 43,
+      "title": "Measurement Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "possession_key",
+    "measurement_key"
+  ],
+  "title": "Enrollment",
+  "type": "object"
+}

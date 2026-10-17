@@ -5,13 +5,10 @@
 (() => {
   const NS = 'http://www.w3.org/2000/svg';
   const COLORS = ['#d8ff66', '#6de4d0', '#ffad68', '#83b8ff', '#ff796d', '#c7a6ff'];
-  const continentShapes = [
-    'M102 105 L150 72 L226 79 L260 116 L246 151 L207 161 L183 195 L137 183 L118 148 Z',
-    'M271 195 L316 177 L355 195 L365 245 L341 286 L320 350 L282 337 L269 285 L244 252 Z',
-    'M475 102 L527 72 L599 84 L635 113 L620 144 L571 147 L543 178 L496 160 Z',
-    'M558 177 L605 165 L658 193 L685 246 L663 306 L631 356 L589 340 L570 295 L538 256 Z',
-    'M704 96 L752 91 L790 111 L776 134 L727 134 Z',
-    'M778 347 L824 353 L850 374 L821 388 L781 376 Z',
+  const REGIONS = [
+    ['AMÉRICA DO NORTE', 235, 168], ['AMÉRICA DO SUL', 350, 357],
+    ['EUROPA', 533, 127], ['ÁFRICA', 552, 252],
+    ['ÁSIA', 731, 157], ['OCEANIA', 828, 374],
   ];
 
   function svg(tag, attrs = {}, text = '') {
@@ -71,7 +68,16 @@
     const mapWrap = document.createElement('div');
     mapWrap.className = 'network-map-canvas';
     const map = svg('svg', { viewBox: '0 0 1000 500', role: 'img', 'aria-label': 'Mapa interativo de operadoras, cidades e países' });
-    mapWrap.append(map);
+    const heading = document.createElement('div');
+    heading.className = 'network-map-heading';
+    const headingTitle = document.createElement('span');
+    headingTitle.textContent = 'Visão global';
+    const headingCount = document.createElement('span');
+    headingCount.className = 'network-map-count';
+    const located = filtered.filter((point) => point.latitude != null && point.longitude != null).length;
+    headingCount.textContent = located + (located === 1 ? ' grupo localizado' : ' grupos localizados');
+    heading.append(headingTitle, headingCount);
+    mapWrap.append(heading, map);
 
     for (let longitude = -180; longitude <= 180; longitude += 30) {
       const start = project(-90, longitude), end = project(90, longitude);
@@ -79,10 +85,19 @@
     }
     for (let latitude = -60; latitude <= 60; latitude += 30) {
       const start = project(latitude, -180), end = project(latitude, 180);
-      map.append(svg('line', { x1: start.x, y1: start.y, x2: end.x, y2: end.y, class: 'map-grid-line' }));
+      map.append(svg('line', { x1: start.x, y1: start.y, x2: end.x, y2: end.y, class: latitude === 0 ? 'map-grid-line map-equator' : 'map-grid-line' }));
     }
-    for (const path of continentShapes) map.append(svg('path', { d: path, class: 'map-continent' }));
-    map.append(svg('text', { x: 54, y: 46, class: 'map-label' }, 'NETWORK ATLAS / AGGREGATED OBSERVATIONS'));
+    map.append(svg('image', { href: '/dashboard/world-map.svg', x: 0, y: 0, width: 1000, height: 500, class: 'map-geography', 'aria-hidden': 'true' }));
+    for (const [name, x, y] of REGIONS) map.append(svg('text', { x, y, 'text-anchor': 'middle', class: 'map-region-label', 'aria-hidden': 'true' }, name));
+    const footer = document.createElement('div');
+    footer.className = 'network-map-footer';
+    const key = document.createElement('span');
+    key.className = 'network-map-key';
+    key.textContent = 'Medições agrupadas';
+    const precision = document.createElement('span');
+    precision.textContent = 'Posições aproximadas';
+    footer.append(key, precision);
+    mapWrap.append(footer);
 
     const visiblePoints = filtered.filter((point) => point.latitude != null && point.longitude != null);
     const coordinateGroups = new Map();

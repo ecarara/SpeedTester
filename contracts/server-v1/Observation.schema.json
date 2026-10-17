@@ -1,0 +1,105 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Protocol Version",
+      "type": "string"
+    },
+    "observation_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Observation Id",
+      "type": "string"
+    },
+    "attempt_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "metric": {
+      "enum": [
+        "download",
+        "upload",
+        "latency",
+        "jitter",
+        "packet_loss",
+        "duration",
+        "transfer",
+        "tcp_retransmits"
+      ],
+      "title": "Metric",
+      "type": "string"
+    },
+    "unit": {
+      "maxLength": 10,
+      "title": "Unit",
+      "type": "string"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Value"
+    },
+    "status": {
+      "enum": [
+        "valid",
+        "not-supported",
+        "not-collected",
+        "error"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "method": {
+      "maxLength": 80,
+      "minLength": 1,
+      "pattern": "^[a-z0-9:._-]+$",
+      "title": "Method",
+      "type": "string"
+    },
+    "measured_at": {
+      "minimum": 0,
+      "title": "Measured At",
+      "type": "integer"
+    },
+    "profile_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Profile Digest",
+      "type": "string"
+    },
+    "legal_digest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Legal Digest",
+      "type": "string"
+    },
+    "nonce": {
+      "maxLength": 64,
+      "minLength": 32,
+      "title": "Nonce",
+      "type": "string"
+    }
+  },
+  "required": [
+    "observation_id",
+    "attempt_id",
+    "metric",
+    "unit",
+    "status",
+    "method",
+    "measured_at",
+    "profile_digest",
+    "legal_digest",
+    "nonce"
+  ],
+  "title": "Observation",
+  "type": "object"
+}

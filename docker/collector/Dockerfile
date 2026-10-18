@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
 
-FROM python:3.11.17-slim-trixie@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce AS iperf-builder
+FROM python:3.14.8-slim-trixie@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170 AS iperf-builder
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends build-essential libssl-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
@@ -12,7 +12,7 @@ RUN tar -xzf /tmp/iperf.tar.gz -C /tmp \
     && ./configure --disable-shared --enable-static --without-sctp --with-openssl=/usr \
     && make -j2
 
-FROM python:3.11.17-slim-trixie@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce
+FROM python:3.14.8-slim-trixie@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170
 
 ARG TARGETARCH
 ARG APP_VERSION=dev

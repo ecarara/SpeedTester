@@ -70,6 +70,8 @@ class LinuxPackagingTests(TestCase):
         self.assertIn("license=('GPL-3.0-or-later')", pkgbuild)
         self.assertIn('SOURCE_SHA256', pkgbuild)
         self.assertIn("package()", pkgbuild)
+        self.assertIn("'uvicorn'", pkgbuild)
+        self.assertNotIn("'python-uvicorn'", pkgbuild)
         self.assertIn("post_remove()", install)
         self.assertTrue((LINUX / "build-pacman.sh").is_file())
 

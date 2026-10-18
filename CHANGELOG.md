@@ -9,6 +9,12 @@ em <https://github.com/ecarara/SpeedTester>.
 
 ## [Unreleased]
 
+### Corrigido
+
+- launcher desktop inicia o `speedtester-api.service` e aguarda o healthcheck
+  local antes de abrir o navegador, evitando a página inacessível em
+  `127.0.0.1:8000` na primeira execução;
+
 ### Adicionado
 
 - contrato inicial do launcher desktop multiplataforma, com abertura segura do

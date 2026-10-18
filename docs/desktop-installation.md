@@ -48,6 +48,10 @@ usuário sem pacote nativo:
 O arquivo `.desktop` e os ícones hicolor fazem o aplicativo aparecer em GNOME,
 KDE, Omarchy, Cinnamon, XFCE e ambientes compatíveis com FreeDesktop. A
 desinstalação remove serviços e atalhos, preservando configuração e histórico.
+Ao abrir o aplicativo pelo menu, o launcher inicia o `speedtester-api.service`
+quando necessário e aguarda o endpoint local `/health` antes de abrir o
+navegador. Assim, a primeira execução não deve abrir uma página inacessível em
+`127.0.0.1:8000`.
 Para remover também os dados:
 
 ```bash

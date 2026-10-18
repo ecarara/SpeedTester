@@ -15,12 +15,15 @@ import os
 import platform
 import subprocess
 import sys
+import time
 import urllib.parse
+import urllib.request
 import webbrowser
 
 
 DEFAULT_DASHBOARD_URL = "http://127.0.0.1:8000/"
 DEFAULT_SERVICE_NAME = "speedtester-client.service"
+DEFAULT_API_SERVICE_NAME = "speedtester-api.service"
 
 
 class LauncherError(RuntimeError):
@@ -33,12 +36,16 @@ class LauncherConfig:
 
     dashboard_url: str = DEFAULT_DASHBOARD_URL
     service_name: str = DEFAULT_SERVICE_NAME
+    api_service_name: str = DEFAULT_API_SERVICE_NAME
 
     @classmethod
     def from_environment(cls) -> "LauncherConfig":
         return cls(
             dashboard_url=os.environ.get("SPEEDTESTER_DASHBOARD_URL", DEFAULT_DASHBOARD_URL),
             service_name=os.environ.get("SPEEDTESTER_SERVICE_NAME", DEFAULT_SERVICE_NAME),
+            api_service_name=os.environ.get(
+                "SPEEDTESTER_API_SERVICE_NAME", DEFAULT_API_SERVICE_NAME
+            ),
         )
 
 
@@ -58,6 +65,59 @@ def _run(command: list[str]) -> subprocess.CompletedProcess[str]:
         return subprocess.run(command, capture_output=True, text=True, check=False)
     except OSError as exc:
         raise LauncherError(f"Comando indisponível: {command[0]}") from exc
+
+
+def _is_local_dashboard(url: str) -> bool:
+    """Return whether the URL is a local dashboard controlled by this package."""
+    hostname = urllib.parse.urlsplit(url).hostname
+    return hostname in {"127.0.0.1", "localhost", "::1"}
+
+
+def _dashboard_health_url(url: str) -> str:
+    """Build the local health URL without carrying dashboard query parameters."""
+    parsed = urllib.parse.urlsplit(url)
+    return urllib.parse.urlunsplit(
+        (parsed.scheme, parsed.netloc, "/health", "", "")
+    )
+
+
+def _dashboard_is_ready(url: str) -> bool:
+    """Check the local API without following external redirects."""
+    try:
+        request = urllib.request.Request(
+            _dashboard_health_url(url),
+            headers={"Cache-Control": "no-cache", "Accept": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=1.5) as response:
+            return response.status == 200
+    except (OSError, ValueError):
+        return False
+
+
+def ensure_dashboard_ready(config: LauncherConfig, timeout: float = 8.0) -> None:
+    """Start the local API, when applicable, and wait for its health endpoint."""
+    url = validate_dashboard_url(config.dashboard_url)
+    if not _is_local_dashboard(url) or _dashboard_is_ready(url):
+        return
+
+    try:
+        ServiceController(config.api_service_name).execute("start")
+    except LauncherError as exc:
+        raise LauncherError(
+            "O dashboard local não está disponível e o serviço "
+            f"{config.api_service_name} não pôde ser iniciado: {exc}"
+        ) from exc
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _dashboard_is_ready(url):
+            return
+        time.sleep(0.2)
+    raise LauncherError(
+        "O serviço local foi iniciado, mas não respondeu em "
+        f"{_dashboard_health_url(url)}. Verifique o status de "
+        f"{config.api_service_name}."
+    )
 
 
 class ServiceController:
@@ -110,6 +170,7 @@ class ServiceController:
 def open_dashboard(config: LauncherConfig) -> None:
     """Open the configured dashboard without exposing credentials in logs."""
     url = validate_dashboard_url(config.dashboard_url)
+    ensure_dashboard_ready(config)
     if not webbrowser.open(url, new=2):
         raise LauncherError("Não foi possível abrir o navegador padrão.")
 
@@ -133,9 +194,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         config = LauncherConfig.from_environment()
         if args.url:
-            config = LauncherConfig(args.url, config.service_name)
+            config = LauncherConfig(args.url, config.service_name, config.api_service_name)
         if args.service:
-            config = LauncherConfig(config.dashboard_url, args.service)
+            config = LauncherConfig(config.dashboard_url, args.service, config.api_service_name)
         if args.action == "open":
             open_dashboard(config)
             print("dashboard_opened")

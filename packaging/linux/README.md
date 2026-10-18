@@ -71,6 +71,11 @@ Os builders não baixam dependências silenciosamente nem inventam um runtime:
 o ambiente Python deve ser criado pelo pipeline de build e então é incorporado
 ao artefato correspondente.
 
+O launcher verifica o dashboard local antes de abrir o navegador. Se
+`speedtester-api.service` ainda não estiver ativo, ele o inicia e aguarda
+`http://127.0.0.1:8000/health`; em caso de falha, informa que o serviço não
+ficou saudável em vez de abrir uma página inacessível.
+
 ## Flatpak
 
 O Flatpak é um launcher gráfico do dashboard. Ele segue o modelo sandboxed e

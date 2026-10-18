@@ -13,5 +13,8 @@ command -v flatpak-builder >/dev/null || { echo "flatpak-builder é necessário 
 command -v flatpak >/dev/null || { echo "flatpak é necessário para gerar o Flatpak" >&2; exit 2; }
 mkdir -p "$OUTPUT_DIR"
 REPO_DIR="$OUTPUT_DIR/flatpak-repo"
-flatpak-builder --force-clean --repo="$REPO_DIR" "$BUILD_DIR" "$MANIFEST"
+# GitHub-hosted runners do not provide a reliable FUSE mount for rofiles-fuse.
+# Disabling that optimization keeps the build portable and avoids indefinite
+# hangs after the module commands complete.
+flatpak-builder --disable-rofiles-fuse --force-clean --repo="$REPO_DIR" "$BUILD_DIR" "$MANIFEST"
 flatpak build-bundle "$REPO_DIR" "$OUTPUT_DIR/${APP_ID}-${VERSION}.flatpak" "$APP_ID" stable

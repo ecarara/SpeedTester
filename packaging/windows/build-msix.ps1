@@ -13,6 +13,14 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $makeAppx = Get-Command MakeAppx.exe -ErrorAction SilentlyContinue
+if (-not $makeAppx) {
+    $windowsKitBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+    if (Test-Path $windowsKitBin) {
+        $makeAppx = Get-ChildItem -Path $windowsKitBin -Filter MakeAppx.exe -Recurse -File -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+    }
+}
 if (-not $makeAppx) { throw 'MakeAppx.exe não encontrado; instale o Windows SDK.' }
 if (-not (Test-Path $LauncherPath)) { throw "Launcher não encontrado: $LauncherPath" }
 if (-not (Test-Path $ClientPath)) { throw "Cliente não encontrado: $ClientPath" }
@@ -28,7 +36,7 @@ try {
     [System.IO.File]::WriteAllText((Join-Path $stage 'AppxManifest.xml'), $manifest, (New-Object System.Text.UTF8Encoding($false)))
     New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
     $output = Join-Path $OutputDirectory ("SpeedTester-$Version-$Architecture.msix")
-    & $makeAppx.Source pack /d $stage /p $output /o
+    & $makeAppx.FullName pack /d $stage /p $output /o
     if ($Sign) {
         $signTool = Get-Command SignTool.exe -ErrorAction SilentlyContinue
         if (-not $signTool) { throw 'SignTool.exe não encontrado; instale o Windows SDK.' }

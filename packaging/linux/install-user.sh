@@ -82,10 +82,12 @@ if command -v update-desktop-database >/dev/null; then
   update-desktop-database "$APPLICATION_DIR" >/dev/null 2>&1 || true
 fi
 
-if command -v systemctl >/dev/null && systemctl --user show-environment >/dev/null 2>&1; then
-  systemctl --user daemon-reload
-  systemctl --user enable --now speedtester-api.service speedtester-client.service
-  echo "[speedtester] serviços systemd do usuário habilitados"
+if [[ "${SPEEDTESTER_SKIP_SYSTEMD:-0}" != "1" ]] && command -v systemctl >/dev/null && systemctl --user show-environment >/dev/null 2>&1; then
+  if systemctl --user daemon-reload && systemctl --user enable --now speedtester-api.service speedtester-client.service; then
+    echo "[speedtester] serviços systemd do usuário habilitados"
+  else
+    echo "[speedtester] sessão systemd --user não aceitou os serviços; arquivos instalados, ative-os depois" >&2
+  fi
 else
   echo "[speedtester] sessão systemd --user indisponível; arquivos instalados, ative-os depois"
 fi

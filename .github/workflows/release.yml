@@ -242,7 +242,12 @@ jobs:
           Export-PfxCertificate -Cert $certificate -FilePath $pfx -Password $password | Out-Null
           Export-Certificate -Cert $certificate -FilePath $cer | Out-Null
           Import-Certificate -FilePath $cer -CertStoreLocation Cert:\CurrentUser\TrustedPeople | Out-Null
-          $signTool = Get-ChildItem "$env:ProgramFiles(x86)\Windows Kits\10\bin" -Filter signtool.exe -Recurse |
+          $sdkRoots = @(
+            (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'),
+            (Join-Path $env:ProgramFiles 'Windows Kits\10\bin')
+          ) | Where-Object { Test-Path $_ }
+          $signTool = $sdkRoots |
+            ForEach-Object { Get-ChildItem $_ -Filter signtool.exe -Recurse -File -ErrorAction SilentlyContinue } |
             Sort-Object FullName -Descending | Select-Object -First 1
           if (-not $signTool) { throw 'SignTool.exe não encontrado' }
           $package = Get-ChildItem dist/windows -Filter *.msix | Select-Object -First 1

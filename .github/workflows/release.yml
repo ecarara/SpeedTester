@@ -166,6 +166,7 @@ jobs:
     name: Linux Flatpak
     needs: [metadata, quality]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Flatpak toolchain
@@ -226,6 +227,7 @@ jobs:
     name: Windows MSIX install smoke test
     needs: windows
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -247,9 +249,19 @@ jobs:
             (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'),
             (Join-Path $env:ProgramFiles 'Windows Kits\10\bin')
           ) | Where-Object { Test-Path $_ }
-          $signTool = $sdkRoots |
-            ForEach-Object { Get-ChildItem $_ -Filter signtool.exe -Recurse -File -ErrorAction SilentlyContinue } |
-            Sort-Object FullName -Descending | Select-Object -First 1
+          $signTool = $null
+          foreach ($sdkRoot in $sdkRoots) {
+            $versions = Get-ChildItem $sdkRoot -Directory -ErrorAction SilentlyContinue |
+              Sort-Object Name -Descending
+            foreach ($version in $versions) {
+              $candidate = Join-Path $version.FullName 'x64\signtool.exe'
+              if (Test-Path $candidate) {
+                $signTool = Get-Item $candidate
+                break
+              }
+            }
+            if ($signTool) { break }
+          }
           if (-not $signTool) { throw 'SignTool.exe não encontrado' }
           $package = Get-ChildItem dist/windows -Filter *.msix | Select-Object -First 1
           & $signTool.FullName sign /fd SHA256 /f $pfx /p speedtester-ci-only $package.FullName

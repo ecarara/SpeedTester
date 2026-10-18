@@ -16,5 +16,5 @@ REPO_DIR="$OUTPUT_DIR/flatpak-repo"
 # GitHub-hosted runners do not provide a reliable FUSE mount for rofiles-fuse.
 # Disabling that optimization keeps the build portable and avoids indefinite
 # hangs after the module commands complete.
-flatpak-builder --disable-rofiles-fuse --force-clean --repo="$REPO_DIR" "$BUILD_DIR" "$MANIFEST"
+flatpak-builder --disable-rofiles-fuse --default-branch=stable --force-clean --repo="$REPO_DIR" "$BUILD_DIR" "$MANIFEST"
 flatpak build-bundle "$REPO_DIR" "$OUTPUT_DIR/${APP_ID}-${VERSION}.flatpak" "$APP_ID" stable

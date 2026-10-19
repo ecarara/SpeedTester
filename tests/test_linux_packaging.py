@@ -76,6 +76,8 @@ class LinuxPackagingTests(TestCase):
         self.assertIn("'uvicorn'", pkgbuild)
         self.assertNotIn("'python-uvicorn'", pkgbuild)
         self.assertIn("post_remove()", install)
+        self.assertIn("_speedtester_migrate_legacy_user_units", install)
+        self.assertIn("WorkingDirectory=%h/.local/share/speedtester/app", install)
         self.assertTrue((LINUX / "build-pacman.sh").is_file())
 
     def test_isolated_install_smoke_exists(self):

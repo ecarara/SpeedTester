@@ -5,7 +5,30 @@ post_install() {
 }
 
 post_upgrade() {
+  _speedtester_migrate_legacy_user_units
   _speedtester_reload_and_start
+}
+
+_speedtester_migrate_legacy_user_units() {
+  # Older install-user.sh versions placed units in ~/.config/systemd/user.
+  # Those files override the package units in /usr/lib and can keep running
+  # an obsolete private copy of the application after a pacman upgrade.
+  local user_name="${SUDO_USER:-}"
+  [[ -n "$user_name" && "$user_name" != "root" ]] || return 0
+  command -v getent >/dev/null 2>&1 || return 0
+
+  local user_home
+  user_home=$(getent passwd "$user_name" | cut -d: -f6)
+  [[ -n "$user_home" && -d "$user_home" ]] || return 0
+
+  local unit_dir="$user_home/.config/systemd/user"
+  local unit
+  for unit in speedtester-api.service speedtester-client.service; do
+    local unit_path="$unit_dir/$unit"
+    if [[ -f "$unit_path" ]] && grep -q 'WorkingDirectory=%h/.local/share/speedtester/app' "$unit_path"; then
+      rm -f "$unit_path"
+    fi
+  done
 }
 
 _speedtester_reload_and_start() {

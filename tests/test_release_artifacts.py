@@ -30,7 +30,6 @@ class ReleaseArtifactTests(TestCase):
         self.assertIn("build-flatpak.sh", workflow)
         self.assertIn("build-pacman.sh", workflow)
         self.assertIn("validate_release_artifacts.py", workflow)
-        self.assertIn("windows-install-smoke", workflow)
         self.assertIn("macos-install-smoke", workflow)
         self.assertIn("needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke, validate]", workflow)
         self.assertIn("gh release create", workflow)

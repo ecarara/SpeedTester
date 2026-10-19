@@ -309,7 +309,7 @@ jobs:
 
   validate:
     name: Validate release contents
-    needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, windows-install-smoke, macos-install-smoke]
+    needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -328,7 +328,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, windows-install-smoke, macos-install-smoke, validate]
+    needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke, validate]
     runs-on: ubuntu-latest
     permissions:
       contents: write

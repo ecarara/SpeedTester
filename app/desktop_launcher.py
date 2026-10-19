@@ -12,7 +12,9 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 import os
+from pathlib import Path
 import platform
+import socket
 import subprocess
 import sys
 import time
@@ -24,10 +26,31 @@ import webbrowser
 DEFAULT_DASHBOARD_URL = "http://127.0.0.1:8000/"
 DEFAULT_SERVICE_NAME = "speedtester-client.service"
 DEFAULT_API_SERVICE_NAME = "speedtester-api.service"
+LOCAL_PORT_RANGE = range(8000, 8101)
 
 
 class LauncherError(RuntimeError):
     """Raised when the launcher configuration or operating-system action fails."""
+
+
+def _config_file() -> Path:
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return config_home / "speedtester" / "speedtester.env"
+
+
+def _configured_local_port() -> int | None:
+    """Read the persisted local API port without importing application settings."""
+    path = _config_file()
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            key, separator, value = line.partition("=")
+            if key.strip() == "API_PORT" and separator:
+                port = int(value.strip())
+                if 1 <= port <= 65535:
+                    return port
+    except (OSError, ValueError):
+        return None
+    return None
 
 
 @dataclass(frozen=True)
@@ -40,8 +63,16 @@ class LauncherConfig:
 
     @classmethod
     def from_environment(cls) -> "LauncherConfig":
+        dashboard_url = os.environ.get("SPEEDTESTER_DASHBOARD_URL")
+        if not dashboard_url:
+            configured_port = os.environ.get("API_PORT")
+            try:
+                port = int(configured_port) if configured_port else _configured_local_port()
+            except ValueError:
+                port = None
+            dashboard_url = f"http://127.0.0.1:{port or 8000}/"
         return cls(
-            dashboard_url=os.environ.get("SPEEDTESTER_DASHBOARD_URL", DEFAULT_DASHBOARD_URL),
+            dashboard_url=dashboard_url,
             service_name=os.environ.get("SPEEDTESTER_SERVICE_NAME", DEFAULT_SERVICE_NAME),
             api_service_name=os.environ.get(
                 "SPEEDTESTER_API_SERVICE_NAME", DEFAULT_API_SERVICE_NAME
@@ -94,11 +125,101 @@ def _dashboard_is_ready(url: str) -> bool:
         return False
 
 
-def ensure_dashboard_ready(config: LauncherConfig, timeout: float = 8.0) -> None:
+def _local_endpoint_is_bound(url: str) -> bool:
+    """Return whether a local TCP endpoint is occupied by any process."""
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+        return False
+    try:
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        family = socket.AF_INET6 if parsed.hostname == "::1" else socket.AF_INET
+        with socket.socket(family, socket.SOCK_STREAM) as probe:
+            probe.settimeout(0.25)
+            return probe.connect_ex((parsed.hostname, port)) == 0
+    except (OSError, ValueError):
+        return False
+
+
+def _find_free_local_port() -> int:
+    """Find a free loopback port for the local dashboard."""
+    for port in LOCAL_PORT_RANGE:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                probe.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return port
+    raise LauncherError("Não há uma porta local disponível para o dashboard do SpeedTester.")
+
+
+def _persist_local_port(port: int) -> None:
+    """Persist an automatically selected port while preserving user settings."""
+    path = _config_file()
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        lines = []
+    except OSError as exc:
+        raise LauncherError(f"Não foi possível atualizar a configuração local: {exc}") from exc
+
+    replacement = f"API_PORT={port}"
+    for index, line in enumerate(lines):
+        if line.strip().startswith("API_PORT="):
+            lines[index] = replacement
+            break
+    else:
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.append(replacement)
+
+    temporary = path.with_suffix(".env.tmp")
+    try:
+        temporary.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, path)
+    except OSError as exc:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise LauncherError(f"Não foi possível atualizar a configuração local: {exc}") from exc
+
+
+def _url_with_port(url: str, port: int) -> str:
+    parsed = urllib.parse.urlsplit(url)
+    host = parsed.hostname or "127.0.0.1"
+    if ":" in host:
+        host = f"[{host}]"
+    return urllib.parse.urlunsplit(
+        (parsed.scheme, f"{host}:{port}", parsed.path or "/", parsed.query, parsed.fragment)
+    )
+
+
+def _reload_user_manager() -> None:
+    result = _run(["systemctl", "--user", "daemon-reload"])
+    if result.returncode:
+        detail = (result.stderr or result.stdout).strip()
+        raise LauncherError(detail or "Não foi possível recarregar o serviço do usuário.")
+
+
+def ensure_dashboard_ready(config: LauncherConfig, timeout: float = 8.0) -> str:
     """Start the local API, when applicable, and wait for its health endpoint."""
     url = validate_dashboard_url(config.dashboard_url)
     if not _is_local_dashboard(url) or _dashboard_is_ready(url):
-        return
+        return url
+
+    if _local_endpoint_is_bound(url):
+        if platform.system() != "Linux":
+            raise LauncherError(
+                "A porta do dashboard local está ocupada por outro processo: "
+                f"{urllib.parse.urlsplit(url).netloc}."
+            )
+        alternate_port = _find_free_local_port()
+        _persist_local_port(alternate_port)
+        _reload_user_manager()
+        url = _url_with_port(url, alternate_port)
 
     try:
         ServiceController(config.api_service_name).execute("start")
@@ -111,7 +232,7 @@ def ensure_dashboard_ready(config: LauncherConfig, timeout: float = 8.0) -> None
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         if _dashboard_is_ready(url):
-            return
+            return url
         time.sleep(0.2)
     raise LauncherError(
         "O serviço local foi iniciado, mas não respondeu em "
@@ -170,7 +291,7 @@ class ServiceController:
 def open_dashboard(config: LauncherConfig) -> None:
     """Open the configured dashboard without exposing credentials in logs."""
     url = validate_dashboard_url(config.dashboard_url)
-    ensure_dashboard_ready(config)
+    url = ensure_dashboard_ready(config)
     if not webbrowser.open(url, new=2):
         raise LauncherError("Não foi possível abrir o navegador padrão.")
 

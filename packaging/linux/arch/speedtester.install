@@ -1,16 +1,38 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
 post_install() {
-  cat <<'EOF'
+  _speedtester_reload_and_start
+}
+
+post_upgrade() {
+  _speedtester_reload_and_start
+}
+
+_speedtester_reload_and_start() {
+  # Package hooks run as root, while the services belong to the installing
+  # user's systemd --user manager.  pacman exposes that user through SUDO_USER
+  # for sudo installs; without it, leave the units installed and let the
+  # desktop launcher report the actionable service error.
+  local user_name="${SUDO_USER:-}"
+  if [[ -z "$user_name" || "$user_name" == "root" ]] || ! command -v runuser >/dev/null 2>&1; then
+    cat <<'EOF'
 SpeedTester installed. Configure ~/.config/speedtester/speedtester.env, then
 enable the per-user services with:
   systemctl --user daemon-reload
   systemctl --user enable --now speedtester-api.service speedtester-client.service
 EOF
-}
+    return 0
+  fi
 
-post_upgrade() {
-  systemctl --user daemon-reload >/dev/null 2>&1 || true
+  runuser -u "$user_name" -- systemctl --user daemon-reload >/dev/null 2>&1 || true
+  if ! runuser -u "$user_name" -- systemctl --user enable --now \
+      speedtester-api.service speedtester-client.service >/dev/null 2>&1; then
+    cat <<'EOF'
+SpeedTester installed, but the per-user services could not be started.
+Check them with:
+  systemctl --user status speedtester-api.service speedtester-client.service
+EOF
+  fi
 }
 
 post_remove() {

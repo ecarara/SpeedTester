@@ -76,6 +76,47 @@ class DesktopLauncherTests(TestCase):
         controller_type.return_value.execute.assert_called_once_with("start")
         open_browser.assert_called_once_with("http://127.0.0.1:8000/", new=2)
 
+    def test_local_open_reuses_an_already_healthy_api(self):
+        config = LauncherConfig("http://127.0.0.1:8000/")
+        with (
+            patch("desktop_launcher._dashboard_is_ready", return_value=True),
+            patch("desktop_launcher.ServiceController") as controller_type,
+            patch("desktop_launcher.webbrowser.open", return_value=True) as open_browser,
+        ):
+            open_dashboard(config)
+        controller_type.assert_not_called()
+        open_browser.assert_called_once_with("http://127.0.0.1:8000/", new=2)
+
+    def test_local_open_does_not_use_an_unrelated_process_on_dashboard_port(self):
+        config = LauncherConfig("http://127.0.0.1:8000/")
+        with (
+            patch("desktop_launcher._dashboard_is_ready", return_value=False),
+            patch("desktop_launcher._local_endpoint_is_bound", return_value=True),
+            patch("desktop_launcher.ServiceController") as controller_type,
+            patch("desktop_launcher.webbrowser.open") as open_browser,
+        ):
+            with self.assertRaisesRegex(LauncherError, "porta.*ocupada"):
+                open_dashboard(config)
+        controller_type.assert_not_called()
+        open_browser.assert_not_called()
+
+    def test_linux_local_open_moves_to_free_port_when_default_is_occupied(self):
+        config = LauncherConfig("http://127.0.0.1:8000/")
+        with (
+            patch("desktop_launcher.platform.system", return_value="Linux"),
+            patch("desktop_launcher._dashboard_is_ready", side_effect=(False, True)),
+            patch("desktop_launcher._local_endpoint_is_bound", return_value=True),
+            patch("desktop_launcher._find_free_local_port", return_value=8001),
+            patch("desktop_launcher._persist_local_port") as persist_port,
+            patch("desktop_launcher._reload_user_manager"),
+            patch("desktop_launcher.ServiceController") as controller_type,
+            patch("desktop_launcher.webbrowser.open", return_value=True) as open_browser,
+        ):
+            open_dashboard(config)
+        persist_port.assert_called_once_with(8001)
+        controller_type.return_value.execute.assert_called_once_with("start")
+        open_browser.assert_called_once_with("http://127.0.0.1:8001/", new=2)
+
     def test_main_open_reports_success(self):
         with patch("desktop_launcher.open_dashboard") as open_action:
             self.assertEqual(main(["open", "--url", "https://speedtester.example.test/"]), 0)

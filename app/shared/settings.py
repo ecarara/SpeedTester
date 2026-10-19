@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 from math import isfinite
 from zoneinfo import ZoneInfo
@@ -159,8 +160,21 @@ def _env_server_ids(name: str, default: list[int]) -> Optional[list[int]]:
 
 
 def load_settings() -> Settings:
-    """Read environment variables and return validated application settings."""
-    db_path = _env_str("DB_PATH", "/data/speedtester.db")
+    """Read environment variables and return validated application settings.
+
+    ``%h`` is a systemd unit specifier, but values inside ``EnvironmentFile``
+    are not unit files and must not rely on specifier expansion. Resolve it
+    here so desktop upgrades always use a writable user-local database path.
+    """
+    configured_db_path = os.environ.get("DB_PATH")
+    if configured_db_path:
+        db_path = os.path.expanduser(
+            configured_db_path.replace("%h", str(Path.home()), 1)
+        )
+    else:
+        db_path = str(
+            Path.home() / ".local" / "share" / "speedtester" / "data" / "speedtester.db"
+        )
     return Settings(
         sample_interval_seconds=_env_int("SAMPLE_INTERVAL_SECONDS", 1800),
         sample_duration_seconds=_env_int("SAMPLE_DURATION_SECONDS", 30),

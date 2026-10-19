@@ -90,6 +90,7 @@ class DesktopLauncherTests(TestCase):
     def test_local_open_does_not_use_an_unrelated_process_on_dashboard_port(self):
         config = LauncherConfig("http://127.0.0.1:8000/")
         with (
+            patch("desktop_launcher.platform.system", return_value="Darwin"),
             patch("desktop_launcher._dashboard_is_ready", return_value=False),
             patch("desktop_launcher._local_endpoint_is_bound", return_value=True),
             patch("desktop_launcher.ServiceController") as controller_type,

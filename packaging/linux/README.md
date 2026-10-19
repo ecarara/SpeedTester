@@ -76,6 +76,11 @@ O launcher verifica o dashboard local antes de abrir o navegador. Se
 `http://127.0.0.1:8000/health`; em caso de falha, informa que o serviço não
 ficou saudável em vez de abrir uma página inacessível.
 
+O dashboard local não exige usuário ou senha: os serviços são limitados a
+`127.0.0.1` e ativam `SPEEDTESTER_LOCAL_MODE`. A autenticação continua
+obrigatória no Server de produção; operações administrativas locais continuam
+protegidas pelo token administrativo.
+
 ## Flatpak
 
 O Flatpak é um launcher gráfico do dashboard. Ele segue o modelo sandboxed e

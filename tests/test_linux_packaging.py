@@ -28,6 +28,7 @@ class LinuxPackagingTests(TestCase):
         self.assertIn("-m collector.collector", client)
         api = (LINUX / "speedtester-api.service").read_text(encoding="utf-8")
         self.assertIn("Environment=DB_PATH=%h/.local/share/speedtester/data/speedtester.db", api)
+        self.assertIn("Environment=SPEEDTESTER_LOCAL_MODE=true", api)
 
     def test_installation_has_all_freedesktop_icon_sizes(self):
         for size in (16, 32, 48, 64, 128, 256, 512):

@@ -213,7 +213,14 @@ def load_settings() -> Settings:
         alert_speed_threshold_pct=_env_float("ALERT_SPEED_THRESHOLD_PCT", 80.0),
         alert_cooldown_seconds=_env_int("ALERT_COOLDOWN_SECONDS", 21600),
         slot_lease_seconds=_env_int("SLOT_LEASE_SECONDS", 300),
-        api_require_login=_env_bool("API_REQUIRE_LOGIN", True),
+        # Desktop packages bind only to loopback and explicitly enable local
+        # mode. Keep the secure server default everywhere else, while avoiding
+        # a login screen for a single-user local dashboard.
+        api_require_login=(
+            False
+            if _env_bool("SPEEDTESTER_LOCAL_MODE", False)
+            else _env_bool("API_REQUIRE_LOGIN", True)
+        ),
         api_viewer_password_hash=os.environ.get("API_VIEWER_PASSWORD_HASH", ""),
         api_admin_password_hash=os.environ.get("API_ADMIN_PASSWORD_HASH", ""),
         api_session_seconds=_env_int("API_SESSION_SECONDS", 28800),

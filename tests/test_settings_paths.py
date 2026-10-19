@@ -28,3 +28,20 @@ class SettingsPathTests(TestCase):
             settings.db_path,
             str(Path.home() / ".local/share/speedtester/data/speedtester.db"),
         )
+
+    def test_local_mode_disables_dashboard_login_without_changing_server_default(self):
+        with patch.dict(
+            "os.environ",
+            {"SPEEDTESTER_LOCAL_MODE": "true", "API_REQUIRE_LOGIN": "true"},
+            clear=False,
+        ):
+            settings = load_settings()
+        self.assertFalse(settings.api_require_login)
+
+        with patch.dict(
+            "os.environ",
+            {"SPEEDTESTER_LOCAL_MODE": "false", "API_REQUIRE_LOGIN": "true"},
+            clear=False,
+        ):
+            settings = load_settings()
+        self.assertTrue(settings.api_require_login)

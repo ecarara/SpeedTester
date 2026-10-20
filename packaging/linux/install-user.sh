@@ -41,10 +41,9 @@ python3 -m venv "$INSTALL_ROOT/venv"
 "$INSTALL_ROOT/venv/bin/python" -m pip install --disable-pip-version-check --no-input -r "$SOURCE_DIR/app/requirements.txt"
 install -m 0755 "$SOURCE_DIR/packaging/linux/speedtester-launcher" "$BIN_DIR/speedtester-launcher"
 
-if [[ ! -e "$ENV_FILE" ]]; then
+SPEEDTESTER_CONFIRM_EXISTING=1 \
   SPEEDTESTER_ENV_TEMPLATE="$SOURCE_DIR/packaging/linux/speedtester.env.example" \
-    "$SOURCE_DIR/packaging/linux/configure-user.sh"
-fi
+  "$SOURCE_DIR/packaging/linux/configure-user.sh"
 mkdir -p "$DATA_HOME/speedtester/data"
 
 for unit in speedtester-api.service speedtester-client.service; do

@@ -45,6 +45,20 @@ class LinuxPackagingTests(TestCase):
         installer = (LINUX / "install-user.sh").read_text(encoding="utf-8")
         self.assertIn("uninstall|--uninstall", installer)
         self.assertIn('exec "$SCRIPT_DIR/uninstall-user.sh"', installer)
+        self.assertIn("speedtester.env.example", installer)
+        self.assertIn("configure-user.sh", installer)
+
+    def test_installation_provisions_user_configuration_for_arch_package(self):
+        example = (LINUX / "speedtester.env.example").read_text(encoding="utf-8")
+        install = (LINUX / "arch" / "speedtester.install").read_text(encoding="utf-8")
+        pkgbuild = (LINUX / "arch" / "PKGBUILD").read_text(encoding="utf-8")
+        self.assertIn("IPERF3_SERVER=", example)
+        self.assertNotIn("DB_PATH=", example)
+        self.assertIn("_speedtester_configure_user", install)
+        self.assertIn("configure-user.sh", install)
+        self.assertIn("/usr/share/speedtester/speedtester.env.example", install)
+        self.assertIn("speedtester.env.example", pkgbuild)
+        self.assertTrue((LINUX / "configure-user.sh").is_file())
 
     def test_package_manifests_have_uninstall_paths(self):
         control = (LINUX / "debian" / "control.in").read_text(encoding="utf-8")
@@ -53,6 +67,9 @@ class LinuxPackagingTests(TestCase):
         appimage_uninstall = LINUX / "appimage" / "uninstall-appimage.sh"
         self.assertIn("Package: speedtester", control)
         self.assertIn("%postun", spec)
+        self.assertIn("configure-user.sh", control + spec)
+        self.assertIn("speedtester.env.example", spec)
+        self.assertIn("configure-user.sh", (LINUX / "debian" / "postinst").read_text(encoding="utf-8"))
         self.assertIn("--uninstall", appimage_install)
         self.assertTrue(appimage_uninstall.is_file())
 

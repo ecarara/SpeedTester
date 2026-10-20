@@ -21,12 +21,15 @@ local dashboard. The package installs a user-level launcher and services.
 %install
 mkdir -p %{buildroot}/usr/lib/speedtester
 mkdir -p %{buildroot}/usr/bin
+mkdir -p %{buildroot}/usr/share/speedtester
 mkdir -p %{buildroot}/usr/share/applications
 mkdir -p %{buildroot}/usr/lib/systemd/user
 mkdir -p %{buildroot}/usr/share/icons/hicolor/512x512/apps
 cp -a app %{buildroot}/usr/lib/speedtester/app
 cp -a venv %{buildroot}/usr/lib/speedtester/venv
 install -m 0755 speedtester-launcher %{buildroot}/usr/bin/speedtester-launcher
+install -m 0755 configure-user.sh %{buildroot}/usr/lib/speedtester/configure-user.sh
+install -m 0644 speedtester.env.example %{buildroot}/usr/share/speedtester/speedtester.env.example
 install -m 0644 speedtester.desktop %{buildroot}/usr/share/applications/speedtester.desktop
 install -m 0644 speedtester-api.service %{buildroot}/usr/lib/systemd/user/speedtester-api.service
 install -m 0644 speedtester-client.service %{buildroot}/usr/lib/systemd/user/speedtester-client.service
@@ -37,10 +40,18 @@ install -m 0644 LICENSE %{buildroot}/usr/lib/speedtester/LICENSE
 %license /usr/lib/speedtester/LICENSE
 /usr/bin/speedtester-launcher
 /usr/lib/speedtester
+/usr/share/speedtester/speedtester.env.example
 /usr/lib/systemd/user/speedtester-api.service
 /usr/lib/systemd/user/speedtester-client.service
 /usr/share/applications/speedtester.desktop
 /usr/share/icons/hicolor/512x512/apps/speedtester.png
+
+%post
+if command -v runuser >/dev/null 2>&1 && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ] && [ -x /usr/lib/speedtester/configure-user.sh ]; then
+    runuser -u "$SUDO_USER" -- env \
+        SPEEDTESTER_ENV_TEMPLATE=/usr/share/speedtester/speedtester.env.example \
+        /usr/lib/speedtester/configure-user.sh || :
+fi
 
 %postun
 systemctl --user daemon-reload >/dev/null 2>&1 || :

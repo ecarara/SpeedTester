@@ -42,23 +42,8 @@ python3 -m venv "$INSTALL_ROOT/venv"
 install -m 0755 "$SOURCE_DIR/packaging/linux/speedtester-launcher" "$BIN_DIR/speedtester-launcher"
 
 if [[ ! -e "$ENV_FILE" ]]; then
-  umask 077
-  cat > "$ENV_FILE" <<'EOF'
-# SpeedTester per-user configuration. Set IPERF3_SERVER before starting measurements.
-DB_PATH=%h/.local/share/speedtester/data/speedtester.db
-SPEEDTEST_RUNNER=iperf3
-IPERF3_SERVER=
-IPERF3_PORT=5201
-IPERF3_DURATION_SECONDS=10
-IPERF3_PARALLEL_STREAMS=5
-MEASUREMENT_TIMEOUT_SECONDS=60
-MEASUREMENTS_PER_QUADRANT=2
-TZ=America/Sao_Paulo
-API_BIND_ADDRESS=127.0.0.1
-API_PORT=8000
-API_REQUIRE_LOGIN=false
-API_REQUIRE_ADMIN_TOKEN=true
-EOF
+  SPEEDTESTER_ENV_TEMPLATE="$SOURCE_DIR/packaging/linux/speedtester.env.example" \
+    "$SOURCE_DIR/packaging/linux/configure-user.sh"
 fi
 mkdir -p "$DATA_HOME/speedtester/data"
 

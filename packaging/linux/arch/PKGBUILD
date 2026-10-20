@@ -19,12 +19,16 @@ package() {
 
   install -Dm755 "${source_root}/packaging/linux/arch/speedtester-launcher" \
     "${pkgdir}/usr/bin/speedtester-launcher"
+  install -Dm755 "${source_root}/packaging/linux/configure-user.sh" \
+    "${pkgdir}/usr/lib/speedtester/configure-user.sh"
   install -Dm644 "${source_root}/packaging/linux/arch/speedtester.desktop" \
     "${pkgdir}/usr/share/applications/speedtester.desktop"
   install -Dm644 "${source_root}/packaging/linux/arch/speedtester-api.service" \
     "${pkgdir}/usr/lib/systemd/user/speedtester-api.service"
   install -Dm644 "${source_root}/packaging/linux/arch/speedtester-client.service" \
     "${pkgdir}/usr/lib/systemd/user/speedtester-client.service"
+  install -Dm644 "${source_root}/packaging/linux/speedtester.env.example" \
+    "${pkgdir}/usr/share/speedtester/speedtester.env.example"
 
   for size in 16 32 48 64 128 256 512; do
     install -Dm644 "${source_root}/assets/icons/hicolor/${size}/apps/speedtester.png" \

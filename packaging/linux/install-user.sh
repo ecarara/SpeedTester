@@ -45,7 +45,7 @@ if [[ ! -e "$ENV_FILE" ]]; then
   umask 077
   cat > "$ENV_FILE" <<'EOF'
 # SpeedTester per-user configuration. Set IPERF3_SERVER before starting measurements.
-DB_PATH=$INSTALL_ROOT/data/speedtester.db
+DB_PATH=%h/.local/share/speedtester/data/speedtester.db
 SPEEDTEST_RUNNER=iperf3
 IPERF3_SERVER=
 IPERF3_PORT=5201

@@ -26,6 +26,7 @@ class LinuxPackagingTests(TestCase):
         client = (LINUX / "speedtester-client.service").read_text(encoding="utf-8")
         self.assertIn("Requires=speedtester-api.service", client)
         self.assertIn("-m collector.collector", client)
+        self.assertIn("Environment=DB_PATH=%h/.local/share/speedtester/data/speedtester.db", client)
         api = (LINUX / "speedtester-api.service").read_text(encoding="utf-8")
         self.assertIn("Environment=DB_PATH=%h/.local/share/speedtester/data/speedtester.db", api)
         self.assertIn("Environment=SPEEDTESTER_LOCAL_MODE=true", api)

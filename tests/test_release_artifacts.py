@@ -31,7 +31,7 @@ class ReleaseArtifactTests(TestCase):
         self.assertIn("build-pacman.sh", workflow)
         self.assertIn("validate_release_artifacts.py", workflow)
         self.assertIn("macos-install-smoke", workflow)
-        self.assertIn("needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke, validate]", workflow)
+        self.assertIn("needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, windows-install-smoke, macos-install-smoke, validate]", workflow)
         self.assertIn("gh release create", workflow)
 
     def test_sbom_is_spdx_and_contains_direct_dependencies(self):

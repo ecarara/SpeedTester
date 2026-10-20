@@ -3,6 +3,9 @@
 
 FROM python:3.11.17-slim-trixie@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce
 
+ARG APP_VERSION=dev
+ENV APP_VERSION=$APP_VERSION
+
 # Agg uses the bundled wheel libraries; no OpenGL or X11 runtime is needed.
 RUN apt-get update \
     && apt-get upgrade -y \

@@ -4,7 +4,9 @@
 """Download one verified public Client revision and run its guided installer."""
 import argparse
 import hashlib
+import json
 import os
+import re
 from pathlib import Path, PurePosixPath
 import platform
 import shutil
@@ -15,9 +17,8 @@ import tempfile
 import urllib.parse
 import urllib.request
 
-CLIENT_REVISION = 'c91f3968a2c8b57d4ab6383eadbff9d72d56cb36'
-ARCHIVE_SHA256 = '3c5a1d195acdfa5297129f395925d54f2919bab9c45f8b220d9d52f4adfa1645'
-ARCHIVE_URL = 'https://codeload.github.com/ecarara/SpeedTester/tar.gz/' + CLIENT_REVISION
+REPOSITORY = 'ecarara/SpeedTester'
+RELEASES_API_URL = 'https://api.github.com/repos/' + REPOSITORY + '/releases/latest'
 DEFAULT_SERVER = 'https://speedtester.cararalab.com.br'
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 MAX_UNPACKED_BYTES = 64 * 1024 * 1024
@@ -59,27 +60,77 @@ def check_requirements():
         raise InstallationError('É necessária uma sessão systemd do usuário no servidor Linux.')
 
 
-def download_archive(path, opener=None):
-    request = urllib.request.Request(ARCHIVE_URL, headers={'User-Agent': 'SpeedTester-Client-Installer'})
+def _read_limited(response, limit):
+    data = response.read(limit + 1)
+    if len(data) > limit:
+        raise InstallationError('A resposta excedeu o limite permitido.')
+    return data
+
+
+def _trusted_url(value, *, api=False):
+    parsed = urllib.parse.urlsplit(value)
+    hostname = (parsed.hostname or '').lower()
+    allowed = {'api.github.com'} if api else {'github.com'}
+    if not api and (hostname == 'github.com' or hostname.endswith('.githubusercontent.com')):
+        allowed = {hostname}
+    if (parsed.scheme != 'https' or parsed.username or parsed.password or hostname not in allowed
+            or parsed.query or parsed.fragment):
+        raise InstallationError('Origem HTTPS inesperada no download do Client.')
+    return value
+
+
+def latest_release(opener=None):
     opener = opener or urllib.request.urlopen
-    count = 0
-    checksum = hashlib.sha256()
-    with opener(request, timeout=60) as response, path.open('xb') as target:
-        url = urllib.parse.urlsplit(response.geturl())
-        if url.scheme != 'https' or url.hostname != 'codeload.github.com':
-            raise InstallationError('Origem inesperada no download do Client.')
-        while block := response.read(1024 * 1024):
-            count += len(block)
-            if count > MAX_DOWNLOAD_BYTES:
-                raise InstallationError('O pacote excedeu o tamanho máximo permitido.')
-            checksum.update(block)
-            target.write(block)
-    if checksum.hexdigest() != ARCHIVE_SHA256:
+    request = urllib.request.Request(
+        RELEASES_API_URL,
+        headers={'Accept': 'application/vnd.github+json', 'User-Agent': 'SpeedTester-Client-Installer'},
+    )
+    with opener(request, timeout=30) as response:
+        _trusted_url(response.geturl(), api=True)
+        payload = json.loads(_read_limited(response, 256 * 1024).decode('utf-8'))
+    tag = payload.get('tag_name', '')
+    if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag):
+        raise InstallationError('A release mais recente não possui uma versão semântica válida.')
+    version = tag[1:]
+    names = {asset.get('name'): asset.get('browser_download_url') for asset in payload.get('assets', [])}
+    archive_name = f'SpeedTester-{version}.tar.gz'
+    for name in (archive_name, 'SHA256SUMS'):
+        if not names.get(name):
+            raise InstallationError(f'Asset obrigatório ausente na release: {name}.')
+        _trusted_url(names[name])
+    return version, archive_name, names[archive_name], names['SHA256SUMS']
+
+
+def download_asset(url, path=None, opener=None):
+    opener = opener or urllib.request.urlopen
+    request = urllib.request.Request(_trusted_url(url), headers={'User-Agent': 'SpeedTester-Client-Installer'})
+    with opener(request, timeout=60) as response:
+        _trusted_url(response.geturl())
+        data = _read_limited(response, MAX_DOWNLOAD_BYTES)
+    if path is None:
+        return data
+    with path.open('xb') as target:
+        target.write(data)
+    return data
+
+
+def download_archive(path, release, opener=None):
+    version, archive_name, archive_url, checksums_url = release
+    checksums = download_asset(checksums_url, opener=opener).decode('utf-8')
+    match = re.search(r'(?m)^([0-9a-fA-F]{64})  ' + re.escape(archive_name) + r'$',
+                     checksums)
+    if not match:
+        raise InstallationError('A soma SHA-256 do pacote não foi publicada.')
+    data = download_asset(archive_url, opener=opener)
+    digest = hashlib.sha256(data).hexdigest()
+    if digest.lower() != match.group(1).lower():
         raise InstallationError('Checksum inválido. A instalação foi interrompida antes de executar o pacote.')
+    with path.open('xb') as target:
+        target.write(data)
+    return version
 
-
-def extract_archive(path, destination):
-    prefix = 'SpeedTester-' + CLIENT_REVISION
+def extract_archive(path, destination, version):
+    prefix = 'SpeedTester-' + version
     seen = set()
     with tarfile.open(path, 'r:gz') as archive:
         members = archive.getmembers()
@@ -113,12 +164,13 @@ def install(server):
     check_requirements()
     previous_umask = os.umask(0o077)
     try:
-        print('Baixando o SpeedTester Client e verificando sua integridade…', flush=True)
+        release = latest_release()
+        print(f'Baixando o SpeedTester Client v{release[0]} e verificando sua integridade…', flush=True)
         with tempfile.TemporaryDirectory(prefix='speedtester-client-install-') as temporary:
             directory = Path(temporary)
             archive = directory / 'client.tar.gz'
-            download_archive(archive)
-            project = extract_archive(archive, directory / 'source')
+            version = download_archive(archive, release)
+            project = extract_archive(archive, directory / 'source', version)
             print('Pacote verificado. Iniciando configuração e pareamento…', flush=True)
             return subprocess.call(['bash', str(project / 'install-community.sh'), '--server', server], cwd=project)
     finally:

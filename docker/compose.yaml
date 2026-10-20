@@ -29,6 +29,8 @@ services:
     build:
       context: ..
       dockerfile: docker/api/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
     user: "10001:10001"
     read_only: true
     tmpfs: ["/tmp:rw,nosuid,noexec,size=134217728,mode=1777"]
@@ -87,6 +89,8 @@ services:
     build:
       context: ..
       dockerfile: docker/collector/Dockerfile
+      args:
+        APP_VERSION: ${APP_VERSION:-dev}
     user: "10001:10001"
     read_only: true
     tmpfs: ["/tmp:rw,nosuid,noexec,size=134217728,mode=1777"]

@@ -22,6 +22,10 @@ if (-not $makeAppx) {
     }
 }
 if (-not $makeAppx) { throw 'MakeAppx.exe não encontrado; instale o Windows SDK.' }
+$makeAppxPath = $makeAppx.Path
+if (-not $makeAppxPath) { $makeAppxPath = $makeAppx.FullName }
+if (-not $makeAppxPath) { $makeAppxPath = $makeAppx.Source }
+if (-not $makeAppxPath) { throw 'Não foi possível determinar o caminho do MakeAppx.exe.' }
 if (-not (Test-Path $LauncherPath)) { throw "Launcher não encontrado: $LauncherPath" }
 if (-not (Test-Path $ClientPath)) { throw "Cliente não encontrado: $ClientPath" }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
@@ -40,7 +44,7 @@ try {
     [System.IO.File]::WriteAllText((Join-Path $stage 'AppxManifest.xml'), $manifest, (New-Object System.Text.UTF8Encoding($false)))
     New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
     $output = Join-Path $OutputDirectory ("SpeedTester-$Version-$Architecture.msix")
-    & $makeAppx.FullName pack /d $stage /p $output /o
+    & $makeAppxPath pack /d $stage /p $output /o
     if ($Sign) {
         $signTool = Get-Command SignTool.exe -ErrorAction SilentlyContinue
         if (-not $signTool) { throw 'SignTool.exe não encontrado; instale o Windows SDK.' }

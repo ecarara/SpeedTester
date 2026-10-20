@@ -255,6 +255,7 @@ jobs:
           $password = ConvertTo-SecureString 'speedtester-ci-only' -AsPlainText -Force
           $certificate = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=Edson Angelo Carara' -CertStoreLocation 'Cert:\CurrentUser\My' -NotAfter (Get-Date).AddDays(1)
           Export-Certificate -Cert $certificate -FilePath $cer | Out-Null
+          Import-Certificate -FilePath $cer -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
           Import-Certificate -FilePath $cer -CertStoreLocation 'Cert:\CurrentUser\TrustedPeople' | Out-Null
           Export-PfxCertificate -Cert $certificate -FilePath $pfx -Password $password | Out-Null
           $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'

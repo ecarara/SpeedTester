@@ -13,7 +13,7 @@ ARCH="$(dpkg --print-architecture)"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 ROOT="$TMP_DIR/root"
-mkdir -p "$ROOT/usr/lib/speedtester" "$ROOT/usr/bin" "$ROOT/usr/share/applications" "$ROOT/usr/lib/systemd/user"
+mkdir -p "$ROOT/usr/lib/speedtester" "$ROOT/usr/bin" "$ROOT/usr/share/applications" "$ROOT/usr/lib/systemd/user" "$ROOT/usr/share/speedtester"
 mkdir -p "$ROOT/usr/share/icons/hicolor/512x512/apps"
 cp -a "$SOURCE_DIR/app" "$ROOT/usr/lib/speedtester/app"
 cp -a "$VENV" "$ROOT/usr/lib/speedtester/venv"

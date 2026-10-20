@@ -13,10 +13,12 @@ done
 
 UID_VALUE="$(id -u)"
 PLIST="$HOME/Library/LaunchAgents/speedtester-client.service.plist"
+API_PLIST="$HOME/Library/LaunchAgents/speedtester-api.service.plist"
 if [[ "${SPEEDTESTER_SKIP_LAUNCHCTL:-0}" != "1" ]]; then
   launchctl bootout "gui/$UID_VALUE" "$PLIST" >/dev/null 2>&1 || true
+  launchctl bootout "gui/$UID_VALUE" "$API_PLIST" >/dev/null 2>&1 || true
 fi
-rm -f "$PLIST"
+rm -f "$PLIST" "$API_PLIST"
 
 for app_path in "/Applications/SpeedTester.app" "$HOME/Applications/SpeedTester.app"; do
   if [[ -d "$app_path" ]]; then

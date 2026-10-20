@@ -18,12 +18,17 @@ O instalador:
 - cria um ambiente Python privado e instala `app/requirements.txt`;
 - instala o launcher, o arquivo `.desktop` e os ícones hicolor;
 - instala e habilita `speedtester-api.service` e `speedtester-client.service`;
+- cria a configuração inicial em
+  `~/.config/speedtester/speedtester.env`, detecta o fuso horário local e pede
+  confirmação dos parâmetros antes de iniciar os serviços;
 - preserva um arquivo de configuração existente em
   `~/.config/speedtester/speedtester.env`.
 
 Requisitos: Python 3, `python3-venv`, `iperf3`, `systemd --user` e acesso de
-rede para instalar as dependências Python. Configure `IPERF3_SERVER` e, se
-necessário, o token ou as credenciais no arquivo de ambiente antes de medir.
+rede para instalar as dependências Python. O instalador confirma o fuso
+horário e solicita o `IPERF3_SERVER`; esse endereço deve apontar para um host
+controlado onde `iperf3 -s` esteja executando. A configuração existente nunca
+é sobrescrita durante uma atualização.
 
 Para remover o aplicativo sem apagar histórico e configuração:
 
@@ -70,6 +75,16 @@ ser integrado ao menu com:
 Os builders não baixam dependências silenciosamente nem inventam um runtime:
 o ambiente Python deve ser criado pelo pipeline de build e então é incorporado
 ao artefato correspondente.
+
+O launcher verifica o dashboard local antes de abrir o navegador. Se
+`speedtester-api.service` ainda não estiver ativo, ele o inicia e aguarda
+`http://127.0.0.1:8000/health`; em caso de falha, informa que o serviço não
+ficou saudável em vez de abrir uma página inacessível.
+
+O dashboard local não exige usuário ou senha: os serviços são limitados a
+`127.0.0.1` e ativam `SPEEDTESTER_LOCAL_MODE`. A autenticação continua
+obrigatória no Server de produção; operações administrativas locais continuam
+protegidas pelo token administrativo.
 
 ## Flatpak
 

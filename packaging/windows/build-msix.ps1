@@ -13,6 +13,14 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $makeAppx = Get-Command MakeAppx.exe -ErrorAction SilentlyContinue
+if (-not $makeAppx) {
+    $windowsKitBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+    if (Test-Path $windowsKitBin) {
+        $makeAppx = Get-ChildItem -Path $windowsKitBin -Filter MakeAppx.exe -Recurse -File -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+    }
+}
 if (-not $makeAppx) { throw 'MakeAppx.exe não encontrado; instale o Windows SDK.' }
 if (-not (Test-Path $LauncherPath)) { throw "Launcher não encontrado: $LauncherPath" }
 if (-not (Test-Path $ClientPath)) { throw "Cliente não encontrado: $ClientPath" }
@@ -23,12 +31,16 @@ New-Item -ItemType Directory -Force -Path $assets | Out-Null
 try {
     Copy-Item $LauncherPath (Join-Path $stage 'SpeedTesterLauncher.exe')
     Copy-Item $ClientPath (Join-Path $stage 'SpeedTesterClient.exe')
+    $apiPath = Join-Path (Split-Path $ClientPath -Parent) 'SpeedTesterAPI.exe'
+    if (-not (Test-Path $apiPath)) { throw "API não encontrado: $apiPath" }
+    Copy-Item $apiPath (Join-Path $stage 'SpeedTesterAPI.exe')
+    Copy-Item (Join-Path $repo 'packaging\linux\speedtester.env.example') (Join-Path $stage 'speedtester.env.example')
     Copy-Item (Join-Path $repo 'assets\packaging\windows\msix\*.png') $assets
     $manifest = (Get-Content (Join-Path $PSScriptRoot 'AppxManifest.xml.in') -Raw).Replace('@VERSION@', $Version).Replace('@ARCH@', $Architecture)
     [System.IO.File]::WriteAllText((Join-Path $stage 'AppxManifest.xml'), $manifest, (New-Object System.Text.UTF8Encoding($false)))
     New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
     $output = Join-Path $OutputDirectory ("SpeedTester-$Version-$Architecture.msix")
-    & $makeAppx.Source pack /d $stage /p $output /o
+    & $makeAppx.FullName pack /d $stage /p $output /o
     if ($Sign) {
         $signTool = Get-Command SignTool.exe -ErrorAction SilentlyContinue
         if (-not $signTool) { throw 'SignTool.exe não encontrado; instale o Windows SDK.' }

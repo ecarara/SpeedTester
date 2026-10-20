@@ -34,8 +34,14 @@ class WindowsPackagingTests(TestCase):
         builder = (WINDOWS / "build-msix.ps1").read_text(encoding="utf-8")
         self.assertIn("Add-AppxPackage", install)
         self.assertIn("Register-ScheduledTask", install)
+        self.assertIn("speedtester-api.service", install)
+        self.assertIn("speedtester-client.service", install)
+        self.assertIn("speedtester.env.example", install)
+        self.assertIn("tzutil.exe", install)
+        self.assertIn("speedtester.env.example", builder)
         self.assertIn("Remove-AppxPackage", uninstall)
         self.assertIn("Unregister-ScheduledTask", uninstall)
+        self.assertIn("SpeedTesterAPI.exe", builder)
         self.assertIn("MakeAppx.exe", builder)
 
     def test_msix_assets_have_required_base_sizes(self):

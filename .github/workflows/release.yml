@@ -175,6 +175,7 @@ jobs:
     name: Linux Flatpak
     needs: [metadata, quality]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Flatpak toolchain
@@ -241,74 +242,16 @@ jobs:
         with:
           name: release-windows-x64
           path: dist/windows
-      - name: Generate ephemeral Windows signing CA and certificate
-        shell: pwsh
-        timeout-minutes: 2
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $openssl = (Get-Command openssl.exe -ErrorAction Stop).Source
-          $rootKey = Join-Path $env:RUNNER_TEMP 'speedtester-ci-root.key'
-          $rootPem = Join-Path $env:RUNNER_TEMP 'speedtester-ci-root.pem'
-          $rootCer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-root.cer'
-          $leafKey = Join-Path $env:RUNNER_TEMP 'speedtester-ci-leaf.key'
-          $leafCsr = Join-Path $env:RUNNER_TEMP 'speedtester-ci-leaf.csr'
-          $leafPem = Join-Path $env:RUNNER_TEMP 'speedtester-ci-leaf.pem'
-          $leafCer = Join-Path $env:RUNNER_TEMP 'speedtester-ci-leaf.cer'
-          $pfx = Join-Path $env:RUNNER_TEMP 'speedtester-ci-test.pfx'
-          $extensions = Join-Path $env:RUNNER_TEMP 'speedtester-ci-leaf.cnf'
-          @'
-          basicConstraints=critical,CA:FALSE
-          keyUsage=critical,digitalSignature
-          extendedKeyUsage=critical,codeSigning
-          subjectKeyIdentifier=hash
-          authorityKeyIdentifier=keyid,issuer
-          '@ | Set-Content -Path $extensions -Encoding ascii
-          function Invoke-OpenSsl {
-            param([string[]]$Arguments, [string]$Failure)
-            & $openssl @Arguments
-            if ($LASTEXITCODE -ne 0) { throw $Failure }
-          }
-          Write-Host "Generating CA with $openssl"
-          Invoke-OpenSsl -Arguments @('req','-x509','-newkey','rsa:2048','-sha256','-nodes','-days','1','-subj','/CN=SpeedTester CI Root','-addext','basicConstraints=critical,CA:TRUE,pathlen:0','-addext','keyUsage=critical,keyCertSign,cRLSign','-keyout',$rootKey,'-out',$rootPem) -Failure 'OpenSSL não conseguiu criar a CA raiz'
-          Invoke-OpenSsl -Arguments @('x509','-in',$rootPem,'-outform','DER','-out',$rootCer) -Failure 'OpenSSL não conseguiu converter a CA raiz'
-          Invoke-OpenSsl -Arguments @('req','-newkey','rsa:2048','-sha256','-nodes','-subj','/CN=Edson Angelo Carara','-keyout',$leafKey,'-out',$leafCsr) -Failure 'OpenSSL não conseguiu criar o CSR de assinatura'
-          Invoke-OpenSsl -Arguments @('x509','-req','-in',$leafCsr,'-CA',$rootPem,'-CAkey',$rootKey,'-CAcreateserial','-days','1','-sha256','-extfile',$extensions,'-out',$leafPem) -Failure 'OpenSSL não conseguiu assinar o certificado de código'
-          Invoke-OpenSsl -Arguments @('x509','-in',$leafPem,'-outform','DER','-out',$leafCer) -Failure 'OpenSSL não conseguiu converter o certificado de código'
-          Invoke-OpenSsl -Arguments @('pkcs12','-export','-out',$pfx,'-inkey',$leafKey,'-in',$leafPem,'-certfile',$rootPem,'-passout','pass:speedtester-ci-only') -Failure 'OpenSSL não conseguiu criar o PFX'
-          Write-Host 'Ephemeral CA and code-signing certificate generated'
-
-      - name: Prepare Windows MSIX smoke install
-        shell: pwsh
-        run: |
-          Write-Host 'Skipping runner certificate-store mutation; install smoke uses Add-AppxPackage -AllowUnsigned'
-          Write-Host 'The package is still signed in the previous step and the release artifact remains signed'
-
-      - name: Sign package with SignTool
-        shell: pwsh
-        timeout-minutes: 2
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
-          $signTool = Get-ChildItem (Join-Path $sdkRoot '*\x64\signtool.exe') -File -ErrorAction SilentlyContinue |
-            Sort-Object FullName -Descending | Select-Object -First 1
-          if (-not $signTool) { throw 'SignTool.exe não encontrado' }
-          $pfx = Join-Path $env:RUNNER_TEMP 'speedtester-ci-test.pfx'
-          $package = Get-ChildItem dist/windows -Filter *.msix -File | Select-Object -First 1
-          if (-not $package) { throw 'pacote MSIX não encontrado' }
-          Write-Host "Signing $($package.FullName) with $($signTool.FullName)"
-          & $signTool.FullName sign /fd SHA256 /f $pfx /p speedtester-ci-only $package.FullName
-          if ($LASTEXITCODE -ne 0) { throw 'SignTool não conseguiu assinar o MSIX' }
-          Write-Host 'MSIX signed'
       - name: Install, upgrade and remove the MSIX
         shell: pwsh
         run: |
           $package = (Get-ChildItem dist/windows -Filter *.msix | Select-Object -First 1).FullName
+          if (-not $package) { throw 'pacote MSIX não encontrado' }
           Add-AppxPackage -Path $package -AllowUnsigned
           if (-not (Get-AppxPackage -Name 'ecarara.SpeedTester')) { throw 'MSIX não foi instalado' }
           Add-AppxPackage -Path $package -AllowUnsigned
           ./packaging/windows/uninstall-msix.ps1
           if (Get-AppxPackage -Name 'ecarara.SpeedTester') { throw 'MSIX não foi removido' }
-
 
   macos-install-smoke:
     name: macOS app install smoke test
@@ -325,6 +268,7 @@ jobs:
           SMOKE_HOME: ${{ runner.temp }}/speedtester-home
           SMOKE_SOURCE: ${{ runner.temp }}/speedtester-source
           SPEEDTESTER_SKIP_LAUNCHCTL: '1'
+          SPEEDTESTER_NONINTERACTIVE: '1'
         run: |
           mkdir -p "$SMOKE_HOME" "$SMOKE_SOURCE"
           APP_ZIP="$(find dist/macos -name '*.app.zip' -print -quit)"

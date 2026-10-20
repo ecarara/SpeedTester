@@ -31,6 +31,16 @@ SmartScreen. Certificados e senhas não pertencem ao repositório.
 .\packaging\windows\uninstall-msix.ps1
 ```
 
+O instalador detecta o fuso horário do Windows, converte-o para um identificador
+IANA, mostra os parâmetros e pede confirmação antes de registrar a tarefa. A
+configuração é persistida em `%APPDATA%\SpeedTester\speedtester.env` e é
+preservada em atualizações. Para instalação gráfica direta pelo MSIX, execute
+o instalador PowerShell uma vez antes de abrir o aplicativo.
+
+São registradas duas tarefas por usuário: a API local e o collector. O launcher
+usa essas tarefas para abrir o dashboard e as medições compartilham a mesma
+configuração e banco local.
+
 O desinstalador remove a tarefa e o pacote, mas preserva dados por padrão.
 Para uma remoção completa:
 

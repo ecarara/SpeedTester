@@ -116,6 +116,8 @@ async def session_access(request: Request, call_next):
 
 @app.get('/login')
 def login_page(request: Request):
+    if not settings.api_require_login:
+        return RedirectResponse('/', status_code=303)
     if request.state.identity:
         return RedirectResponse('/', status_code=303)
     with open(os.path.join(_DASHBOARD_DIR, 'login.html'), encoding='utf-8') as source:

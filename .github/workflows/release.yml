@@ -244,14 +244,33 @@ jobs:
         with:
           name: release-windows-x64
           path: dist/windows
+      - name: Sign MSIX with an ephemeral CI certificate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $package = Get-ChildItem dist/windows -Filter *.msix -File | Select-Object -First 1
+          if (-not $package) { throw 'pacote MSIX não encontrado' }
+          $pfx = Join-Path $env:RUNNER_TEMP 'speedtester-ci.pfx'
+          $cer = Join-Path $env:RUNNER_TEMP 'speedtester-ci.cer'
+          $password = ConvertTo-SecureString 'speedtester-ci-only' -AsPlainText -Force
+          $certificate = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=Edson Angelo Carara' -CertStoreLocation 'Cert:\CurrentUser\My' -NotAfter (Get-Date).AddDays(1)
+          Export-Certificate -Cert $certificate -FilePath $cer | Out-Null
+          Import-Certificate -FilePath $cer -CertStoreLocation 'Cert:\CurrentUser\TrustedPeople' | Out-Null
+          Export-PfxCertificate -Cert $certificate -FilePath $pfx -Password $password | Out-Null
+          $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+          $signTool = Get-ChildItem (Join-Path $sdkRoot '*\x64\signtool.exe') -File -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signTool) { throw 'SignTool.exe não encontrado' }
+          & $signTool.FullName sign /fd SHA256 /f $pfx /p speedtester-ci-only $package.FullName
+          if ($LASTEXITCODE -ne 0) { throw 'SignTool não conseguiu assinar o MSIX' }
       - name: Install, upgrade and remove the MSIX
         shell: pwsh
         run: |
           $package = (Get-ChildItem dist/windows -Filter *.msix | Select-Object -First 1).FullName
           if (-not $package) { throw 'pacote MSIX não encontrado' }
-          Add-AppxPackage -Path $package -AllowUnsigned
+          Add-AppxPackage -Path $package
           if (-not (Get-AppxPackage -Name 'ecarara.SpeedTester')) { throw 'MSIX não foi instalado' }
-          Add-AppxPackage -Path $package -AllowUnsigned
+          Add-AppxPackage -Path $package
           ./packaging/windows/uninstall-msix.ps1
           if (Get-AppxPackage -Name 'ecarara.SpeedTester') { throw 'MSIX não foi removido' }
 

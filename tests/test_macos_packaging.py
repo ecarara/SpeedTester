@@ -27,15 +27,20 @@ class MacOSPackagingTests(TestCase):
 
     def test_build_install_and_uninstall_paths_exist(self):
         self.assertTrue((MACOS / "build-app.sh").is_file())
+        self.assertTrue((MACOS / "LaunchAgents" / "speedtester-api.service.plist.in").is_file())
         install = (MACOS / "install-dmg.sh").read_text(encoding="utf-8")
         uninstall = (MACOS / "uninstall-app.sh").read_text(encoding="utf-8")
         self.assertIn("launchctl bootstrap", install)
         self.assertIn("ditto", install)
         self.assertIn("SPEEDTESTER_SKIP_LAUNCHCTL", install)
+        self.assertIn("configure-user.sh", install)
         builder = (MACOS / "build-app.sh").read_text(encoding="utf-8")
         self.assertIn("Install SpeedTester.command", builder)
         self.assertIn("Uninstall SpeedTester.command", builder)
+        self.assertIn("speedtester.env.example", builder)
+        self.assertIn("SpeedTesterAPI", builder)
         self.assertIn("launchctl bootout", uninstall)
+        self.assertIn("speedtester-api.service.plist", uninstall)
         self.assertIn("SPEEDTESTER_SKIP_LAUNCHCTL", uninstall)
         self.assertIn("--purge-data", uninstall)
 

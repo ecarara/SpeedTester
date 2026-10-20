@@ -11,6 +11,8 @@ from typing import Optional
 from math import isfinite
 from zoneinfo import ZoneInfo
 
+from shared.user_config import load_user_environment
+
 
 @dataclass(frozen=True)
 class Settings:
@@ -166,6 +168,7 @@ def load_settings() -> Settings:
     are not unit files and must not rely on specifier expansion. Resolve it
     here so desktop upgrades always use a writable user-local database path.
     """
+    load_user_environment()
     configured_db_path = os.environ.get("DB_PATH")
     if configured_db_path:
         db_path = os.path.expanduser(

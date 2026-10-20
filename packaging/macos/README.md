@@ -44,6 +44,14 @@ O instalador usa `/Applications` quando gravável e, caso contrário,
 `--purge-data` remove também preferências e dados em
 `~/Library/Application Support/SpeedTester`.
 
+Na primeira instalação, o comando detecta o fuso horário do macOS, mostra os
+parâmetros do runner e pede confirmação. A configuração é persistida em
+`~/Library/Application Support/SpeedTester/speedtester.env` e não é sobrescrita
+durante atualizações.
+
+O instalador registra dois `LaunchAgent`s por usuário: a API local e o
+collector. O launcher aguarda a API responder antes de abrir o dashboard.
+
 ## Assinatura e notarização
 
 O builder não exige segredo e, portanto, continua reproduzível em CI. Para

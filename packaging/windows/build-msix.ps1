@@ -31,6 +31,10 @@ New-Item -ItemType Directory -Force -Path $assets | Out-Null
 try {
     Copy-Item $LauncherPath (Join-Path $stage 'SpeedTesterLauncher.exe')
     Copy-Item $ClientPath (Join-Path $stage 'SpeedTesterClient.exe')
+    $apiPath = Join-Path (Split-Path $ClientPath -Parent) 'SpeedTesterAPI.exe'
+    if (-not (Test-Path $apiPath)) { throw "API não encontrado: $apiPath" }
+    Copy-Item $apiPath (Join-Path $stage 'SpeedTesterAPI.exe')
+    Copy-Item (Join-Path $repo 'packaging\linux\speedtester.env.example') (Join-Path $stage 'speedtester.env.example')
     Copy-Item (Join-Path $repo 'assets\packaging\windows\msix\*.png') $assets
     $manifest = (Get-Content (Join-Path $PSScriptRoot 'AppxManifest.xml.in') -Raw).Replace('@VERSION@', $Version).Replace('@ARCH@', $Architecture)
     [System.IO.File]::WriteAllText((Join-Path $stage 'AppxManifest.xml'), $manifest, (New-Object System.Text.UTF8Encoding($false)))

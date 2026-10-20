@@ -3,9 +3,8 @@
 # Copyright (C) 2026 Edson Angelo Carara
 set -euo pipefail
 
-CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
-CONFIG_DIR="$CONFIG_HOME/speedtester"
-ENV_FILE="$CONFIG_DIR/speedtester.env"
+CONFIG_DIR="${SPEEDTESTER_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/speedtester}"
+ENV_FILE="${SPEEDTESTER_ENV_FILE:-$CONFIG_DIR/speedtester.env}"
 TEMPLATE="${SPEEDTESTER_ENV_TEMPLATE:-$(cd "$(dirname "$0")" && pwd)/speedtester.env.example}"
 
 die() { echo "[speedtester] $*" >&2; exit 1; }
@@ -35,7 +34,7 @@ read_tty() {
 
 ask() {
   local prompt="$1" default="$2" answer
-  if [[ ! -r /dev/tty || ! -w /dev/tty ]]; then
+  if [[ "${SPEEDTESTER_NONINTERACTIVE:-0}" == "1" || ! -r /dev/tty || ! -w /dev/tty ]]; then
     printf '%s\n' "$default"
     return 0
   fi
@@ -55,7 +54,7 @@ runner="iperf3"
 server="${SPEEDTESTER_IPERF3_SERVER:-}"
 port="${SPEEDTESTER_IPERF3_PORT:-5201}"
 
-if [[ -r /dev/tty && -w /dev/tty ]]; then
+if [[ "${SPEEDTESTER_NONINTERACTIVE:-0}" != "1" && -r /dev/tty && -w /dev/tty ]]; then
   {
     printf '\nSpeedTester — configuração inicial\n'
     printf 'Fuso horário detectado: %s\n' "$timezone"

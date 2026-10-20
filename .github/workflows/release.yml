@@ -238,6 +238,7 @@ jobs:
           SMOKE_HOME: ${{ runner.temp }}/speedtester-home
           SMOKE_SOURCE: ${{ runner.temp }}/speedtester-source
           SPEEDTESTER_SKIP_LAUNCHCTL: '1'
+          SPEEDTESTER_NONINTERACTIVE: '1'
         run: |
           mkdir -p "$SMOKE_HOME" "$SMOKE_SOURCE"
           APP_ZIP="$(find dist/macos -name '*.app.zip' -print -quit)"

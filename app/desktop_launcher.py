@@ -22,6 +22,8 @@ import urllib.parse
 import urllib.request
 import webbrowser
 
+from shared.user_config import config_path
+
 
 DEFAULT_DASHBOARD_URL = "http://127.0.0.1:8000/"
 DEFAULT_SERVICE_NAME = "speedtester-client.service"
@@ -34,8 +36,7 @@ class LauncherError(RuntimeError):
 
 
 def _config_file() -> Path:
-    config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
-    return config_home / "speedtester" / "speedtester.env"
+    return config_path()
 
 
 def _configured_local_port() -> int | None:

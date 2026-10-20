@@ -2,10 +2,13 @@
 # Copyright (C) 2026 Edson Angelo Carara
 """Desktop-safe path resolution tests."""
 from pathlib import Path
+import os
+import tempfile
 from unittest import TestCase
 from unittest.mock import patch
 
 from shared.settings import load_settings
+from shared.user_config import config_path, load_user_environment
 
 
 class SettingsPathTests(TestCase):
@@ -45,3 +48,16 @@ class SettingsPathTests(TestCase):
         ):
             settings = load_settings()
         self.assertTrue(settings.api_require_login)
+
+    def test_persisted_desktop_configuration_is_loaded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "speedtester.env"
+            config.write_text(
+                "# user config\nIPERF3_SERVER=iperf.example\nTZ=America/Sao_Paulo\n",
+                encoding="utf-8",
+            )
+            with patch.dict("os.environ", {"SPEEDTESTER_CONFIG_FILE": str(config)}, clear=True):
+                self.assertEqual(config_path(), config)
+                load_user_environment()
+                self.assertEqual(os.environ["IPERF3_SERVER"], "iperf.example")
+                self.assertEqual(os.environ["TZ"], "America/Sao_Paulo")

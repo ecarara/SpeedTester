@@ -31,6 +31,8 @@ trap cleanup EXIT
   --name SpeedTesterLauncher app/desktop_launcher.py
 "$PYTHON" -m PyInstaller --noconfirm --clean --onefile --console \
   --name SpeedTesterClient --paths app app/macos_client_entry.py
+"$PYTHON" -m PyInstaller --noconfirm --clean --onefile --console \
+  --name SpeedTesterAPI --paths app app/macos_api_entry.py
 
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/speedtester-macos.XXXXXX")"
 APP="$STAGE/SpeedTester.app"
@@ -38,8 +40,9 @@ CONTENTS="$APP/Contents"
 mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 cp dist/SpeedTesterLauncher "$CONTENTS/MacOS/SpeedTesterLauncher"
 cp dist/SpeedTesterClient "$CONTENTS/MacOS/SpeedTesterClient"
+cp dist/SpeedTesterAPI "$CONTENTS/MacOS/SpeedTesterAPI"
 cp assets/packaging/macos/SpeedTester.icns "$CONTENTS/Resources/SpeedTester.icns"
-chmod 0755 "$CONTENTS/MacOS/SpeedTesterLauncher" "$CONTENTS/MacOS/SpeedTesterClient"
+chmod 0755 "$CONTENTS/MacOS/SpeedTesterLauncher" "$CONTENTS/MacOS/SpeedTesterClient" "$CONTENTS/MacOS/SpeedTesterAPI"
 
 sed -e "s|@VERSION@|$VERSION|g" -e "s|@BUILD_VERSION@|$BUILD_VERSION|g" \
   "$SCRIPT_DIR/Info.plist.in" > "$CONTENTS/Info.plist"
@@ -60,6 +63,10 @@ cp "$SCRIPT_DIR/install-dmg.sh" "$DMG_STAGE/Install SpeedTester.command"
 cp "$SCRIPT_DIR/uninstall-app.sh" "$DMG_STAGE/Uninstall SpeedTester.command"
 cp "$SCRIPT_DIR/LaunchAgents/speedtester-client.service.plist.in" \
   "$DMG_STAGE/LaunchAgents/speedtester-client.service.plist.in"
+cp "$SCRIPT_DIR/LaunchAgents/speedtester-api.service.plist.in" \
+  "$DMG_STAGE/LaunchAgents/speedtester-api.service.plist.in"
+cp "$REPO_ROOT/packaging/linux/configure-user.sh" "$DMG_STAGE/configure-user.sh"
+cp "$REPO_ROOT/packaging/linux/speedtester.env.example" "$DMG_STAGE/speedtester.env.example"
 chmod 0755 "$DMG_STAGE/Install SpeedTester.command" "$DMG_STAGE/Uninstall SpeedTester.command"
 DMG="$OUTPUT_DIR/SpeedTester-$VERSION-macos-$ARCHITECTURE.dmg"
 hdiutil create -volname SpeedTester -srcfolder "$DMG_STAGE" -ov -format UDZO "$DMG" >/dev/null

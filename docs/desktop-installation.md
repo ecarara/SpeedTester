@@ -25,12 +25,22 @@ No PowerShell, instale o MSIX:
 Add-AppxPackage .\SpeedTester-<versao>-x64.msix
 ```
 
+Para configurar o fuso horário, o servidor iPerf3 e confirmar os parâmetros
+antes de registrar a tarefa, use o instalador incluído:
+
+```powershell
+.\packaging\windows\install-msix.ps1 .\SpeedTester-<versao>-x64.msix
+```
+
 O aplicativo aparece no Menu Iniciar. A remoção pode ser feita em
 Configurações > Aplicativos ou com:
 
 ```powershell
 .\uninstall-msix.ps1
 ```
+
+O instalador registra a API local e o collector como tarefas do usuário. O
+launcher aguarda a API ficar saudável antes de abrir o dashboard.
 
 Sem assinatura de código, o Windows pode exibir aviso do SmartScreen. O
 certificado usado para uma release nunca deve ser incluído no repositório.
@@ -81,6 +91,10 @@ feita executando `Uninstall SpeedTester.command` no `.dmg` ou:
 A remoção normal preserva dados. O modo `--purge-data` remove preferências e
 dados locais documentados. Artefatos sem assinatura/notarização podem exigir
 confirmação adicional do Gatekeeper.
+
+Na primeira instalação, `Install SpeedTester.command` detecta o fuso horário,
+mostra os parâmetros e pede confirmação. A configuração fica em
+`~/Library/Application Support/SpeedTester/speedtester.env`.
 
 O parâmetro interno `SPEEDTESTER_SKIP_LAUNCHCTL=1` existe apenas para o smoke
 test do CI, que valida cópia, upgrade, plist e remoção em um HOME temporário;

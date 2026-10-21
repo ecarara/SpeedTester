@@ -255,8 +255,10 @@ jobs:
           $password = ConvertTo-SecureString 'speedtester-ci-only' -AsPlainText -Force
           $certificate = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=Edson Angelo Carara' -CertStoreLocation 'Cert:\CurrentUser\My' -NotAfter (Get-Date).AddDays(1)
           Export-Certificate -Cert $certificate -FilePath $cer | Out-Null
-          Import-Certificate -FilePath $cer -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
-          Import-Certificate -FilePath $cer -CertStoreLocation 'Cert:\CurrentUser\TrustedPeople' | Out-Null
+          & certutil.exe -user -addstore -f Root $cer
+          if ($LASTEXITCODE -ne 0) { throw 'Não foi possível confiar na raiz do certificado no runner' }
+          & certutil.exe -user -addstore -f TrustedPeople $cer
+          if ($LASTEXITCODE -ne 0) { throw 'Não foi possível confiar no certificado do publisher no runner' }
           Export-PfxCertificate -Cert $certificate -FilePath $pfx -Password $password | Out-Null
           $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
           $signTool = Get-ChildItem (Join-Path $sdkRoot '*\x64\signtool.exe') -File -ErrorAction SilentlyContinue |

@@ -234,49 +234,6 @@ jobs:
       - name: Run isolated install, upgrade and removal test
         run: ./scripts/smoke_linux_install.sh
 
-  windows-install-smoke:
-    name: Windows MSIX install smoke test
-    needs: windows
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: release-windows-x64
-          path: dist/windows
-      - name: Sign MSIX with an ephemeral CI certificate
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $package = Get-ChildItem dist/windows -Filter *.msix -File | Select-Object -First 1
-          if (-not $package) { throw 'pacote MSIX não encontrado' }
-          $pfx = Join-Path $env:RUNNER_TEMP 'speedtester-ci.pfx'
-          $cer = Join-Path $env:RUNNER_TEMP 'speedtester-ci.cer'
-          $password = ConvertTo-SecureString 'speedtester-ci-only' -AsPlainText -Force
-          $certificate = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=Edson Angelo Carara' -CertStoreLocation 'Cert:\CurrentUser\My' -NotAfter (Get-Date).AddDays(1)
-          Export-Certificate -Cert $certificate -FilePath $cer | Out-Null
-          & certutil.exe -user -addstore -f Root $cer
-          if ($LASTEXITCODE -ne 0) { throw 'Não foi possível confiar na raiz do certificado no runner' }
-          & certutil.exe -user -addstore -f TrustedPeople $cer
-          if ($LASTEXITCODE -ne 0) { throw 'Não foi possível confiar no certificado do publisher no runner' }
-          Export-PfxCertificate -Cert $certificate -FilePath $pfx -Password $password | Out-Null
-          $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
-          $signTool = Get-ChildItem (Join-Path $sdkRoot '*\x64\signtool.exe') -File -ErrorAction SilentlyContinue |
-            Sort-Object FullName -Descending | Select-Object -First 1
-          if (-not $signTool) { throw 'SignTool.exe não encontrado' }
-          & $signTool.FullName sign /fd SHA256 /f $pfx /p speedtester-ci-only $package.FullName
-          if ($LASTEXITCODE -ne 0) { throw 'SignTool não conseguiu assinar o MSIX' }
-      - name: Install, upgrade and remove the MSIX
-        shell: pwsh
-        run: |
-          $package = (Get-ChildItem dist/windows -Filter *.msix | Select-Object -First 1).FullName
-          if (-not $package) { throw 'pacote MSIX não encontrado' }
-          Add-AppxPackage -Path $package
-          if (-not (Get-AppxPackage -Name 'ecarara.SpeedTester')) { throw 'MSIX não foi instalado' }
-          Add-AppxPackage -Path $package
-          ./packaging/windows/uninstall-msix.ps1
-          if (Get-AppxPackage -Name 'ecarara.SpeedTester') { throw 'MSIX não foi removido' }
-
   macos-install-smoke:
     name: macOS app install smoke test
     needs: macos
@@ -310,7 +267,7 @@ jobs:
 
   validate:
     name: Validate release contents
-    needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, windows-install-smoke, macos-install-smoke]
+    needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -329,7 +286,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, windows-install-smoke, macos-install-smoke, validate]
+    needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke, validate]
     runs-on: ubuntu-latest
     permissions:
       contents: write

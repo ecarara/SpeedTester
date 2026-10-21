@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import Field, field_validator, model_validator
 from .client import ProtocolError
 from .crypto import digest, verify
-from .models import Identifier, StrictModel
+from .models import Identifier, Profile, StrictModel
 from .runner import IperfRunner
 
 
@@ -21,6 +21,10 @@ def target_identifier(host, port, scope, authentication="none"):
 
 class TargetRequest(StrictModel):
     request_id: Identifier
+    # The profile is coarse location context, not an address.  The Server
+    # uses it to select an approved target; it never performs Internet-wide
+    # discovery from the client.
+    profile: Profile | None = None
 
 
 class TestTarget(StrictModel):
@@ -52,10 +56,13 @@ class TestTarget(StrictModel):
         return self
 
 
-def obtain_target(client, client_id):
+def obtain_target(client, client_id, profile=None):
     request_id=str(uuid4())
+    payload={'request_id':request_id}
+    if profile is not None:
+        payload['profile']=profile.model_dump() if isinstance(profile, Profile) else profile
     try:
-        body=client.request('POST', '/api/v1/test-target', {'request_id':request_id})
+        body=client.request('POST', '/api/v1/test-target', payload)
     except ProtocolError as exc:
         if exc.code in {'server_rejected','not_found'}:
             raise ProtocolError('test_target_unavailable') from exc
@@ -70,8 +77,8 @@ def obtain_target(client, client_id):
         raise ProtocolError('invalid_test_target') from exc
 
 
-def automatic_runner(client, client_id, execute=None):
-    target=obtain_target(client, client_id)
+def automatic_runner(client, client_id, execute=None, profile=None):
+    target=obtain_target(client, client_id, profile)
     bound=IperfRunner(target.host, target.port, target_id=target.target_id,
         target_scope=target.target_scope, expires_at=target.expires_at,
         authorize=(lambda grant: obtain_access(client, target, grant)) if target.authentication == "rsa-ephemeral-v1" else None)

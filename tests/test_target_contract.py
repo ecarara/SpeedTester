@@ -14,14 +14,16 @@ from speedtester_protocol.crypto import sign
 from speedtester_protocol.targets import TargetRequest, TestTarget, TargetAccess, obtain_target, obtain_access, automatic_runner, target_identifier
 from speedtester_protocol.runner import IperfRunner
 from speedtester_protocol.cli import installation_config
+from speedtester_protocol.models import Profile
 
 
 class TargetContractTests(unittest.TestCase):
     def setUp(self):
         self.server=Ed25519PrivateKey.generate();self.client_id=str(uuid4());self.modifier=lambda p:p
-        self.signed_modifier=lambda e:e;self.calls=[];self.failure=None
+        self.signed_modifier=lambda e:e;self.calls=[];self.bodies=[];self.failure=None
         def transport(method,path,headers,body):
             self.calls.append(path)
+            self.bodies.append(body)
             if self.failure:return self.failure
             now=int(time.time())
             payload={'request_id':body['request_id'],'client_id':self.client_id,'runner':'iperf3',
@@ -29,6 +31,12 @@ class TargetContractTests(unittest.TestCase):
                 'host':'authorized.example','port':5201,'issued_at':now,'expires_at':now+300,'protocol_version':'1'}
             return 200,{},self.signed_modifier(sign(self.modifier(payload),self.server,'test-target-v1'))
         self.client=ServerClient('https://server.example','t'*40,Ed25519PrivateKey.generate(),self.server.public_key(),transport=transport)
+
+    def test_location_profile_is_sent_only_to_the_server_policy_endpoint(self):
+        profile=Profile(version=1,operator='Synthetic',country_code='BR',region='SP',city='São Paulo',access_type='fiber',link_type='ethernet')
+        obtain_target(self.client,self.client_id,profile)
+        self.assertEqual(self.calls,['/api/v1/test-target'])
+        self.assertEqual(self.bodies[0]['profile'],profile.model_dump())
 
     def test_signed_target_is_bound_to_this_client_request_endpoint_and_short_lifetime(self):
         target=obtain_target(self.client,self.client_id)

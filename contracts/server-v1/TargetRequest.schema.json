@@ -1,15 +1,29 @@
 {
-  "additionalProperties": false,
-  "properties": {
-    "request_id": {
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-      "title": "Request Id",
-      "type": "string"
+  "$defs": {
+    "Profile": {
+      "additionalProperties": false,
+      "properties": {
+        "version": {"minimum": 1, "title": "Version", "type": "integer"},
+        "operator": {"maxLength": 100, "minLength": 1, "title": "Operator", "type": "string"},
+        "country_code": {"pattern": "^[A-Z]{2}$", "title": "Country Code", "type": "string"},
+        "region": {"maxLength": 80, "title": "Region", "type": "string"},
+        "city": {"maxLength": 80, "title": "City", "type": "string"},
+        "access_type": {"enum": ["fiber", "coaxial", "radio", "satellite", "cellular", "dsl", "other", "unknown"], "title": "Access Type", "type": "string"},
+        "link_type": {"enum": ["ethernet", "wifi"], "title": "Link Type", "type": "string"},
+        "contracted_download_bps": {"anyOf": [{"exclusiveMinimum": 0, "maximum": 1000000000000, "type": "integer"}, {"type": "null"}], "default": null, "title": "Contracted Download Bps"},
+        "contracted_upload_bps": {"anyOf": [{"exclusiveMinimum": 0, "maximum": 1000000000000, "type": "integer"}, {"type": "null"}], "default": null, "title": "Contracted Upload Bps"}
+      },
+      "required": ["version", "operator", "country_code", "region", "city", "access_type", "link_type"],
+      "title": "Profile",
+      "type": "object"
     }
   },
-  "required": [
-    "request_id"
-  ],
+  "additionalProperties": false,
+  "properties": {
+    "request_id": {"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "title": "Request Id", "type": "string"},
+    "profile": {"anyOf": [{"$ref": "#/$defs/Profile"}, {"type": "null"}], "default": null}
+  },
+  "required": ["request_id"],
   "title": "TargetRequest",
   "type": "object"
 }

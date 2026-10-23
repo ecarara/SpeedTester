@@ -134,7 +134,10 @@ def cycle(queue,*,transport=None,runner=None,now=None,clock=time.time):
     try:
         if config.get("target_mode")=="automatic":
             from .targets import automatic_runner
-            execute=automatic_runner(client,credentials.bundle.client_id,runner)
+            execute=automatic_runner(
+                client, credentials.bundle.client_id, runner,
+                profile=Profile.model_validate(config["profile"]),
+            )
         else:
             execute=runner or IperfRunner(config["host"],config["port"])
         def validate(grant):

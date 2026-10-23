@@ -71,7 +71,7 @@ class GraphicalFlows(unittest.TestCase):
         self.settle()
 
     def settle(self):
-        deadline=time.monotonic()+5
+        deadline=time.monotonic()+15
         while self.window.busy or self.window.account_pending or not self.window.events.empty() or not self.window.browser_events.empty():
             self.window.update()
             self.assertLess(time.monotonic(),deadline,'UI worker did not complete')

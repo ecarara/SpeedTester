@@ -55,7 +55,7 @@ def build(bundle, version):
     configure = ['./configure','--disable-shared','--enable-static','--without-sctp']
     bash = None
     if system=='Darwin':
-        prefix = run(['/opt/homebrew/bin/brew','--prefix','openssl@3'])
+        prefix = run([shutil.which('brew') or '/opt/homebrew/bin/brew','--prefix','openssl@3'])
         configure.append('--with-openssl='+prefix)
         crypto_version = run([prefix+'/bin/openssl','version']).split()[1]
     elif system=='Linux':
@@ -127,7 +127,7 @@ def build(bundle, version):
         releases=ROOT/'dist/desktop/releases';releases.mkdir(parents=True,exist_ok=True)
         source_name=pins['windows_source']['url'].rsplit('/',1)[1]
         fetch(pins['windows_source'],releases/source_name)
-        tag='v0.3.0-desktop-preview.'+version.split('dev')[1]
+        tag=('v0.3.0-desktop-preview.'+version.split('dev')[1]) if 'dev' in version else 'v'+version
         (license_dir/'SOURCE.txt').write_text('Corresponding MSYS2 runtime sources, including upstream source and distribution patches:\nhttps://github.com/ecarara/SpeedTester/releases/download/'+tag+'/'+source_name+'\nSHA256: '+pins['windows_source']['sha256']+'\n')
         native.append({'name':'msys2-runtime','version':pins['windows_runtime']['version'],'source':pins['windows_source']})
     # Invoking --version performs no network or measurement. Verify the exact

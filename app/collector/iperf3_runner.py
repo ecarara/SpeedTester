@@ -13,6 +13,8 @@ from typing import Optional
 from collector.network_metrics import measure_ping
 from collector.network_identity import resolve_network_identity
 from collector.speedtest_runner import SpeedTestResult, _detect_interface
+from collector.target_selection import select_target, TargetSelectionError, CATALOG_REVISION
+from shared.native_tools import iperf_binary
 
 
 @dataclass(frozen=True)
@@ -39,11 +41,10 @@ def run_iperf3(
     parallel_streams: int = 5,
     binary: str = "iperf3",
     timeout_seconds: float = 60.0,
+    location: Optional[dict] = None,
 ) -> SpeedTestResult:
     """Run upload and reverse/download iperf3 tests against one server."""
     del share, server_ids, max_bytes
-    if not server:
-        raise RuntimeError("IPERF3_SERVER não está configurado")
     if duration_seconds < 1 or parallel_streams < 1:
         raise ValueError("iperf3 duration and parallel streams must be positive")
     if timeout_seconds <= 0:
@@ -51,6 +52,15 @@ def run_iperf3(
 
     started = time.monotonic()
     deadline = started + timeout_seconds
+    if binary == "iperf3":
+        binary = iperf_binary()
+    identity = {}
+    if (not server or not server.strip()) and not location:
+        if not isp_lookup_enabled:
+            raise TargetSelectionError("A localização automática está desativada. Confirme sua localização ou informe um servidor opcional.")
+        identity = resolve_network_identity(min(isp_lookup_timeout_seconds, _remaining_timeout(deadline)))
+    target = select_target(server, port, location=location or identity)
+    server, port = target.host, target.port
     upload_metrics = _run_once_metrics(
         binary,
         server,
@@ -82,12 +92,11 @@ def run_iperf3(
     retransmits = _sum_optional(
         upload_metrics.retransmits, download_metrics.retransmits
     )
-    identity = {}
     if isp_lookup_enabled:
         # Metadata enrichment is optional and must not extend the 60s
         # measurement budget.  Skip it when the budget has already elapsed.
         remaining_for_identity = max(deadline - time.monotonic(), 0.0)
-        if remaining_for_identity > 0.1:
+        if not identity and remaining_for_identity > 0.1:
             identity = resolve_network_identity(
                 min(isp_lookup_timeout_seconds, remaining_for_identity)
             )
@@ -102,11 +111,14 @@ def run_iperf3(
         tcp_retransmits=retransmits,
         server_id=None,
         server_name=f"iperf3:{server}:{port}",
-        server_location=None,
+        server_location=f"{target.city}, {target.country_code}" if target.city else None,
+        target_selection=target.mode,
+        target_distance_km=target.distance_km,
+        target_catalog_revision=CATALOG_REVISION if target.mode != "manual" else None,
         country=identity.get("country"),
         interface=_detect_interface(),
         bandwidth_contracted_mbps=bandwidth_contracted_mbps,
-        isp=identity.get("isp"),
+        isp=identity.get("isp") if isp_lookup_enabled else None,
         duration_sec=time.monotonic() - started,
         transfer_bytes=(upload_metrics.transfer_bytes + download_metrics.transfer_bytes
                         if upload_metrics.transfer_bytes is not None and download_metrics.transfer_bytes is not None else None),

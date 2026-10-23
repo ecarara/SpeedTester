@@ -53,6 +53,12 @@ class DoctorTests(unittest.TestCase):
             self.assertEqual(self.run_doctor(['--container'],{'SPEEDTEST_RUNNER':'ookla'}),1)
             self.assertEqual(self.run_doctor(['--container'],{'SPEEDTEST_RUNNER':'fast'}),0)
 
+    def test_automatic_selection_does_not_require_a_manual_server_or_probe_on_install(self):
+        with patch.object(doctor.shutil,'which',return_value='/usr/bin/iperf3'), \
+                patch.object(doctor.socket,'create_connection') as probe:
+            self.assertEqual(self.run_doctor(['--container']),0)
+            probe.assert_not_called()
+
     def test_environment_is_literal_and_does_not_execute_shell(self):
         with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ,{},clear=True):
             env=Path(directory)/'.env';marker=Path(directory)/'must-not-exist'

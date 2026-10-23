@@ -47,7 +47,7 @@ def resolve_network_identity(
                 result["isp"] = isp_hint
             return result
 
-    fields = "success,ip,country,country_code,city,connection.isp,connection.org,connection.asn"
+    fields = "success,ip,country,country_code,region,city,latitude,longitude,connection.isp,connection.org,connection.asn"
     result = {
         "public_ip": None,
         "country": None,
@@ -64,7 +64,10 @@ def resolve_network_identity(
         with urllib.request.urlopen(
             f"https://ipwho.is/?fields={fields}", timeout=timeout_seconds
         ) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+            raw = response.read(32769)
+            if len(raw) > 32768:
+                return result
+            payload = json.loads(raw.decode("utf-8"))
         if not payload.get("success"):
             return result
         connection = payload.get("connection") or {}
@@ -74,6 +77,9 @@ def resolve_network_identity(
                 "country": payload.get("country"),
                 "country_code": payload.get("country_code"),
                 "city": payload.get("city"),
+                "region": payload.get("region"),
+                "latitude": payload.get("latitude"),
+                "longitude": payload.get("longitude"),
                 "isp": connection.get("isp") or connection.get("org") or isp_hint,
                 "isp_organization": connection.get("org"),
                 "asn": connection.get("asn"),

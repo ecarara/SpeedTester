@@ -18,6 +18,7 @@ command -v hdiutil >/dev/null || die "hdiutil não encontrado; execute este buil
 
 mkdir -p "$OUTPUT_DIR"
 pushd "$REPO_ROOT" >/dev/null
+"$PYTHON" scripts/stamp_version.py app "$VERSION"
 STAGE=""
 cleanup() {
   if [[ -n "$STAGE" && -d "$STAGE" ]]; then
@@ -43,6 +44,7 @@ cp dist/SpeedTesterClient "$CONTENTS/MacOS/SpeedTesterClient"
 cp dist/SpeedTesterAPI "$CONTENTS/MacOS/SpeedTesterAPI"
 cp assets/packaging/macos/SpeedTester.icns "$CONTENTS/Resources/SpeedTester.icns"
 chmod 0755 "$CONTENTS/MacOS/SpeedTesterLauncher" "$CONTENTS/MacOS/SpeedTesterClient" "$CONTENTS/MacOS/SpeedTesterAPI"
+"$PYTHON" "$REPO_ROOT/scripts/bundle_release_tools.py" "$APP" --version "$VERSION"
 
 sed -e "s|@VERSION@|$VERSION|g" -e "s|@BUILD_VERSION@|$BUILD_VERSION|g" \
   "$SCRIPT_DIR/Info.plist.in" > "$CONTENTS/Info.plist"

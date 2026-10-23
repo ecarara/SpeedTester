@@ -1,13 +1,17 @@
-# Client comunitário: instalação e pareamento
+# Protocolo de contribuição: referência de integração
 
-Este fluxo está implementado no branch de integração. O serviço central precisa estar implantado, com login OIDC configurado e documentos vigentes publicados, para aceitar instalações. A existência do domínio não confirma essa implantação.
+Esta é uma referência técnica do SDK de contribuição e de suas credenciais;
+não é uma segunda edição do produto. Instalações de usuários usam os pacotes
+da [mesma release SpeedTester](https://speedtester.cararalab.com.br/client) ou
+`install-speedtester-client.py`, com [destino automático ou manual](server-selection.md).
+O nome de compatibilidade `install-community.sh` encaminha ao mesmo instalador.
 
-## Instalação Linux
+## Integração do SDK em ambientes de desenvolvimento
 
 Suporte inicial: Linux amd64/arm64, Python 3.11, 3.12 ou 3.13 com módulo `venv`, iPerf3 e uma sessão systemd do usuário. Instale os pré-requisitos pelo gerenciador de pacotes da distribuição. Execute o instalador a partir de uma revisão verificada do repositório, como usuário normal:
 
 ```bash
-./install-community.sh --server https://speedtester.cararalab.com.br
+speedtester-client setup --server https://speedtester.cararalab.com.br
 ```
 
 O assistente pede operadora, país, região, cidade, tecnologia de acesso e cabeado/Ethernet ou Wi-Fi. Não tenta inferir fibra pelo endereço IP. O destino de teste é configurado automaticamente pelo Server. A agenda fixa programa dois testes por período (00h–06h, 06h–12h, 12h–18h e 18h–24h), oito por dia completo, no fuso da instalação, sujeita à autorização e às cotas centrais. Não existe intervalo em horas a configurar.

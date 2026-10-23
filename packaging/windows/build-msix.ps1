@@ -38,6 +38,12 @@ try {
     $apiPath = Join-Path (Split-Path $ClientPath -Parent) 'SpeedTesterAPI.exe'
     if (-not (Test-Path $apiPath)) { throw "API não encontrado: $apiPath" }
     Copy-Item $apiPath (Join-Path $stage 'SpeedTesterAPI.exe')
+    $runtimeRoot = Split-Path $ClientPath -Parent
+    foreach ($name in @('tools', 'THIRD-PARTY-LICENSES', 'iperf-components.json', 'runtime-components.json', 'native-sbom.cdx.json', 'LICENSE')) {
+        $payload = Join-Path $runtimeRoot $name
+        if (-not (Test-Path $payload)) { throw "Componente nativo ausente: $name" }
+        Copy-Item $payload (Join-Path $stage $name) -Recurse -Force
+    }
     Copy-Item (Join-Path $repo 'packaging\linux\speedtester.env.example') (Join-Path $stage 'speedtester.env.example')
     Copy-Item (Join-Path $repo 'assets\packaging\windows\msix\*.png') $assets
     $manifest = (Get-Content (Join-Path $PSScriptRoot 'AppxManifest.xml.in') -Raw).Replace('@VERSION@', $Version).Replace('@ARCH@', $Architecture)

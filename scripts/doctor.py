@@ -49,7 +49,7 @@ def main():
         print(f'[error] configuration: {exc}', file=sys.stderr)
         return 1
     if settings.speedtest_runner == 'iperf3' and not settings.iperf3_server:
-        errors.append('IPERF3_SERVER is required for the iperf3 runner')
+        print('[ok] automatic geographic server selection; IPERF3_SERVER is optional')
     if args.container:
         binary = {'iperf3':'iperf3', 'ookla':settings.ookla_binary}.get(settings.speedtest_runner)
         if binary and not shutil.which(binary):

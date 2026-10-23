@@ -59,6 +59,7 @@ jobs:
         run: |
           mkdir -p dist/release
           OUTPUT_DIR=dist/release ./scripts/build-source-tarball.sh
+          cp install-speedtester-client.py dist/release/install-speedtester-client.py
           python3 scripts/build_sbom.py --version "$APP_VERSION" --output "dist/release/SpeedTester-$APP_VERSION.spdx.json"
           python3 scripts/generate_checksums.py dist/release
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -86,6 +87,8 @@ jobs:
           python-version: '3.13'
       - name: Install packaging dependencies
         run: python -m pip install -r app/requirements.txt pyinstaller==6.16.0
+      - name: Native macOS crypto runtime
+        run: brew install openssl@3
       - name: Build unsigned macOS package
         env:
           APP_VERSION: ${{ needs.metadata.outputs.version }}
@@ -109,6 +112,14 @@ jobs:
           python-version: '3.13'
       - name: Install packaging dependencies
         run: python -m pip install -r app/requirements.txt pyinstaller==6.16.0
+      - name: Native Windows measurement toolchain
+        id: msys2
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e
+        with:
+          msystem: MSYS
+          location: C:\speedtester-msys64
+          update: true
+          install: gcc make diffutils openssl-devel openssl pkgconf tar zstd
       - name: Add Windows SDK packaging tools to PATH
         shell: pwsh
         run: |
@@ -121,14 +132,19 @@ jobs:
       - name: Build unsigned MSIX
         env:
           MSIX_VERSION: ${{ needs.metadata.outputs.msix-version }}
+          APP_VERSION: ${{ needs.metadata.outputs.version }}
+          SPEEDTESTER_MSYS_ROOT: ${{ steps.msys2.outputs.msys2-location }}
         shell: pwsh
         run: |
           ./packaging/windows/build-launchers.ps1 -OutputDirectory dist/windows
           ./packaging/windows/build-msix.ps1 -Version $env:MSIX_VERSION -Architecture x64 -OutputDirectory dist/windows
+          Copy-Item dist/desktop/releases/*.src.tar.zst dist/windows/
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-windows-x64
-          path: dist/windows/*.msix
+          path: |
+            dist/windows/*.msix
+            dist/windows/*.src.tar.zst
           if-no-files-found: error
 
   linux:
@@ -203,7 +219,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install pinned build utilities
-        run: pacman -Sy --noconfirm --needed curl git
+        run: pacman -Sy --noconfirm --needed curl git python
       - name: Build package as an unprivileged user
         env:
           APP_VERSION: ${{ needs.metadata.outputs.version }}
@@ -212,6 +228,15 @@ jobs:
           mkdir -p "$GITHUB_WORKSPACE/dist/linux"
           chown -R builder:builder "$GITHUB_WORKSPACE"
           su builder -s /bin/bash -c "APP_VERSION='$APP_VERSION' OUTPUT_DIR='$GITHUB_WORKSPACE/dist/linux' ./packaging/linux/build-pacman.sh"
+      - name: Install and verify the actual pacman package
+        env:
+          APP_VERSION: ${{ needs.metadata.outputs.version }}
+          SPEEDTESTER_NONINTERACTIVE: '1'
+        run: |
+          pacman -S --noconfirm --needed python-aiohttp python-fastapi python-matplotlib python-pandas python-pydantic uvicorn iperf3
+          SUDO_USER=builder pacman -U --noconfirm dist/linux/*.pkg.tar.zst
+          python scripts/test_installed_client.py --app /usr/lib/speedtester/app --version "$APP_VERSION"
+          grep -q '^IPERF3_SERVER=$' /home/builder/.config/speedtester/speedtester.env
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-linux-pacman

@@ -25,10 +25,10 @@ O instalador:
   `~/.config/speedtester/speedtester.env`.
 
 Requisitos: Python 3, `python3-venv`, `iperf3`, `systemd --user` e acesso de
-rede para instalar as dependências Python. O instalador confirma o fuso
-horário e solicita o `IPERF3_SERVER`; esse endereço deve apontar para um host
-controlado onde `iperf3 -s` esteja executando. A configuração existente nunca
-é sobrescrita durante uma atualização.
+rede para instalar as dependências Python. O instalador confirma o fuso e o
+modo de seleção. `IPERF3_SERVER` vazio seleciona o destino por localização
+geográfica; preencher host/porta fixa a escolha do usuário. Atualizações
+preservam essa escolha. Consulte [seleção do servidor](../../docs/server-selection.md).
 
 Para remover o aplicativo sem apagar histórico e configuração:
 

@@ -30,12 +30,15 @@ from shared.settings import Settings, load_settings
 from shared.observation import start_observation
 
 
+TARGET_ATTEMPTS = "target_attempts"
+
+
 def _with_target_evidence(snapshot, source):
     """Attach bounded destination diagnostics without changing probe evidence."""
-    attempts = getattr(source, "target_attempts", None)
+    attempts = getattr(source, TARGET_ATTEMPTS, None)
     if not attempts:
         return snapshot
-    return replace(snapshot, evidence={**snapshot.evidence, "target_attempts": attempts})
+    return replace(snapshot, evidence={**snapshot.evidence, TARGET_ATTEMPTS: attempts})
 
 
 class ConnectivityFailure(RuntimeError):
@@ -220,7 +223,7 @@ class Collector:
         try:
             result = self._dispatch_speedtest()
         except Exception as exc:
-            metrics = {"target_attempts": getattr(exc, "target_attempts", [])}
+            metrics = {TARGET_ATTEMPTS: getattr(exc, TARGET_ATTEMPTS, [])}
             self._record_attempt("timeout" if isinstance(exc, Iperf3Timeout) else "error", str(exc)[:400], metrics)
             raise
         metrics = {name: getattr(result, name, None) for name in (
@@ -229,7 +232,7 @@ class Collector:
             "server_name", "interface", "isp", "country", "country_code", "city",
             "public_ip", "isp_organization", "asn", "isp_source", "isp_confidence",
             "isp_observed_at", "transfer_bytes", "target_selection",
-            "target_distance_km", "target_catalog_revision", "server_location", "target_attempts")}
+            "target_distance_km", "target_catalog_revision", "server_location", TARGET_ATTEMPTS)}
         self._record_attempt("candidate", None, metrics)
         return result
 

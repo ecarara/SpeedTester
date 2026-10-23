@@ -83,8 +83,9 @@ def _failure_detail(completed):
         payload = json.loads(completed.stdout)
     except (TypeError, ValueError):
         return detail[-240:]
-    if isinstance(payload, dict) and isinstance(payload.get("error"), str):
-        return payload["error"][:240]
+    message = payload.get("error") if isinstance(payload, dict) else None
+    if isinstance(message, str):
+        return message[:240]
     return detail[-240:]
 
 

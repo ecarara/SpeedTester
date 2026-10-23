@@ -70,7 +70,8 @@ def main():
             with os.fdopen(private_open(path,os.O_WRONLY|os.O_CREAT|os.O_TRUNC),'w') as stream:
                 json.dump({'operation':operation,'control_key':key.hex(),'purge':purge},stream)
             result=subprocess.run([str(executable),'--native-helper',str(path)],timeout=180,capture_output=True)
-            assert result.returncode==0, f'{operation}: helper exit {result.returncode}; '+result.stderr.decode(errors='replace')[-2048:]
+            reboot_exit = layout.system=='Windows' and operation=='uninstall' and result.returncode==10
+            assert result.returncode==0 or reboot_exit, f'{operation}: helper exit {result.returncode}; '+result.stderr.decode(errors='replace')[-2048:]
         def removed():
             if layout.definition:
                 assert not layout.definition.exists()

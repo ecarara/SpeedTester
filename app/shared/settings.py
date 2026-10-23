@@ -6,9 +6,12 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 from math import isfinite
 from zoneinfo import ZoneInfo
+
+from shared.user_config import load_user_environment
 
 
 @dataclass(frozen=True)
@@ -159,8 +162,22 @@ def _env_server_ids(name: str, default: list[int]) -> Optional[list[int]]:
 
 
 def load_settings() -> Settings:
-    """Read environment variables and return validated application settings."""
-    db_path = _env_str("DB_PATH", "/data/speedtester.db")
+    """Read environment variables and return validated application settings.
+
+    ``%h`` is a systemd unit specifier, but values inside ``EnvironmentFile``
+    are not unit files and must not rely on specifier expansion. Resolve it
+    here so desktop upgrades always use a writable user-local database path.
+    """
+    load_user_environment()
+    configured_db_path = os.environ.get("DB_PATH")
+    if configured_db_path:
+        db_path = os.path.expanduser(
+            configured_db_path.replace("%h", str(Path.home()), 1)
+        )
+    else:
+        db_path = str(
+            Path.home() / ".local" / "share" / "speedtester" / "data" / "speedtester.db"
+        )
     return Settings(
         sample_interval_seconds=_env_int("SAMPLE_INTERVAL_SECONDS", 1800),
         sample_duration_seconds=_env_int("SAMPLE_DURATION_SECONDS", 30),
@@ -199,7 +216,14 @@ def load_settings() -> Settings:
         alert_speed_threshold_pct=_env_float("ALERT_SPEED_THRESHOLD_PCT", 80.0),
         alert_cooldown_seconds=_env_int("ALERT_COOLDOWN_SECONDS", 21600),
         slot_lease_seconds=_env_int("SLOT_LEASE_SECONDS", 300),
-        api_require_login=_env_bool("API_REQUIRE_LOGIN", True),
+        # Desktop packages bind only to loopback and explicitly enable local
+        # mode. Keep the secure server default everywhere else, while avoiding
+        # a login screen for a single-user local dashboard.
+        api_require_login=(
+            False
+            if _env_bool("SPEEDTESTER_LOCAL_MODE", False)
+            else _env_bool("API_REQUIRE_LOGIN", True)
+        ),
         api_viewer_password_hash=os.environ.get("API_VIEWER_PASSWORD_HASH", ""),
         api_admin_password_hash=os.environ.get("API_ADMIN_PASSWORD_HASH", ""),
         api_session_seconds=_env_int("API_SESSION_SECONDS", 28800),

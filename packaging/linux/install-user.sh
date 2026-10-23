@@ -37,6 +37,9 @@ command -v iperf3 >/dev/null || die "iperf3 não encontrado; instale-o antes de 
 mkdir -p "$INSTALL_ROOT" "$CONFIG_DIR" "$BIN_DIR" "$APPLICATION_DIR" "$SYSTEMD_DIR"
 rm -rf "$INSTALL_ROOT/app"
 cp -R "$SOURCE_DIR/app" "$INSTALL_ROOT/app"
+if [[ -n "${APP_VERSION:-}" ]]; then
+  python3 "$SOURCE_DIR/scripts/stamp_version.py" "$INSTALL_ROOT/app" "$APP_VERSION"
+fi
 python3 -m venv "$INSTALL_ROOT/venv"
 "$INSTALL_ROOT/venv/bin/python" -m pip install --disable-pip-version-check --no-input -r "$SOURCE_DIR/app/requirements.txt"
 install -m 0755 "$SOURCE_DIR/packaging/linux/speedtester-launcher" "$BIN_DIR/speedtester-launcher"
@@ -77,4 +80,4 @@ else
 fi
 
 echo "[speedtester] instalado em $INSTALL_ROOT"
-echo "[speedtester] configure IPERF3_SERVER em $ENV_FILE e execute o launcher pelo menu"
+echo "[speedtester] abra SpeedTester pelo menu; servidor automático por localização ou escolha opcional em $ENV_FILE"

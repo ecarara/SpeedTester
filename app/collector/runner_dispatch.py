@@ -29,6 +29,7 @@ def run_named_runner(
     iperf3_duration_seconds: int = 10,
     iperf3_parallel_streams: int = 5,
     measurement_timeout_seconds: float = 60.0,
+    iperf3_location: Optional[dict] = None,
 ) -> SpeedTestResult:
     """Run one named speed-test implementation.
 
@@ -81,5 +82,6 @@ def run_named_runner(
             port=iperf3_port,
             parallel_streams=iperf3_parallel_streams,
             timeout_seconds=measurement_timeout_seconds,
+            location=iperf3_location,
         )
     raise ValueError(f"runner inválido: {name!r}; use {', '.join(RUNNER_NAMES)}")

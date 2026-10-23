@@ -38,17 +38,21 @@ if ($package) {
         Write-Host $(if ($configExists) { 'SpeedTester - confirmação da configuração atual' } else { 'SpeedTester - configuração inicial' })
         Write-Host "Fuso horário detectado: $windowsTimezone -> $timezone"
         Write-Host 'Runner: iperf3'
-        Write-Host "Servidor iPerf3: $(if ($server) { $server } else { 'não configurado' })"
-        Write-Host "Porta iPerf3: $port"
+        Write-Host "Servidor de medição: $(if ($server) { "$server (porta $port)" } else { 'automático pela localização geográfica' })"
+        Write-Host 'Servidor opcional: deixe vazio para seleção automática ou informe sua escolha.'
         if ($env:SPEEDTESTER_NONINTERACTIVE -ne '1') {
             $confirmation = Read-Host 'Confirmar esses parâmetros? [Y/n]'
             if ($confirmation -match '^[Nn]$') {
                 $writeConfig = $true
                 $timezoneInput = Read-Host "Fuso horário IANA [$timezone]"
                 if ($timezoneInput) { $timezone = $timezoneInput }
-                $server = Read-Host 'Servidor iPerf3 (vazio para configurar depois)'
-                $portInput = Read-Host "Porta iPerf3 [$port]"
-                if ($portInput) { $port = $portInput }
+                $serverInput = Read-Host "Servidor opcional [$server; digite auto para seleção automática]"
+                if ($serverInput -eq 'auto') { $server = '' }
+                elseif ($serverInput) { $server = $serverInput }
+                if ($server) {
+                    $portInput = Read-Host "Porta [$port]"
+                    if ($portInput) { $port = $portInput }
+                }
             } elseif ($configExists) {
                 $writeConfig = $false
                 Write-Host "Configuração confirmada: $configPath"
@@ -74,7 +78,7 @@ if ($package) {
             [System.IO.File]::WriteAllText($configPath, $content, [System.Text.UTF8Encoding]::new($false))
             Write-Host "Configuração criada/atualizada em $configPath"
         }
-        if (-not $server) { Write-Warning 'IPERF3_SERVER não foi configurado; medições começarão após informar um servidor iPerf3.' }
+        if (-not $server) { Write-Host 'Seleção automática por localização habilitada; nenhum servidor precisa ser informado.' }
     }
     $client = Join-Path $package.InstallLocation 'SpeedTesterClient.exe'
     $api = Join-Path $package.InstallLocation 'SpeedTesterAPI.exe'

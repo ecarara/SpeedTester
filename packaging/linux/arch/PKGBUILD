@@ -16,6 +16,7 @@ package() {
   local source_root="${srcdir}/SpeedTester-${pkgver}"
   install -dm755 "${pkgdir}/usr/lib/speedtester/app"
   cp -a "${source_root}/app/." "${pkgdir}/usr/lib/speedtester/app/"
+  python "${source_root}/scripts/stamp_version.py" "${pkgdir}/usr/lib/speedtester/app" "$pkgver"
 
   install -Dm755 "${source_root}/packaging/linux/arch/speedtester-launcher" \
     "${pkgdir}/usr/bin/speedtester-launcher"

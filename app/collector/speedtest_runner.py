@@ -85,6 +85,9 @@ class SpeedTestResult:
     isp_source: Optional[str] = None
     isp_confidence: Optional[str] = None
     isp_observed_at: Optional[str] = None
+    target_selection: Optional[str] = None
+    target_distance_km: Optional[float] = None
+    target_catalog_revision: Optional[str] = None
 
 
 def run_speedtest(

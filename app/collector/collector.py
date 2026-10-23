@@ -218,7 +218,8 @@ class Collector:
             "latency_min_ms", "latency_max_ms", "packet_loss_pct", "tcp_retransmits",
             "server_name", "interface", "isp", "country", "country_code", "city",
             "public_ip", "isp_organization", "asn", "isp_source", "isp_confidence",
-            "isp_observed_at", "transfer_bytes")}
+            "isp_observed_at", "transfer_bytes", "target_selection",
+            "target_distance_km", "target_catalog_revision", "server_location")}
         self._record_attempt("candidate", None, metrics)
         return result
 
@@ -247,6 +248,7 @@ class Collector:
             iperf3_port=self.settings.iperf3_port,
             iperf3_duration_seconds=self.settings.iperf3_duration_seconds,
             iperf3_parallel_streams=self.settings.iperf3_parallel_streams,
+            iperf3_location=getattr(self.settings, "iperf3_location", None),
             measurement_timeout_seconds=getattr(
                 self.settings, "measurement_timeout_seconds", 60
             ),

@@ -20,27 +20,27 @@ SQLite e disponibiliza uma API e um dashboard web.
 
 A [prévia do Client gráfico](docs/desktop-client.md) inicia o suporte a Windows, Linux e macOS, com serviço independente da interface, vínculo opcional, reparo e desinstalação. Ainda não é um pacote certificado para workstations de produção; o instalador Linux publicado permanece disponível. Após aceite vigente e pareamento, a agenda ativa oito testes por dia, sempre em horários futuros; a instalação não executa um teste imediato. A consulta **Minhas medições** apresenta gráficos locais, filtros e a situação de envio ao Server, sem exigir login.
 
-## Client comunitário: baixar e instalar
+## Baixar e instalar SpeedTester
 
-A consulta ao [SpeedTester Server](https://speedtester.cararalab.com.br/) é pública.
-Para contribuir com seu servidor Linux, baixe o
-[instalador autônomo](https://speedtester.cararalab.com.br/downloads/install-speedtester-client.py)
+Existe um único cliente SpeedTester, nos formatos de cada sistema operacional.
+Baixe o pacote em [Downloads](https://speedtester.cararalab.com.br/client).
+Para instalar por terminal no Linux, baixe o
+[instalador](https://github.com/ecarara/SpeedTester/releases/latest/download/install-speedtester-client.py)
 e execute no diretório em que salvou o arquivo:
 
 ```bash
 python3 install-speedtester-client.py
 ```
 
-O instalador baixa uma revisão fixa deste repositório público, verifica o
-SHA-256 e abre o assistente. Não é necessário clonar o projeto nem copiar tokens.
-Entre no portal, aceite os documentos de produção e confirme o código e a
-impressão digital da instalação. Depois do pareamento, o client mantém suas
-credenciais protegidas e as renova automaticamente enquanto autorizado.
+O instalador baixa a release estável, verifica o SHA-256 e usa o mesmo coletor
+dos pacotes nativos. Confirme o fuso e a localização. Deixe o servidor vazio
+para seleção automática por distância geográfica ou informe seu próprio
+servidor opcional. As medições e o painel local não exigem conta.
 
 Requisitos: Linux amd64/arm64, usuário normal com sessão systemd, Python
-3.11–3.13 com venv e iPerf3. O assistente pede o perfil da conexão, o destino e
-a agenda antes de habilitar o serviço. O download sozinho não inicia medições.
-Para um Server próprio, use `python3 install-speedtester-client.py --server https://seu-server`.
+3.11 ou posterior com venv e iPerf3. O download sozinho não inicia medições.
+Para fixar um destino, use `python3 install-speedtester-client.py --server seu-host --port 5201`.
+Consulte [seleção geográfica e escolha manual](docs/server-selection.md).
 O código do instalador está em [install-speedtester-client.py](install-speedtester-client.py).
 
 Antes de autorizar, consulte o [inventário de dados enviados](https://speedtester.cararalab.com.br/data). Depois do aceite e do pareamento, Servers que anunciam `client-environment-v1` podem receber sistema operacional, distribuição, versão e arquitetura. Hostname, nome do usuário, número de série e conteúdo de arquivos pessoais não fazem parte desse registro. As métricas e o perfil da conexão continuam separados; os detalhes estão em [docs/client-environment.md](docs/client-environment.md).
@@ -144,16 +144,16 @@ Abra <http://127.0.0.1:8000>.
 
 ```bash
 cp env.example .env
-# Edite .env e configure IPERF3_SERVER com seu servidor iPerf3.
+# IPERF3_SERVER vazio = seleção geográfica; preencher = servidor escolhido.
 docker compose --env-file .env -f docker/compose.yaml -p speedtester up -d --build
 docker compose --env-file .env -f docker/compose.yaml -p speedtester logs -f collector
 ```
 
 Dashboard padrão: <http://localhost:8000>.
 
-Requisitos: Docker com Compose v2 e, para coleta iPerf3, um servidor
-controlado e alcançável (porta padrão `5201`). O destino não vem configurado:
-defina `IPERF3_SERVER` antes de iniciar o collector. O runner iPerf3 requer
+Requisitos: Docker com Compose v2. O destino é selecionado automaticamente
+pela localização geográfica. Opcionalmente, defina `IPERF3_SERVER` e a porta
+para usar um destino específico. O runner iPerf3 requer
 os binários `iperf3`, `ping` e `ip` no host Linux; eles já estão na imagem do
 collector. As imagens suportam Linux AMD64 e ARM64. O cliente Ookla incluído permanece
 restrito a AMD64; ARM64 usa iPerf3 ou fast.com.
@@ -195,7 +195,7 @@ backup externo criptografado e restauração.
 | `ANOMALY_RETRY_MIN_DOWNLOAD_MBPS` | vazio | limiar absoluto opcional de download para acionar o reteste |
 | `MAX_BYTES` | `10000000` | teto por stream, conforme runner atual |
 | `SPEEDTEST_SERVER_IDS` | `29564` | compatibilidade; não usado pelo fast.com |
-| `IPERF3_SERVER` | vazio | servidor iperf3 para o runner `iperf3` |
+| `IPERF3_SERVER` | vazio | vazio: seleção geográfica automática; preenchido: servidor escolhido |
 | `IPERF3_PORT` | `5201` | porta do servidor iperf3 |
 | `IPERF3_DURATION_SECONDS` | `10` | duração de cada direção do iperf3 |
 | `IPERF3_PARALLEL_STREAMS` | `5` | fluxos TCP paralelos do iperf3 |

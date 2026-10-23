@@ -9,12 +9,16 @@ import os
 import re
 
 _VERSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$")
+try:
+    from shared._build_version import VERSION as BUILD_VERSION
+except ImportError:
+    BUILD_VERSION = 'dev'
 
 
 def runtime_version() -> str:
     """Return the build-injected version, or dev for local source runs."""
     value = os.environ.get("APP_VERSION", "").strip()
-    return value if _VERSION_RE.fullmatch(value) else "dev"
+    return value if _VERSION_RE.fullmatch(value) else BUILD_VERSION
 
 
 APP_VERSION = runtime_version()

@@ -40,3 +40,5 @@ backup-outbox/
 *.egg-info/
 /build/
 /dist/
+# Generated only in staged/native release runtimes.
+app/shared/_build_version.py

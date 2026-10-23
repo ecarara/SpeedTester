@@ -66,9 +66,14 @@ class Settings:
     measurement_target_controlled: bool = False
     api_max_body_bytes: int = 65536
     api_rate_limit_max_clients: int = 10000
+    iperf3_location: Optional[dict] = None
 
     def __post_init__(self) -> None:
         ZoneInfo(self.timezone)
+        if self.iperf3_location and any(self.iperf3_location.get(key) is not None for key in ('latitude', 'longitude')):
+            from collector.target_selection import coordinates
+            if coordinates(self.iperf3_location) is None:
+                raise ValueError('both latitude and longitude must be valid finite coordinates')
         if not 60 <= self.api_session_seconds <= 86400:
             raise ValueError("api_session_seconds must be between 60 and 86400")
         if not 1024 <= self.api_max_body_bytes <= 1048576:
@@ -195,6 +200,13 @@ def load_settings() -> Settings:
         speedtest_server_ids=_env_server_ids("SPEEDTEST_SERVER_IDS", [29564]),
         ookla_binary=_env_str("OOKLA_BINARY", "speedtest"),
         iperf3_server=(os.environ.get("IPERF3_SERVER") or None),
+        iperf3_location=({
+            "country_code": os.environ.get("SPEEDTESTER_COUNTRY_CODE", ""),
+            "city": os.environ.get("SPEEDTESTER_CITY", ""),
+            **({"latitude": _env_float("SPEEDTESTER_LATITUDE", None),
+                "longitude": _env_float("SPEEDTESTER_LONGITUDE", None)}
+               if os.environ.get("SPEEDTESTER_LATITUDE") and os.environ.get("SPEEDTESTER_LONGITUDE") else {}),
+        } if os.environ.get("SPEEDTESTER_CITY") or os.environ.get("SPEEDTESTER_LATITUDE") else None),
         iperf3_port=_env_int("IPERF3_PORT", 5201),
         iperf3_duration_seconds=_env_int("IPERF3_DURATION_SECONDS", 10),
         iperf3_parallel_streams=_env_int("IPERF3_PARALLEL_STREAMS", 5),

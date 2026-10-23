@@ -106,6 +106,7 @@ def validate_native_package(path: Path) -> None:
         "speedtester-api.service",
         "speedtester-client.service",
         "speedtester-launcher",
+        "collector/target_selection.py",
     ))
 
 
@@ -117,12 +118,17 @@ def validate_pacman_package(path: Path) -> None:
         "usr/lib/systemd/user/speedtester-api.service",
         "usr/lib/systemd/user/speedtester-client.service",
         "usr/bin/speedtester-launcher",
+        "usr/lib/speedtester/app/collector/target_selection.py",
     ))
 
 
 def validate_artifact(artifact: Path) -> None:
     """Dispatch validation for one supported release artifact."""
-    if artifact.name.endswith(".tar.gz"):
+    if artifact.name.endswith(".src.tar.zst"):
+        pins = json.loads((Path(__file__).resolve().parents[1] / 'security/iperf3.json').read_text())['windows_source']
+        if artifact.name != pins['url'].rsplit('/', 1)[1] or sha256(artifact) != pins['sha256']:
+            raise ValueError('native source archive checksum mismatch')
+    elif artifact.name.endswith(".tar.gz"):
         validate_source_archive(artifact)
     elif artifact.name.endswith(".spdx.json"):
         validate_spdx(artifact)

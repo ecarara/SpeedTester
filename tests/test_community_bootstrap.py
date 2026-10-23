@@ -30,8 +30,8 @@ class BootstrapTests(unittest.TestCase):
         path = self.root / 'fixture.tar.gz'
         prefix = 'SpeedTester-' + self.version
         with tarfile.open(path, 'w:gz') as archive:
-            for name in ('install-community.sh', 'pyproject.toml', 'app/requirements-community.txt',
-                         'app/speedtester_protocol/cli.py', 'LICENSE'):
+            for name in ('packaging/linux/install-user.sh', 'packaging/linux/configure-user.sh', 'app/requirements.txt',
+                         'app/collector/target_selection.py', 'LICENSE'):
                 info = tarfile.TarInfo(prefix + '/' + name)
                 data = b'synthetic installation fixture\n'
                 info.size = len(data)
@@ -80,8 +80,8 @@ class BootstrapTests(unittest.TestCase):
 
     def test_complete_package_is_extracted_and_keeps_the_existing_installer(self):
         project = installer.extract_archive(self.archive(), self.root / 'source', self.version)
-        self.assertTrue((project / 'install-community.sh').is_file())
-        self.assertTrue((project / 'app/speedtester_protocol/cli.py').is_file())
+        self.assertTrue((project / 'packaging/linux/install-user.sh').is_file())
+        self.assertTrue((project / 'app/collector/target_selection.py').is_file())
 
     def test_traversal_links_and_unpacking_limits_are_rejected_before_extraction(self):
         for name, kind in (('../escape', tarfile.REGTYPE),
@@ -106,8 +106,10 @@ class BootstrapTests(unittest.TestCase):
             child.assert_not_called()
         project = self.root / 'package'
         with patch.object(installer, 'check_requirements'), patch.object(installer, 'latest_release', return_value=release), patch.object(installer, 'download_archive'), patch.object(installer, 'extract_archive', return_value=project), patch.object(installer.subprocess, 'call', return_value=0) as child:
-            self.assertEqual(installer.install('https://server.example'), 0)
-            child.assert_called_once_with(['bash', str(project / 'install-community.sh'), '--server', 'https://server.example'], cwd=project)
+            self.assertEqual(installer.install('measurement.example', 5300), 0)
+            self.assertEqual(child.call_args.args[0], ['bash', str(project / 'packaging/linux/install-user.sh')])
+            self.assertEqual(child.call_args.kwargs['env']['SPEEDTESTER_IPERF3_SERVER'], 'measurement.example')
+            self.assertEqual(child.call_args.kwargs['env']['SPEEDTESTER_IPERF3_PORT'], '5300')
 
     def test_platform_and_server_origin_fail_closed_and_help_has_no_side_effects(self):
         with patch.object(installer.platform, 'system', return_value='Darwin'):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
-"""Download one verified public Client revision and run its guided installer."""
+"""Install the same SpeedTester release as the native packages, with optional host override."""
 import argparse
 import hashlib
 import json
@@ -19,7 +19,6 @@ import urllib.request
 
 REPOSITORY = 'ecarara/SpeedTester'
 RELEASES_API_URL = 'https://api.github.com/repos/' + REPOSITORY + '/releases/latest'
-DEFAULT_SERVER = 'https://speedtester.cararalab.com.br'
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 MAX_UNPACKED_BYTES = 64 * 1024 * 1024
 MAX_MEMBERS = 10000
@@ -30,11 +29,15 @@ class InstallationError(RuntimeError):
 
 
 def server_origin(value):
-    parsed = urllib.parse.urlsplit(value)
-    if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password
-            or parsed.path not in ('', '/') or parsed.query or parsed.fragment):
-        raise argparse.ArgumentTypeError('Informe a origem HTTPS do Server, sem caminho ou credenciais.')
-    return value.rstrip('/')
+    import ipaddress
+    try:
+        ipaddress.ip_address(value)
+        return value
+    except ValueError:
+        pass
+    if len(value) > 253 or not all(re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?', label) for label in value.rstrip('.').split('.')):
+        raise argparse.ArgumentTypeError('Informe somente o hostname/IP do servidor de medição opcional.')
+    return value
 
 
 def check_requirements():
@@ -47,12 +50,12 @@ def check_requirements():
     python = None
     for candidate in ('python3', 'python3.13', 'python3.12', 'python3.11'):
         executable = shutil.which(candidate)
-        if executable and subprocess.run([executable, '-c', 'import sys,venv;assert (3,11)<=sys.version_info[:2]<=(3,13)'],
+        if executable and subprocess.run([executable, '-c', 'import sys,venv;assert sys.version_info[:2]>=(3,11)'],
                                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
             python = executable
             break
     if not python:
-        raise InstallationError('Instale Python 3.11, 3.12 ou 3.13 com venv antes de continuar.')
+        raise InstallationError('Instale Python 3.11 ou posterior com venv antes de continuar.')
     if not shutil.which('iperf3') or not shutil.which('bash') or not shutil.which('systemctl'):
         raise InstallationError('Instale iperf3, bash e systemd pelo gerenciador de pacotes da distribuição.')
     if subprocess.run(['systemctl', '--user', 'show-environment'], stdout=subprocess.DEVNULL,
@@ -152,15 +155,16 @@ def extract_archive(path, destination, version):
                 target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 with archive.extractfile(member) as source, target.open('xb') as output:
                     shutil.copyfileobj(source, output)
+                target.chmod(0o700 if member.mode & 0o111 else 0o600)
     project = destination / prefix
-    for required in ('install-community.sh', 'pyproject.toml', 'app/requirements-community.txt',
-                     'app/speedtester_protocol/cli.py', 'LICENSE'):
+    for required in ('packaging/linux/install-user.sh', 'packaging/linux/configure-user.sh', 'app/requirements.txt',
+                     'app/collector/target_selection.py', 'LICENSE'):
         if not (project / required).is_file():
             raise InstallationError('Pacote incompleto; nenhum instalador foi executado.')
     return project
 
 
-def install(server):
+def install(server=None, port=5201):
     check_requirements()
     previous_umask = os.umask(0o077)
     try:
@@ -171,19 +175,26 @@ def install(server):
             archive = directory / 'client.tar.gz'
             version = download_archive(archive, release)
             project = extract_archive(archive, directory / 'source', version)
-            print('Pacote verificado. Iniciando configuração e pareamento…', flush=True)
-            return subprocess.call(['bash', str(project / 'install-community.sh'), '--server', server], cwd=project)
+            print('Pacote verificado. Confirme o fuso e o servidor automático ou sua escolha opcional…', flush=True)
+            environment = os.environ.copy()
+            environment['APP_VERSION'] = version
+            if server:
+                environment.update(SPEEDTESTER_IPERF3_SERVER=server, SPEEDTESTER_IPERF3_PORT=str(port))
+            return subprocess.call(['bash', str(project / 'packaging/linux/install-user.sh')], cwd=project, env=environment)
     finally:
         os.umask(previous_umask)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--server', type=server_origin, default=DEFAULT_SERVER,
-                        help='Server HTTPS (padrão: %(default)s)')
+    parser.add_argument('--server', '--iperf3-server', type=server_origin, default=None,
+                        help='Servidor de medição opcional (padrão: automático pela localização geográfica)')
+    parser.add_argument('--port', type=int, default=5201, help='Porta do servidor escolhido (padrão: 5201)')
     args = parser.parse_args(argv)
     try:
-        return install(args.server)
+        if not 1 <= args.port <= 65535:
+            raise InstallationError('A porta deve estar entre 1 e 65535.')
+        return install(args.server, args.port)
     except (InstallationError, OSError, tarfile.TarError) as exc:
         print('Instalação interrompida: ' + str(exc), file=sys.stderr)
         return 1

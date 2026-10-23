@@ -69,6 +69,20 @@ class GeographicSelectionTests(unittest.TestCase):
 
 @unittest.skipIf(__import__("os").name == "nt", "POSIX installer")
 class InstallerSelectionTests(unittest.TestCase):
+    def test_city_with_awk_escape_is_rejected_without_creating_configuration(self):
+        import os
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temporary:
+            result = subprocess.run(["bash", str(root / "packaging/linux/configure-user.sh")],
+                env=dict(os.environ, SPEEDTESTER_CONFIG_DIR=temporary,
+                         SPEEDTESTER_ENV_FILE=str(Path(temporary) / "speedtester.env"),
+                         SPEEDTESTER_NONINTERACTIVE="1", SPEEDTESTER_COUNTRY_CODE="BR",
+                         SPEEDTESTER_CITY=r"city\nIPERF3_SERVER=wrong.example"),
+                capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("cidade inválida", result.stderr)
+            self.assertFalse((Path(temporary) / "speedtester.env").exists())
+
     def test_package_configuration_allows_empty_host_and_preserves_manual_on_upgrade(self):
         import os
         root = Path(__file__).resolve().parents[1]

@@ -125,7 +125,7 @@ fi
 [[ "$port" =~ ^[0-9]+$ ]] && (( port >= 1 && port <= 65535 )) || die "porta iPerf3 inválida: $port"
 [[ "$country" =~ ^[A-Za-z]{2}$ || -z "$country" ]] || die "país deve ter duas letras"
 [[ -z "$city" || -n "$country" ]] || die "confirme também o país ao informar a cidade"
-[[ "$city" != *$'\n'* && "$city" != *$'\r'* && "$city" != *'"'* && "$city" != *"'"* && "$city" != *'\\'* ]] || die "cidade inválida"
+[[ "$city" != *$'\n'* && "$city" != *$'\r'* && "$city" != *'"'* && "$city" != *"'"* && "$city" != *$'\\'* ]] || die "cidade inválida"
 
 mkdir -p "$CONFIG_DIR"
 chmod 0700 "$CONFIG_DIR"

@@ -23,10 +23,19 @@ import time
 from .local_security import reject_links, windows_acl
 from .desktop_links import system_environment
 
+SYSTEMCTL = "/usr/bin/systemctl"
+LAUNCHCTL = "/bin/launchctl"
+SYSTEM_DOMAIN = "system/"
+EMPTY_HOME = "/var/empty"
+DSCL = "/usr/bin/dscl"
+INDEX_FILENAME = "index.sqlite"
+STORAGE_KEY_FILENAME = "storage.key"
+
 SERVICE = "CararaLabSpeedTesterClient"
 LABEL = "com.cararalab.speedtester.client"
 MARKER = "cararalab-speedtester-desktop-v1"
 BOOTSTRAP = "service.json"
+INVALID_NATIVE_REQUEST = "invalid_native_request"
 
 
 @dataclass(frozen=True)
@@ -125,44 +134,52 @@ def trusted_parent(path):
             item.chmod(0o755)
 
 
+def _stop_launchd_service():
+    loaded = subprocess.run([LAUNCHCTL, "print", SYSTEM_DOMAIN + LABEL], capture_output=True, timeout=10, env=system_environment()).returncode == 0
+    if loaded:
+        checked([LAUNCHCTL, "bootout", SYSTEM_DOMAIN + LABEL])
+        # launchd may retain the job briefly after bootout returns. Starting
+        # it immediately can fail with EIO, so wait for the label to unload.
+        deadline = time.monotonic() + 30
+        while subprocess.run([LAUNCHCTL, "print", SYSTEM_DOMAIN + LABEL],
+                capture_output=True, timeout=10, env=system_environment()).returncode == 0:
+            if time.monotonic() >= deadline:
+                raise RuntimeError("native_service_stop_timeout")
+            time.sleep(.25)
+
+
+def _stop_windows_service():
+    import win32service
+    import win32serviceutil
+    import pywintypes
+    try:
+        status = win32serviceutil.QueryServiceStatus(SERVICE)[1]
+    except pywintypes.error as exc:
+        if exc.winerror == 1060:
+            return
+        raise
+    if status != win32service.SERVICE_STOPPED:
+        win32serviceutil.StopService(SERVICE)
+        win32serviceutil.WaitForServiceStatus(SERVICE, win32service.SERVICE_STOPPED, 360)
+
+
 def stop_service(layout):
     if layout.system == "Linux":
         if layout.definition.exists():
-            checked(["/usr/bin/systemctl", "stop", layout.definition.name])
-            checked(["/usr/bin/systemctl", "is-active", layout.definition.name], allowed=(3,))
+            checked([SYSTEMCTL, "stop", layout.definition.name])
+            checked([SYSTEMCTL, "is-active", layout.definition.name], allowed=(3,))
     elif layout.system == "Darwin":
-        loaded = subprocess.run(["/bin/launchctl", "print", "system/" + LABEL], capture_output=True, timeout=10, env=system_environment()).returncode == 0
-        if loaded:
-            checked(["/bin/launchctl", "bootout", "system/" + LABEL])
-            # launchd may retain the job briefly after bootout returns. Starting
-            # it immediately can fail with EIO, so wait for the label to unload.
-            deadline = time.monotonic() + 30
-            while subprocess.run(["/bin/launchctl", "print", "system/" + LABEL],
-                    capture_output=True, timeout=10, env=system_environment()).returncode == 0:
-                if time.monotonic() >= deadline:
-                    raise RuntimeError("native_service_stop_timeout")
-                time.sleep(.25)
+        _stop_launchd_service()
     else:
-        import win32service
-        import win32serviceutil
-        import pywintypes
-        try:
-            status = win32serviceutil.QueryServiceStatus(SERVICE)[1]
-        except pywintypes.error as exc:
-            if exc.winerror == 1060:
-                return
-            raise
-        if status != win32service.SERVICE_STOPPED:
-            win32serviceutil.StopService(SERVICE)
-            win32serviceutil.WaitForServiceStatus(SERVICE, win32service.SERVICE_STOPPED, 360)
+        _stop_windows_service()
 
 
 def register_service(layout):
     if layout.system == "Linux":
         layout.definition.write_text(system_service_unit(layout))
         layout.definition.chmod(0o644)
-        checked(["/usr/bin/systemctl", "daemon-reload"])
-        checked(["/usr/bin/systemctl", "enable", layout.definition.name])
+        checked([SYSTEMCTL, "daemon-reload"])
+        checked([SYSTEMCTL, "enable", layout.definition.name])
     elif layout.system == "Darwin":
         layout.definition.write_bytes(launch_daemon(layout))
         layout.definition.chmod(0o644)
@@ -170,9 +187,9 @@ def register_service(layout):
         import win32service
         import win32serviceutil
         import pywintypes
-        options = dict(startType=win32service.SERVICE_AUTO_START, userName=layout.user,
-            exeName=str(layout.executable), exeArgs="--windows-service",
-            description="CararaLab SpeedTester Client")
+        options = {"startType": win32service.SERVICE_AUTO_START, "userName": layout.user,
+            "exeName": str(layout.executable), "exeArgs": "--windows-service",
+            "description": "CararaLab SpeedTester Client"}
         try:
             win32serviceutil.QueryServiceStatus(SERVICE)
         except pywintypes.error as exc:
@@ -186,11 +203,11 @@ def register_service(layout):
 
 def start_service(layout):
     if layout.system == "Linux":
-        checked(["/usr/bin/systemctl", "start", layout.definition.name])
+        checked([SYSTEMCTL, "start", layout.definition.name])
     elif layout.system == "Darwin":
         deadline = time.monotonic() + 15
         while True:
-            result = subprocess.run(["/bin/launchctl", "bootstrap", "system", str(layout.definition)],
+            result = subprocess.run([LAUNCHCTL, "bootstrap", "system", str(layout.definition)],
                 capture_output=True, timeout=30, env=system_environment())
             if result.returncode == 0:
                 break
@@ -221,9 +238,9 @@ def remove_service(layout):
     stop_service(layout)
     if layout.system == "Linux":
         if layout.definition.exists():
-            checked(["/usr/bin/systemctl", "disable", layout.definition.name])
+            checked([SYSTEMCTL, "disable", layout.definition.name])
             layout.definition.unlink()
-            checked(["/usr/bin/systemctl", "daemon-reload"])
+            checked([SYSTEMCTL, "daemon-reload"])
     elif layout.system == "Darwin":
         layout.definition.unlink(missing_ok=True)
     else:
@@ -236,6 +253,25 @@ def remove_service(layout):
                 raise
 
 
+def _create_posix_identity(layout):
+    if layout.system == "Linux":
+        checked(["/usr/sbin/useradd", "--system", "--user-group", "--home-dir", EMPTY_HOME,
+            "--shell", "/usr/sbin/nologin", layout.user])
+    else:
+        users = checked([DSCL, ".", "-list", "/Users", "UniqueID"])
+        groups = checked([DSCL, ".", "-list", "/Groups", "PrimaryGroupID"])
+        occupied = {int(row.split()[-1]) for row in (users + "\n" + groups).splitlines() if row.split()}
+        identifier = next((number for number in range(499, 199, -1) if number not in occupied), None)
+        if identifier is None:
+            raise ValueError("service_identity_unavailable")
+        for record, values in (("/Groups/" + layout.user, {"PrimaryGroupID": str(identifier)}),
+                ("/Users/" + layout.user, {"UniqueID": str(identifier), "PrimaryGroupID": str(identifier),
+                    "UserShell": "/usr/bin/false", "NFSHomeDirectory": EMPTY_HOME, "IsHidden": "1", "Password": "*"})):
+            checked([DSCL, ".", "-create", record])
+            for key, value in values.items():
+                checked([DSCL, ".", "-create", record, key, value])
+
+
 def provision_identity(layout):
     if layout.system == "Windows":
         # Register the virtual-account service before resolving its SID.
@@ -246,24 +282,9 @@ def provision_identity(layout):
     try:
         identity = pwd.getpwnam(layout.user)
     except KeyError:
-        if layout.system == "Linux":
-            checked(["/usr/sbin/useradd", "--system", "--user-group", "--home-dir", "/var/empty",
-                "--shell", "/usr/sbin/nologin", layout.user])
-        else:
-            users = checked(["/usr/bin/dscl", ".", "-list", "/Users", "UniqueID"])
-            groups = checked(["/usr/bin/dscl", ".", "-list", "/Groups", "PrimaryGroupID"])
-            occupied = {int(row.split()[-1]) for row in (users + "\n" + groups).splitlines() if row.split()}
-            identifier = next((number for number in range(499, 199, -1) if number not in occupied), None)
-            if identifier is None:
-                raise ValueError("service_identity_unavailable")
-            for record, values in (("/Groups/" + layout.user, {"PrimaryGroupID": str(identifier)}),
-                    ("/Users/" + layout.user, {"UniqueID": str(identifier), "PrimaryGroupID": str(identifier),
-                        "UserShell": "/usr/bin/false", "NFSHomeDirectory": "/var/empty", "IsHidden": "1", "Password": "*"})):
-                checked(["/usr/bin/dscl", ".", "-create", record])
-                for key, value in values.items():
-                    checked(["/usr/bin/dscl", ".", "-create", record, key, value])
+        _create_posix_identity(layout)
         identity = pwd.getpwnam(layout.user)
-    if identity.pw_uid == 0 or identity.pw_dir != "/var/empty" or identity.pw_shell not in ("/usr/sbin/nologin", "/usr/bin/false"):
+    if identity.pw_uid == 0 or identity.pw_dir != EMPTY_HOME or identity.pw_shell not in ("/usr/sbin/nologin", "/usr/bin/false"):
         raise ValueError("unexpected_service_identity")
     return identity
 
@@ -317,7 +338,7 @@ def verify_bundle(root):
 
 def verify_database(directory):
     reject_links(directory)
-    database, keyfile = directory / "index.sqlite", directory / "storage.key"
+    database, keyfile = directory / INDEX_FILENAME, directory / STORAGE_KEY_FILENAME
     if not database.exists():
         if keyfile.exists():
             raise ValueError("incomplete_local_state")
@@ -345,7 +366,7 @@ def verify_database(directory):
 def backup_state(layout):
     directory = layout.state / "queue"
     verify_database(directory)
-    database = directory / "index.sqlite"
+    database = directory / INDEX_FILENAME
     if not database.exists():
         return
     destination = layout.state / "backups" / str(time.time_ns())
@@ -353,9 +374,9 @@ def backup_state(layout):
     if layout.system == "Windows":
         windows_acl(destination, apply=True, directory=True)
     with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as source:
-        with closing(sqlite3.connect(destination / "index.sqlite")) as target:
+        with closing(sqlite3.connect(destination / INDEX_FILENAME)) as target:
             source.backup(target)
-    shutil.copyfile(directory / "storage.key", destination / "storage.key")
+    shutil.copyfile(directory / STORAGE_KEY_FILENAME, destination / STORAGE_KEY_FILENAME)
     for path in destination.iterdir():
         path.chmod(0o600)
     # Backups contain the key: they inherit the service's restricted Windows DACL.
@@ -372,7 +393,7 @@ def read_request(path):
     with os.fdopen(descriptor, "rb") as stream:
         metadata = os.fstat(stream.fileno())
         if not stat.S_ISREG(metadata.st_mode):
-            raise ValueError("invalid_native_request")
+            raise ValueError(INVALID_NATIVE_REQUEST)
         if os.name == "nt":
             import win32security
             owner = win32security.GetNamedSecurityInfo(str(path), win32security.SE_FILE_OBJECT,
@@ -388,14 +409,16 @@ def read_request(path):
             raise ValueError("insecure_native_request")
         raw = stream.read(4097)
     if len(raw) > 4096:
-        raise ValueError("invalid_native_request")
+        raise ValueError(INVALID_NATIVE_REQUEST)
     request = json.loads(raw)
     if (set(request) != {"operation", "control_key", "purge"}
             or request["operation"] not in ("install", "repair", "uninstall")
             or type(request["purge"]) is not bool or not isinstance(request["control_key"], str)
             or len(request["control_key"]) != 64):
-        raise ValueError("invalid_native_request")
-    bytes.fromhex(request["control_key"])
+        raise ValueError(INVALID_NATIVE_REQUEST)
+    key = bytes.fromhex(request["control_key"])
+    if len(key) != 32:
+        raise ValueError(INVALID_NATIVE_REQUEST)
     return request
 
 
@@ -437,16 +460,84 @@ def require_admin():
         raise PermissionError("administrator_required")
 
 
-def native_operation(request):
-    layout = native_layout()
-    require_admin()
-    source = bundle_root()
-    verify_bundle(source)
-    trusted_parent(layout.runtime.parent)
-    trusted_parent(layout.state.parent)
+def _prepare_maintenance_state(layout, operation):
+    backup_state(layout)
+    # Upgrades preserve active/paused choice, credentials and all records.
+    # A repair deliberately pauses; both skip slots due during maintenance.
+    database = layout.state / "queue/index.sqlite"
+    if database.exists():
+        from .queue import EncryptedQueue
+        cipher = object.__new__(EncryptedQueue)
+        cipher.key = (layout.state / "queue/storage.key").read_bytes()
+        with closing(sqlite3.connect(database)) as connection:
+            with connection:
+                if operation == "repair":
+                    connection.execute("INSERT OR REPLACE INTO state VALUES(?,?)",
+                        ("desktop:measurements_enabled", cipher.seal(False, "desktop:measurements_enabled")))
+                connection.execute("INSERT OR REPLACE INTO state VALUES(?,?)",
+                    ("desktop:upgrade_pending", cipher.seal(True, "desktop:upgrade_pending")))
+
+
+def _stage_runtime(source, staged, layout, control_key, existing):
+    try:
+        shutil.copytree(source, staged, symlinks=True)
+        verify_bundle(staged)
+    except BaseException:
+        if staged.exists():
+            shutil.rmtree(staged)
+        if existing:
+            start_service(layout)
+            wait_for_service(control_key)
+        raise
+    if os.name != "nt":
+        for path in (staged, *staged.rglob("*")):
+            os.chown(path, 0, 0)
+            if path.is_dir():
+                path.chmod(0o755)
+            elif path.stat().st_mode & 0o111:
+                path.chmod(0o755)
+            else:
+                path.chmod(0o644)
+
+
+def _activate_runtime(layout, staged, previous, control_key, existing):
+    swapped = False
+    try:
+        if layout.runtime.exists():
+            layout.runtime.rename(previous)
+        staged.rename(layout.runtime)
+        swapped = True
+        identity = provision_identity(layout)
+        protect_layout(layout, identity)
+        write_bootstrap(layout, control_key, identity)
+        if layout.system != "Windows":
+            register_service(layout)
+        start_service(layout)
+        wait_for_service(control_key)
+    except BaseException:
+        if swapped:
+            stop_service(layout)
+            shutil.rmtree(layout.runtime)
+        if previous.exists():
+            previous.rename(layout.runtime)
+            # Preserve data and leave maintenance paused; never hide the failure.
+            start_service(layout)
+            wait_for_service(control_key)
+        elif not existing:
+            remove_service(layout)
+        raise
+    if previous.exists():
+        shutil.rmtree(previous)
+
+
+def _validate_managed_paths(layout):
     for path in (layout.runtime, layout.state, layout.definition):
         if path:
             reject_links(path)
+
+
+def _installation_transaction(layout, source, request):
+    _validate_managed_paths(layout)
     bootstrap = layout.state / BOOTSTRAP
     existing = json.loads(bootstrap.read_text()) if bootstrap.exists() else None
     if existing:
@@ -461,6 +552,17 @@ def native_operation(request):
             raise ValueError("open_downloaded_installer_for_repair")
         if staged.exists() or previous.exists():
             raise ValueError("previous_installation_transaction_exists")
+    return existing, staged, previous
+
+
+def native_operation(request):
+    layout = native_layout()
+    require_admin()
+    source = bundle_root()
+    verify_bundle(source)
+    trusted_parent(layout.runtime.parent)
+    trusted_parent(layout.state.parent)
+    existing, staged, previous = _installation_transaction(layout, source, request)
     stop_service(layout)
     if request["operation"] == "uninstall":
         remove_service(layout)
@@ -469,68 +571,10 @@ def native_operation(request):
             shutil.rmtree(layout.state)
         return {"ok": True, "reboot_required": reboot, "data_preserved": not request["purge"], "central_revocation": "not_requested"}
     if existing:
-        backup_state(layout)
-        # Upgrades preserve active/paused choice, credentials and all records.
-        # A repair deliberately pauses; both skip slots due during maintenance.
-        database = layout.state / "queue/index.sqlite"
-        if database.exists():
-            from .queue import EncryptedQueue
-            cipher = object.__new__(EncryptedQueue)
-            cipher.key = (layout.state / "queue/storage.key").read_bytes()
-            with closing(sqlite3.connect(database)) as connection:
-                with connection:
-                    if request["operation"] == "repair":
-                        connection.execute("INSERT OR REPLACE INTO state VALUES(?,?)",
-                            ("desktop:measurements_enabled", cipher.seal(False, "desktop:measurements_enabled")))
-                    connection.execute("INSERT OR REPLACE INTO state VALUES(?,?)",
-                        ("desktop:upgrade_pending", cipher.seal(True, "desktop:upgrade_pending")))
+        _prepare_maintenance_state(layout, request["operation"])
     # Install from a separate downloaded bundle. Never mutate the running GUI's
     # own directory or overwrite a runtime that Windows is still mapping.
     layout.runtime.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        shutil.copytree(source, staged, symlinks=True)
-        verify_bundle(staged)
-    except BaseException:
-        if staged.exists():
-            shutil.rmtree(staged)
-        if existing:
-            start_service(layout)
-            wait_for_service(request["control_key"])
-        raise
-    if os.name != "nt":
-        for path in (staged, *staged.rglob("*")):
-            os.chown(path, 0, 0)
-            if path.is_dir():
-                path.chmod(0o755)
-            elif path.stat().st_mode & 0o111:
-                path.chmod(0o755)
-            else:
-                path.chmod(0o644)
-    swapped = False
-    try:
-        if layout.runtime.exists():
-            layout.runtime.rename(previous)
-        staged.rename(layout.runtime)
-        swapped = True
-        identity = provision_identity(layout)
-        protect_layout(layout, identity)
-        write_bootstrap(layout, request["control_key"], identity)
-        if layout.system != "Windows":
-            register_service(layout)
-        start_service(layout)
-        wait_for_service(request["control_key"])
-    except BaseException:
-        if swapped:
-            stop_service(layout)
-            shutil.rmtree(layout.runtime)
-        if previous.exists():
-            previous.rename(layout.runtime)
-            # Preserve data and leave maintenance paused; never hide the failure.
-            start_service(layout)
-            wait_for_service(request["control_key"])
-        elif not existing:
-            remove_service(layout)
-        raise
-    if previous.exists():
-        shutil.rmtree(previous)
+    _stage_runtime(source, staged, layout, request["control_key"], existing)
+    _activate_runtime(layout, staged, previous, request["control_key"], existing)
     return {"ok": True, "measurements_enabled": False, "data_preserved": bool(existing)}

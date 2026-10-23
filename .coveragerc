@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+[run]
+source =
+    app
+    scripts
+    security
+relative_files = True
+parallel = True
+patch =
+    subprocess

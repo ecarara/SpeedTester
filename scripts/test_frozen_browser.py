@@ -32,12 +32,14 @@ def main():
                 loaded.set()
             self.send_response(200);self.send_header('Content-Type','text/html');self.end_headers()
             self.wfile.write(b'<title>SpeedTester browser acceptance fixture</title><p>Local test complete.</p>')
-        def log_message(self,*args):pass
+        def log_message(self,*args):
+            # The synthetic browser fixture deliberately does not log requests.
+            return
     server=HTTPServer(('127.0.0.1',0),Handler)
     threading.Thread(target=server.serve_forever,daemon=True).start()
     system=platform.system()
     bundle=ROOT/'dist/desktop/raw'/('SpeedTesterClient.app' if system=='Darwin' else 'SpeedTesterClient')
-    executable=bundle/('Contents/MacOS/SpeedTesterClient' if system=='Darwin' else 'SpeedTesterClient.exe' if os.name=='nt' else 'SpeedTesterClient')
+    executable = bundle / {'Darwin': 'Contents/MacOS/SpeedTesterClient', 'Windows': 'SpeedTesterClient.exe'}.get(system, 'SpeedTesterClient')
     try:
         with tempfile.TemporaryDirectory() as temporary:
             environment=os.environ.copy()

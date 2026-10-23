@@ -87,6 +87,22 @@ class GraphicalFlows(unittest.TestCase):
         self.window.access.set(self.window.t('fiber'))
         self.window.link.set(self.window.t('ethernet'))
 
+    def _confirmation_controls(self, popup, expected_title):
+        self.assertEqual(popup.title(), expected_title or self.window.t('enable'))
+        labels = [w.cget('text') for w in self.widgets(popup) if isinstance(w, self.tk.Label)]
+        buttons = [w for w in self.widgets(popup) if isinstance(w, self.tk.Button)]
+        expected = {'pt-BR': ('Sim', 'Não'), 'en': ('Yes', 'No'), 'es': ('Sí', 'No')}[self.window.locale]
+        self.assertEqual({w.cget('text') for w in buttons}, set(expected))
+        for widget in self.widgets(popup):
+            self.assertLessEqual(widget.winfo_rootx()+widget.winfo_width(), popup.winfo_rootx()+popup.winfo_width())
+            self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(), popup.winfo_rooty()+popup.winfo_height())
+        if expected_title is None:
+            self.assertEqual(labels, [self.window.t('enable_confirm')])
+            self.assertFalse(any(word in labels[0].lower() for word in ('orçamento', 'budget', 'presupuesto')))
+        yes = next(w for w in buttons if w.cget('text') == expected[0])
+        no = next(w for w in buttons if w.cget('text') == expected[1])
+        return yes, no
+
     def answer_confirmation(self, operation, decision, expected_title=None):
         errors = []
         deadline = time.monotonic() + 3
@@ -99,19 +115,7 @@ class GraphicalFlows(unittest.TestCase):
                 errors.append(AssertionError('Confirmation did not become visible'))
                 return
             try:
-                self.assertEqual(popup.title(), expected_title or self.window.t('enable'))
-                labels = [w.cget('text') for w in self.widgets(popup) if isinstance(w, self.tk.Label)]
-                buttons = [w for w in self.widgets(popup) if isinstance(w, self.tk.Button)]
-                expected = {'pt-BR': ('Sim', 'Não'), 'en': ('Yes', 'No'), 'es': ('Sí', 'No')}[self.window.locale]
-                self.assertEqual({w.cget('text') for w in buttons}, set(expected))
-                for widget in self.widgets(popup):
-                    self.assertLessEqual(widget.winfo_rootx()+widget.winfo_width(), popup.winfo_rootx()+popup.winfo_width())
-                    self.assertLessEqual(widget.winfo_rooty()+widget.winfo_height(), popup.winfo_rooty()+popup.winfo_height())
-                if expected_title is None:
-                    self.assertEqual(labels, [self.window.t('enable_confirm')])
-                    self.assertFalse(any(word in labels[0].lower() for word in ('orçamento', 'budget', 'presupuesto')))
-                yes = next(w for w in buttons if w.cget('text') == expected[0])
-                no = next(w for w in buttons if w.cget('text') == expected[1])
+                yes, no = self._confirmation_controls(popup, expected_title)
                 if decision == 'close':
                     popup.tk.eval(popup.protocol('WM_DELETE_WINDOW'))
                 elif decision in ('escape', 'enter_no', 'enter_yes'):
@@ -161,6 +165,21 @@ class GraphicalFlows(unittest.TestCase):
             self.click('back')
         self.assertEqual(self.native_calls,[])
         self.assertEqual(self.provider.calls,[])
+
+    def test_packaged_smoke_checks_all_pages_and_translations_without_os_actions(self):
+        from contextlib import suppress
+        from speedtester_protocol.desktop_controller import PreviewController
+        from speedtester_protocol.desktop_gui import Installer
+        self.confirmation_patcher.stop()
+        window = Installer(PreviewController())
+        try:
+            with patch.dict(os.environ, {'GITHUB_ACTIONS': 'false'}):
+                window.smoke_test()
+        finally:
+            with suppress(self.tk.TclError):
+                window.destroy()
+        self.assertEqual(self.native_calls, [])
+        self.assertEqual(self.provider.calls, [])
 
     def test_status_explains_completed_installation_paused_active_and_blocked_without_measurements(self):
         self.click('install');self.fill();self.click('continue')

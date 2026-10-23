@@ -1,5 +1,55 @@
 # Qualidade e revisão de manutenção
 
+## Quality Gate e cobertura reproduzível
+
+A análise de 23/10/2026 do commit `701cf9780910e1625b99f6aaf95a50556351a207`
+reprovou duas condições: cobertura do código novo de 65,2% (mínimo de 80%) e
+109 ocorrências novas (máximo de zero). Duplicação estava em 0%, aprovada.
+Não se tratava de timeout, autenticação ou indisponibilidade do scanner.
+
+A correção mantém o mesmo gate e a mesma definição de código novo. Funções
+grandes foram separadas por responsabilidade; contratos, confirmações gráficas,
+validações de entrada e testes de exceção passaram por refatoração com regressões.
+Os testes gráficos existentes agora executam com Xvfb na análise. A configuração
+`.coveragerc` inclui também processos Python filhos, e os dados paralelos são
+combinados antes de gerar o XML enviado ao SonarQube. Nenhum módulo de produção
+foi omitido da cobertura para elevar o percentual.
+
+Para reproduzir em Linux, depois de instalar as dependências de desenvolvimento
+e disponibilizar Tk/Xvfb:
+
+```sh
+python -m coverage erase
+SPEEDTESTER_GUI_TESTS=1 PYTHONPATH=app xvfb-run -a python -m coverage run -m unittest discover -s tests -v
+python -m coverage combine
+python -m coverage report
+python -m coverage xml
+```
+
+No macOS ou Windows com sessão gráfica, remova apenas `xvfb-run -a`. Os testes
+usam respostas assinadas sintéticas e adaptadores de sistema simulados; não
+executam medições operacionais nem instalam serviços na estação. Os testes
+destrutivos de ciclo de vida continuam restritos às VMs descartáveis da CI.
+
+### Revisões de aplicabilidade
+
+Dez alertas receberam comentários e classificação individual de falso positivo
+na API do SonarQube. Não foram desativadas regras nem aceitas falhas em bloco:
+
+| Regra | Quantidade | Evidência da revisão |
+| --- | ---: | --- |
+| S1313 | 7 | Destinos públicos de teste pertencentes ao catálogo geográfico versionado, com fonte documentada; não são endereços internos ou credenciais. |
+| S5332 | 1 | IPC vinculado somente ao loopback, sem credenciais de pareamento/medição, com HMAC nas duas direções, proteção contra replay, rejeição de Origin e bypass de proxy. |
+| S2245 | 1 | PRNG determinístico somente para horários reproduzíveis; não gera chaves, identificadores ou autorizações. |
+| S2612 | 1 | Fixture protegida da CI restaura `/opt` para root:root/0755: leitura/execução pública, sem escrita pública; nenhuma permissão de dados privados é relaxada. |
+
+Alterações futuras nesses limites de confiança exigem nova revisão, não a
+reutilização automática dessa classificação. Para investigar outra reprovação,
+consulte `api/qualitygates/project_status?projectKey=speedtester` e os achados da
+mesma revisão analisada. Tokens ficam fora do código e dos relatórios.
+
+## Histórico da revisão inicial
+
 A análise inicial apontou 56 itens de manutenção, sem bugs, vulnerabilidades ou
 hotspots. Foram revisados por categoria:
 

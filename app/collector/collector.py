@@ -24,7 +24,7 @@ from collector.anomaly import is_anomalous_download
 from collector.connectivity import ConnectivitySnapshot, probe_connectivity
 from collector.iperf3_runner import Iperf3Timeout
 from collector.quadrants import local_date_now, plan_day_slots
-from collector.runner_dispatch import run_named_runner
+from collector.runner_dispatch import Iperf3Target, run_named_runner
 from shared.settings import Settings, load_settings
 from shared.observation import start_observation
 
@@ -244,11 +244,10 @@ class Collector:
             isp_lookup_enabled=self.settings.isp_lookup_enabled,
             isp_lookup_timeout_seconds=self.settings.isp_lookup_timeout_seconds,
             ookla_binary=self.settings.ookla_binary,
-            iperf3_server=self.settings.iperf3_server,
-            iperf3_port=self.settings.iperf3_port,
+            iperf3_target=Iperf3Target(self.settings.iperf3_server, self.settings.iperf3_port,
+                                     getattr(self.settings, "iperf3_location", None)),
             iperf3_duration_seconds=self.settings.iperf3_duration_seconds,
             iperf3_parallel_streams=self.settings.iperf3_parallel_streams,
-            iperf3_location=getattr(self.settings, "iperf3_location", None),
             measurement_timeout_seconds=getattr(
                 self.settings, "measurement_timeout_seconds", 60
             ),

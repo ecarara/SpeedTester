@@ -39,7 +39,7 @@ class AccessTests(IntegrationFixture):
         response = self.client.get('/login', follow_redirects=False)
         self.assertEqual(response.status_code, 303)
         self.assertEqual(response.headers['location'], '/')
-        self.assertEqual(self.client.get('/api/auth/session').json()['login_required'], False)
+        self.assertFalse(self.client.get('/api/auth/session').json()['login_required'])
 
     def test_viewer_reads_and_exports_but_cannot_write_even_with_valid_csrf(self):
         csrf = self.sign_in('viewer','viewer-password-example')

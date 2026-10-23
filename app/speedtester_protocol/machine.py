@@ -19,6 +19,8 @@ from .crypto import b64, public_bytes, sign, verify
 from .desktop_links import system_environment
 from .models import MachineReport, MachinePolicy, MachinePermission
 
+PENDING_SUFFIX = ":pending"
+
 CAPABILITY = 'machine-schedule-v1'
 
 
@@ -67,6 +69,41 @@ def machine_identity(origin):
     return {'machine_id': hmac.new(bytes.fromhex(raw), payload, hashlib.sha256).hexdigest(), 'basis': basis}
 
 
+def _request_machine_policy(credentials, measurement_key, config, scope):
+    # Do not derive or send a new identifier merely because discovery
+    # advertises a capability. Confirm the participant's CURRENT consent
+    # and the disclosed privacy version using an authenticated request.
+    request_id = str(uuid4())
+    envelope = credentials.client().request('POST', '/api/v1/machine/permission', {'request_id':request_id})
+    try:
+        permission = MachinePermission.model_validate(verify(envelope, credentials.server_key, 'machine-permission-v1'))
+        now = int(time.time())
+        if ((permission.request_id, permission.client_id) != (request_id,credentials.bundle.client_id)
+                or abs(permission.issued_at-now)>60 or not now<permission.expires_at<=now+300):
+            raise ValueError('permission binding mismatch')
+    except Exception as exc:
+        raise ProtocolError('invalid_machine_permission') from exc
+    pending = credentials.queue.state(scope+PENDING_SUFFIX)
+    if not pending:
+        report = MachineReport(request_id=str(uuid4()), client_id=credentials.bundle.client_id,
+            timezone=config['schedule']['timezone'], **machine_identity(credentials.origin))
+        pending = report.model_dump()
+        credentials.queue.state(scope+PENDING_SUFFIX, pending)
+    reply = credentials.client().request('POST', '/api/v1/machine', sign(pending, measurement_key, 'machine-report-v1'))
+    try:
+        policy = MachinePolicy.model_validate(verify(reply, credentials.server_key, 'machine-policy-v1'))
+        if ((policy.request_id, policy.client_id, policy.machine_id) !=
+                (pending['request_id'], pending['client_id'], pending['machine_id'])):
+            raise ValueError('binding mismatch')
+        from .central_slots import central_zone
+        central_zone(policy.timezone)
+    except Exception as exc:
+        raise ProtocolError('invalid_machine_policy') from exc
+    cached = policy.model_dump()
+    credentials.queue.put_batch([], scope, state_updates={scope+':policy':cached, scope+PENDING_SUFFIX:None})
+    return cached
+
+
 def sync_machine(credentials, measurement_key, config):
     if not credentials.bundle:
         raise ProtocolError('pairing_required')
@@ -80,37 +117,7 @@ def sync_machine(credentials, measurement_key, config):
     scope = credentials.scope + ':machine'
     cached = credentials.queue.state(scope+':policy')
     if not cached:
-        # Do not derive or send a new identifier merely because discovery
-        # advertises a capability. Confirm the participant's CURRENT consent
-        # and the disclosed privacy version using an authenticated request.
-        request_id = str(uuid4())
-        envelope = credentials.client().request('POST', '/api/v1/machine/permission', {'request_id':request_id})
-        try:
-            permission = MachinePermission.model_validate(verify(envelope, credentials.server_key, 'machine-permission-v1'))
-            now = int(time.time())
-            if ((permission.request_id, permission.client_id) != (request_id,credentials.bundle.client_id)
-                    or abs(permission.issued_at-now)>60 or not now<permission.expires_at<=now+300):
-                raise ValueError('permission binding mismatch')
-        except Exception as exc:
-            raise ProtocolError('invalid_machine_permission') from exc
-        pending = credentials.queue.state(scope+':pending')
-        if not pending:
-            report = MachineReport(request_id=str(uuid4()), client_id=credentials.bundle.client_id,
-                timezone=config['schedule']['timezone'], **machine_identity(credentials.origin))
-            pending = report.model_dump()
-            credentials.queue.state(scope+':pending', pending)
-        reply = credentials.client().request('POST', '/api/v1/machine', sign(pending, measurement_key, 'machine-report-v1'))
-        try:
-            policy = MachinePolicy.model_validate(verify(reply, credentials.server_key, 'machine-policy-v1'))
-            if ((policy.request_id, policy.client_id, policy.machine_id) !=
-                    (pending['request_id'], pending['client_id'], pending['machine_id'])):
-                raise ValueError('binding mismatch')
-            from .central_slots import central_zone
-            central_zone(policy.timezone)
-        except Exception as exc:
-            raise ProtocolError('invalid_machine_policy') from exc
-        cached = policy.model_dump()
-        credentials.queue.put_batch([], scope, state_updates={scope+':policy':cached, scope+':pending':None})
+        cached = _request_machine_policy(credentials, measurement_key, config, scope)
     central = {'format':cached['format'], 'timezone':cached['timezone'], 'seed':cached['seed']}
     if config['schedule'] != central:
         config = {**config, 'schedule':central}

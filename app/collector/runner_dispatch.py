@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from typing import Optional
+from dataclasses import dataclass
 
 from collector.iperf3_runner import run_iperf3
 from collector.ookla_runner import run_ookla
@@ -12,6 +13,14 @@ from collector.speedtest_runner import SpeedTestResult, run_speedtest
 
 
 RUNNER_NAMES = ("fast", "ookla", "iperf3")
+
+
+@dataclass(frozen=True)
+class Iperf3Target:
+    """Optional destination and geographic override for the iPerf3 runner."""
+    server: Optional[str] = None
+    port: int = 5201
+    location: Optional[dict] = None
 
 
 def run_named_runner(
@@ -24,12 +33,10 @@ def run_named_runner(
     isp_lookup_enabled: bool,
     isp_lookup_timeout_seconds: float,
     ookla_binary: str = "speedtest",
-    iperf3_server: Optional[str] = None,
-    iperf3_port: int = 5201,
+    iperf3_target: Optional[Iperf3Target] = None,
     iperf3_duration_seconds: int = 10,
     iperf3_parallel_streams: int = 5,
     measurement_timeout_seconds: float = 60.0,
-    iperf3_location: Optional[dict] = None,
 ) -> SpeedTestResult:
     """Run one named speed-test implementation.
 
@@ -42,8 +49,7 @@ def run_named_runner(
         isp_lookup_enabled: Whether best-effort ISP lookup is allowed.
         isp_lookup_timeout_seconds: Timeout for the ISP lookup.
         ookla_binary: Path to the official Ookla executable.
-        iperf3_server: Hostname or address of the iPerf3 server.
-        iperf3_port: iPerf3 TCP port.
+        iperf3_target: Optional host, port and confirmed location.
         iperf3_duration_seconds: Duration of each iPerf3 direction.
         iperf3_parallel_streams: Number of parallel TCP streams.
         measurement_timeout_seconds: Total iPerf3 wall-clock budget.
@@ -70,6 +76,7 @@ def run_named_runner(
     if normalized == "ookla":
         return run_ookla(**common, binary=ookla_binary)
     if normalized == "iperf3":
+        target = iperf3_target or Iperf3Target()
         return run_iperf3(
             duration_seconds=iperf3_duration_seconds,
             share=False,
@@ -78,10 +85,10 @@ def run_named_runner(
             bandwidth_contracted_mbps=bandwidth_contracted_mbps,
             isp_lookup_enabled=isp_lookup_enabled,
             isp_lookup_timeout_seconds=isp_lookup_timeout_seconds,
-            server=iperf3_server,
-            port=iperf3_port,
+            server=target.server,
+            port=target.port,
             parallel_streams=iperf3_parallel_streams,
             timeout_seconds=measurement_timeout_seconds,
-            location=iperf3_location,
+            location=target.location,
         )
     raise ValueError(f"runner inválido: {name!r}; use {', '.join(RUNNER_NAMES)}")

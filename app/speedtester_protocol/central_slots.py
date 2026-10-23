@@ -29,6 +29,18 @@ def central_zone(name):
         raise ValueError('unknown timezone') from exc
 
 
+def _central_offsets(day, quadrant, key, available):
+    offsets = []
+    for counter in range(10000):
+        message = f'{day.isoformat()}:{quadrant}:{counter}'.encode('utf-8')
+        candidate = int.from_bytes(hmac.new(key, message, hashlib.sha256).digest(), 'big') % (available + 1)
+        if all(abs(candidate - old) >= MIN_SLOT_GAP_SECONDS for old in offsets):
+            offsets.append(candidate)
+        if len(offsets) == 2:
+            return sorted(offsets)
+    raise ValueError('could not plan spaced central slots')
+
+
 def plan_central_day_slots(day, timezone_name, seed):
     """v1: HMAC-SHA256 offsets, UTF-8 date:period:counter, big endian modulo."""
     key=bytes.fromhex(seed)
@@ -43,16 +55,6 @@ def plan_central_day_slots(day, timezone_name, seed):
         available=int((end-start).total_seconds())-30-SLOT_END_MARGIN_SECONDS
         if available<MIN_SLOT_GAP_SECONDS:
             raise ValueError('quadrant too short')
-        offsets=[]
-        for counter in range(10000):
-            message=f'{day.isoformat()}:{quadrant}:{counter}'.encode('utf-8')
-            candidate=int.from_bytes(hmac.new(key,message,hashlib.sha256).digest(),'big')%(available+1)
-            if all(abs(candidate-old)>=MIN_SLOT_GAP_SECONDS for old in offsets):
-                offsets.append(candidate)
-            if len(offsets)==2:
-                break
-        if len(offsets)!=2:
-            raise ValueError('could not plan spaced central slots')
-        for index,offset in enumerate(sorted(offsets),start=1):
+        for index,offset in enumerate(_central_offsets(day, quadrant, key, available),start=1):
             planned.append(PlannedSlot(day.isoformat(),quadrant,index,(start+timedelta(seconds=offset)).strftime('%Y-%m-%dT%H:%M:%SZ'),seed))
     return planned

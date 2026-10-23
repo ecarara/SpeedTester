@@ -466,13 +466,15 @@ class LocalControlTests(unittest.TestCase):
         payload = server.authenticate(request)
         self.assertEqual(client.verify_response(payload["nonce"], server.response(payload["nonce"], {"ok": True})), {"ok": True})
         with self.assertRaises(ProtocolError):server.authenticate(request)
-        with self.assertRaises(ProtocolError):client.verify_response("different", server.response(payload["nonce"], {"ok": True}))
+        response = server.response(payload["nonce"], {"ok": True})
+        with self.assertRaises(ProtocolError):client.verify_response("different", response)
         changed = client.request("status");changed["payload"]["operation"] = "enable"
         with self.assertRaises(ProtocolError):server.authenticate(changed)
         expired = Authenticator(self.key, clock=lambda: time.time() - 100).request("status")
         with self.assertRaises(ProtocolError):server.authenticate(expired)
         for _ in range(255):server.authenticate(client.request("status"))
-        with self.assertRaises(ProtocolError):server.authenticate(client.request("status"))
+        limited_request = client.request("status")
+        with self.assertRaises(ProtocolError):server.authenticate(limited_request)
         with self.assertRaises(ProtocolError):server.authenticate(request)
 
     def test_real_loopback_requests_reject_browser_origins_wrong_keys_and_large_bodies(self):
@@ -483,7 +485,8 @@ class LocalControlTests(unittest.TestCase):
             port = server.server_address[1]
             self.assertEqual(ControlClient(self.key, port).call("status")["service"], "running")
             self.assertEqual(dispatch.call_count, 1)
-            with self.assertRaises(urllib.error.HTTPError):ControlClient(secrets.token_bytes(32), port).call("enable")
+            unauthorized = ControlClient(secrets.token_bytes(32), port)
+            with self.assertRaises(urllib.error.HTTPError):unauthorized.call("enable")
             url = f"http://127.0.0.1:{port}/control/v1"
             request = urllib.request.Request(url, data=b"{}", headers={"Origin": "https://attacker.example"})
             with self.assertRaises(urllib.error.HTTPError):urllib.request.urlopen(request, timeout=3)

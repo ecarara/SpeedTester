@@ -115,7 +115,8 @@ class ScheduleTests(unittest.TestCase):
 
     def test_a_changed_policy_cannot_reset_existing_day_quotas(self):
         changed={**self.policy,'timezone':'UTC'}
-        with self.assertRaises(ValueError):DailySchedule(self.queue,changed).refresh(self.base)
+        schedule = DailySchedule(self.queue,changed)
+        with self.assertRaises(ValueError):schedule.refresh(self.base)
 
 
 if __name__=='__main__':unittest.main()

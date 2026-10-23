@@ -249,7 +249,7 @@ async def _run_async(
 # ---------------------------------------------------------------------------
 # fast.com download / upload methodology
 # ---------------------------------------------------------------------------
-async def _get_token(session: "ClientSession") -> str:
+async def _get_token(session: "aiohttp.ClientSession") -> str:
     async with session.get("https://fast.com/") as resp:
         text = await resp.text()
     match = re.search(r'<script src="(.*?)">', text)
@@ -265,7 +265,7 @@ async def _get_token(session: "ClientSession") -> str:
 
 
 async def _get_urls(
-    session: "ClientSession", token: str
+    session: "aiohttp.ClientSession", token: str
 ) -> list[str]:
     params = urllib.parse.urlencode(
         {"https": "true", "token": token, "urlCount": CONCURRENT_CONNECTIONS}
@@ -278,7 +278,7 @@ async def _get_urls(
 
 
 async def _measure_speed(
-    session: "ClientSession",
+    session: "aiohttp.ClientSession",
     urls: list[str],
     direction: str,
     duration_seconds: int,

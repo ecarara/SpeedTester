@@ -117,4 +117,6 @@ class PreviewController:
         return self.state.copy()
 
     def native(self, operation, purge=False):
+        if operation not in {'install', 'repair', 'uninstall'}:
+            raise ValueError('invalid_native_operation')
         return {"ok": True, "reboot_required": False, "data_preserved": not purge}

@@ -7,6 +7,7 @@ import hashlib
 import tempfile
 import time
 import unittest
+import urllib.error
 from pathlib import Path
 from uuid import uuid4
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -159,7 +160,7 @@ class LocalHistoryTests(unittest.TestCase):
         self.assertEqual(
             result["counts"], {"accepted": 17, "pending": 10, "quarantined": 9}
         )
-        self.assertEqual(self.read(metric="latency")["rows"][0]["value"], None)
+        self.assertIsNone(self.read(metric="latency")["rows"][0]["value"])
         self.assertEqual(self.read(metric="tcp_retransmits")["rows"][0]["value"], 0)
 
     def test_query_is_read_only_scoped_and_does_not_return_secrets_or_raw_envelopes(
@@ -364,8 +365,9 @@ class LocalHistoryTests(unittest.TestCase):
             hashlib.sha256(self.queue.path.read_bytes()).digest(), snapshot
         )
         self.assertFalse(client.call("history", {"before": True})["ok"])
-        with self.assertRaises(Exception):
-            ControlClient(secrets.token_bytes(32), port=server.server_port).call(
+        unauthorized = ControlClient(secrets.token_bytes(32), port=server.server_port)
+        with self.assertRaises(urllib.error.HTTPError):
+            unauthorized.call(
                 "history"
             )
         self.assertFalse(engine.wake.is_set())

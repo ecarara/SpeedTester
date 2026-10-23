@@ -166,6 +166,17 @@ def _env_server_ids(name: str, default: list[int]) -> Optional[list[int]]:
         raise ValueError(f"Invalid server IDs for {name}={raw!r}") from exc
 
 
+def _configured_location():
+    if not os.environ.get("SPEEDTESTER_CITY") and not os.environ.get("SPEEDTESTER_LATITUDE"):
+        return None
+    location = {"country_code": os.environ.get("SPEEDTESTER_COUNTRY_CODE", ""),
+                "city": os.environ.get("SPEEDTESTER_CITY", "")}
+    if os.environ.get("SPEEDTESTER_LATITUDE") and os.environ.get("SPEEDTESTER_LONGITUDE"):
+        location.update(latitude=_env_float("SPEEDTESTER_LATITUDE", None),
+                        longitude=_env_float("SPEEDTESTER_LONGITUDE", None))
+    return location
+
+
 def load_settings() -> Settings:
     """Read environment variables and return validated application settings.
 
@@ -200,13 +211,7 @@ def load_settings() -> Settings:
         speedtest_server_ids=_env_server_ids("SPEEDTEST_SERVER_IDS", [29564]),
         ookla_binary=_env_str("OOKLA_BINARY", "speedtest"),
         iperf3_server=(os.environ.get("IPERF3_SERVER") or None),
-        iperf3_location=({
-            "country_code": os.environ.get("SPEEDTESTER_COUNTRY_CODE", ""),
-            "city": os.environ.get("SPEEDTESTER_CITY", ""),
-            **({"latitude": _env_float("SPEEDTESTER_LATITUDE", None),
-                "longitude": _env_float("SPEEDTESTER_LONGITUDE", None)}
-               if os.environ.get("SPEEDTESTER_LATITUDE") and os.environ.get("SPEEDTESTER_LONGITUDE") else {}),
-        } if os.environ.get("SPEEDTESTER_CITY") or os.environ.get("SPEEDTESTER_LATITUDE") else None),
+        iperf3_location=_configured_location(),
         iperf3_port=_env_int("IPERF3_PORT", 5201),
         iperf3_duration_seconds=_env_int("IPERF3_DURATION_SECONDS", 10),
         iperf3_parallel_streams=_env_int("IPERF3_PARALLEL_STREAMS", 5),

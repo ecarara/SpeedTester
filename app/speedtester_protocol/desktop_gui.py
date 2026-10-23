@@ -19,6 +19,9 @@ from .profile_text import uppercase_text
 from .plan import parse_mbps, format_mbps
 from .desktop_history import HistoryScreen
 
+ESCAPE_EVENT = "<Escape>"
+CONFIGURE_EVENT = "<Configure>"
+
 BACKGROUND, PAPER, INK, MUTED, ACCENT = "#f2f1e9", "#ffffff", "#112b2a", "#49615c", "#c1ef55"
 
 
@@ -108,7 +111,7 @@ class Installer(HistoryScreen, tk.Tk):
         yes.pack(side="left")
         no.pack(side="right")
         no.configure(default="active")
-        window.bind("<Escape>", lambda _event: finish())
+        window.bind(ESCAPE_EVENT, lambda _event: finish())
         def enter(_event):
             finish(window.focus_get() == yes)
             return "break"
@@ -152,7 +155,7 @@ class Installer(HistoryScreen, tk.Tk):
             self.label(rail, number + "   " + self.t(key), color=PAPER, size=11, width=205).pack(anchor="w", padx=25, pady=(18, 0))
         for key, command in (("status", self.load_status), ("history", self.open_history)):
             navigation = self.button(rail, key, command)
-            navigation.configure(bg=INK, fg=ACCENT if self.page == ("history" if key == "history" else "status") else PAPER, font=("Helvetica",11,"bold"), padx=10, pady=9)
+            navigation.configure(bg=INK, fg=ACCENT if self.page == key else PAPER, font=("Helvetica",11,"bold"), padx=10, pady=9)
             navigation.pack(fill="x",padx=15,pady=(8,0))
         self.label(rail, self.t("footer")+"\n"+build_label(), color="#94b6a7", size=10, width=200).pack(side="bottom", anchor="w", padx=25, pady=25)
         shell = tk.Frame(self, bg=BACKGROUND)
@@ -201,6 +204,20 @@ class Installer(HistoryScreen, tk.Tk):
             self.button(card, operation, lambda action=operation: self.choose(action), primary=operation == "install").pack(anchor="w")
             self.label(card, self.t(detail), color=MUTED, size=11, width=610).pack(anchor="w", pady=(8, 0))
 
+    def _detect_installation(self):
+        try:
+            return self.controller.call("status")
+        except OSError:
+            return {"ok": True}
+    def _installation_detected(self, result):
+        self.snapshot = result
+        if result.get("configured"):
+            self.configure_existing()
+            self.operation = "upgrade"
+            self.render()
+        else:
+            self.show("configure")
+
     def choose(self, operation):
         if self.busy:
             return
@@ -213,20 +230,7 @@ class Installer(HistoryScreen, tk.Tk):
             if self.ask_confirmation("repair", "repair_confirm"):
                 self.work(lambda: self.controller.native("repair"), lambda _result: self.load_status())
         elif operation == "install":
-            def detect():
-                try:
-                    return self.controller.call("status")
-                except OSError:
-                    return {"ok": True}
-            def detected(result):
-                self.snapshot = result
-                if result.get("configured"):
-                    self.configure_existing()
-                    self.operation = "upgrade"
-                    self.render()
-                else:
-                    self.show("configure")
-            self.work(detect, detected)
+            self.work(self._detect_installation, self._installation_detected)
         else:
             self.show("remove" if operation == "uninstall" else "configure")
 
@@ -237,7 +241,8 @@ class Installer(HistoryScreen, tk.Tk):
         actions = tk.Frame(self.content, bg=BACKGROUND)
         actions.pack(side="bottom", fill="x", pady=(12, 0))
         self.button(actions, "back", lambda: self.show("welcome")).pack(side="left")
-        self.button(actions, "upgrade" if self.operation == "upgrade" else "save" if self.operation == "configure" else "continue", self.install, primary=True).pack(side="right")
+        action = {"upgrade": "upgrade", "configure": "save"}.get(self.operation, "continue")
+        self.button(actions, action, self.install, primary=True).pack(side="right")
         self.data_button = self.button(self.content, "data", self.show_disclosure)
         self.data_button.pack(side="bottom", anchor="w", pady=(8, 0))
         viewport = tk.Frame(self.content, bg=BACKGROUND)
@@ -249,8 +254,8 @@ class Installer(HistoryScreen, tk.Tk):
         canvas.configure(yscrollcommand=scrollbar.set)
         form = tk.Frame(canvas, bg=BACKGROUND)
         item = canvas.create_window((0, 0), window=form, anchor="nw")
-        canvas.bind("<Configure>", lambda event: canvas.itemconfigure(item, width=event.width))
-        form.bind("<Configure>", lambda _event: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind(CONFIGURE_EVENT, lambda event: canvas.itemconfigure(item, width=event.width))
+        form.bind(CONFIGURE_EVENT, lambda _event: canvas.configure(scrollregion=canvas.bbox("all")))
         self.form_canvas = canvas
         def reveal(event):
             canvas.update_idletasks()
@@ -305,6 +310,29 @@ class Installer(HistoryScreen, tk.Tk):
             "contracted_upload_bps": parse_mbps(self.fields["contracted_upload"].get())},
             timezone=self.schedule_timezone, contribute=True).model_dump()
 
+    def _install_configuration(self, action, configuration):
+        if action in ("install", "upgrade"):
+            self.controller.native("install")
+        deadline = time.monotonic() + 45
+        while True:
+            try:
+                status = self.controller.call("status")
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(.5)
+        if action == "install" and status.get("configured"):
+            # A stopped service may only reveal its existing state after the
+            # helper restarts it. Never overwrite it with an empty form.
+            return status
+        if configuration:
+            status = self.controller.call("configure", configuration)
+        else:
+            # Explicit opt-out also pauses the schedule and all contribution.
+            status = self.controller.call("disconnect")
+        return status
+
     def install(self):
         try:
             configuration = self.configuration()
@@ -312,28 +340,6 @@ class Installer(HistoryScreen, tk.Tk):
             messagebox.showerror(self.t("configure"), self.t("invalid"), parent=self)
             return
         action = self.operation
-        def operation():
-            if action in ("install", "upgrade"):
-                self.controller.native("install")
-            deadline = time.monotonic() + 45
-            while True:
-                try:
-                    status = self.controller.call("status")
-                    break
-                except OSError:
-                    if time.monotonic() >= deadline:
-                        raise
-                    time.sleep(.5)
-            if action == "install" and status.get("configured"):
-                # A stopped service may only reveal its existing state after the
-                # helper restarts it. Never overwrite it with an empty form.
-                return status
-            if configuration:
-                status = self.controller.call("configure", configuration)
-            else:
-                # Explicit opt-out also pauses the schedule and all contribution.
-                status = self.controller.call("disconnect")
-            return status
         def completed(result):
             self.snapshot = result
             if configuration and not result.get("paired"):
@@ -341,7 +347,7 @@ class Installer(HistoryScreen, tk.Tk):
                 self.begin_pairing()
             else:
                 self.received_status(result)
-        self.work(operation, completed)
+        self.work(lambda: self._install_configuration(action, configuration), completed)
 
     def page_pair(self):
         self.heading("pair_title", "pair_detail")
@@ -385,7 +391,9 @@ class Installer(HistoryScreen, tk.Tk):
             self.show("status")
             return
         expired = self.pairing_state == "expired" or result.get("code") == "pairing_expired" or (previous and previous["expires_at"] <= time.time())
-        self.pairing_state = "ready" if self.pairing else "expired" if expired else "failed"
+        self.pairing_state = "expired" if expired else "failed"
+        if self.pairing:
+            self.pairing_state = "ready"
         # Stable status polling must not destroy the copyable portal window,
         # keyboard focus or the button the participant is about to click.
         if self.page != "pair" or previous != self.pairing or previous_state != self.pairing_state:
@@ -455,12 +463,12 @@ class Installer(HistoryScreen, tk.Tk):
         self.disclosure_text = text
         note = self.label(content, self.t("data_offline"), color=MUTED, size=10)
         note.pack(fill="x", pady=(12, 8))
-        note.bind("<Configure>", lambda event: note.configure(wraplength=max(100, event.width)))
+        note.bind(CONFIGURE_EVENT, lambda event: note.configure(wraplength=max(100, event.width)))
         actions = tk.Frame(content, bg=BACKGROUND)
         actions.pack(fill="x")
         self.button(actions, "data_portal", lambda: self.open_url(self.fields["origin"].get(), "/data")).pack(side="left")
         self.button(actions, "close", window.destroy).pack(side="right")
-        window.bind("<Escape>", lambda _event: window.destroy())
+        window.bind(ESCAPE_EVENT, lambda _event: window.destroy())
         text.focus_set()
 
     def open_pair(self):
@@ -523,7 +531,7 @@ class Installer(HistoryScreen, tk.Tk):
         content.pack(fill="both", expand=True)
         note = self.label(content, self.t("browser_opening"), size=12)
         note.pack(fill="x", pady=(0, 14))
-        note.bind("<Configure>", lambda event: note.configure(wraplength=max(100, event.width)))
+        note.bind(CONFIGURE_EVENT, lambda event: note.configure(wraplength=max(100, event.width)))
         entry = ttk.Entry(content, width=65)
         entry.insert(0, url)
         entry.configure(state="readonly")
@@ -536,7 +544,7 @@ class Installer(HistoryScreen, tk.Tk):
             self.feedback.configure(text=self.t("link_copied"))
         self.button(actions, "copy_link", copy).pack(side="left")
         self.button(actions, "close", window.destroy).pack(side="right")
-        window.bind("<Escape>", lambda _event: window.destroy())
+        window.bind(ESCAPE_EVENT, lambda _event: window.destroy())
         entry.focus_set()
         entry.selection_range(0, "end")
         self.portal_window, self.portal_entry = window, entry
@@ -554,25 +562,7 @@ class Installer(HistoryScreen, tk.Tk):
                 return {"ok": True, "service": "unavailable"}
         self.work(read, self.received_status)
 
-    def page_status(self):
-        self.heading("status", "status_detail")
-        # Notices and plan rows may grow; account/activation actions must stay visible.
-        actions = tk.Frame(self.content, bg=BACKGROUND)
-        actions.pack(side="bottom", fill="x")
-        viewport = tk.Frame(self.content, bg=BACKGROUND)
-        viewport.pack(fill="both", expand=True)
-        canvas = tk.Canvas(viewport, bg=BACKGROUND, highlightthickness=0)
-        scrollbar = ttk.Scrollbar(viewport, orient="vertical", command=canvas.yview)
-        scrollbar.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-        canvas.configure(yscrollcommand=scrollbar.set)
-        body = tk.Frame(canvas, bg=BACKGROUND)
-        item = canvas.create_window((0, 0), window=body, anchor="nw")
-        canvas.bind("<Configure>", lambda event: canvas.itemconfigure(item, width=event.width))
-        body.bind("<Configure>", lambda _event: canvas.configure(scrollregion=canvas.bbox("all")))
-        self.status_canvas = canvas
-        paired = self.snapshot.get("paired", False)
-        enabled = self.snapshot.get("measurements_enabled", False)
+    def _status_state(self, paired, enabled):
         if not self.snapshot:
             state, detail = "status_unknown", "status_unknown_detail"
         elif self.snapshot.get("service") == "unavailable":
@@ -587,15 +577,74 @@ class Installer(HistoryScreen, tk.Tk):
             state, detail = "tests_active", "tests_active_detail"
         else:
             state, detail = "setup_complete", "setup_complete_detail"
-        panel = tk.Frame(body, bg=PAPER, padx=16, pady=12)
-        panel.pack(fill="x", pady=(0, 12))
-        self.label(panel, self.t(state), bold=True, size=15).pack(fill="x")
+        return state, detail
+
+    def _plan_rows(self, comparison):
+        plan_rows = []
+        for metric in ("download", "upload"):
+            item = comparison.get(metric) or {}
+            if item.get("contracted_bps"):
+                measured = item.get("measured_bps")
+                value = self.t("plan_result").format(contracted=format_mbps(item["contracted_bps"]),
+                    measured=format_mbps(measured), percent=format(item["percent"], ".1f")) if measured is not None else self.t("plan_waiting").format(contracted=format_mbps(item["contracted_bps"]))
+                plan_rows.append(self.t("metric_" + metric) + ": " + value)
+        return plan_rows
+
+    def _status_actions(self, actions, paired, enabled):
+        primary = tk.Frame(actions, bg=BACKGROUND)
+        primary.pack(fill="x", pady=(10, 0))
+        if self.snapshot.get("contribute") and not paired:
+            self.button(primary, "resume_pair", self.begin_pairing, primary=True).pack(side="left")
+        elif paired:
+            key = "pause" if enabled else "enable"
+            activate = self.button(primary, key, lambda action=key: self.schedule(action), primary=True)
+            if not enabled and self.snapshot.get("runner_available") is False:
+                activate.configure(state="disabled")
+            activate.pack(side="left")
+        self.button(primary, "refresh_status", self.load_status).pack(side="right")
+        secondary = tk.Frame(actions, bg=BACKGROUND)
+        secondary.pack(fill="x", pady=(10, 0))
+        for key, command in (("manage", self.configure_existing), ("account", self.open_account),
+                             ("copy_info", self.copy_information), ("home", lambda: self.show("welcome"))):
+            index = ("manage", "account", "copy_info", "home").index(key)
+            button = self.button(secondary, key, command)
+            button.configure(font=("Helvetica", 10, "bold"), pady=8, padx=10)
+            button.grid(row=index // 2, column=index % 2, sticky="w", padx=(0, 8), pady=(0, 6))
+
+
+    def _status_explanation(self, paired, enabled, detail):
         problem = self.snapshot.get("problem") or {}
         code = problem.get("code") or self.snapshot.get("code")
         problem_key = self.status_problem(code)
         if not problem_key and paired and not enabled and self.snapshot.get("runner_available") is False:
             problem_key = "no_runner"
         explanation = self.t("last_notice") + " " + problem_text(self.locale, problem_key, compact=True) if problem_key else self.t(detail)
+        return problem_key, explanation
+
+    def page_status(self):
+        self.heading("status", "status_detail")
+        # Notices and plan rows may grow; account/activation actions must stay visible.
+        actions = tk.Frame(self.content, bg=BACKGROUND)
+        actions.pack(side="bottom", fill="x")
+        viewport = tk.Frame(self.content, bg=BACKGROUND)
+        viewport.pack(fill="both", expand=True)
+        canvas = tk.Canvas(viewport, bg=BACKGROUND, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(viewport, orient="vertical", command=canvas.yview)
+        scrollbar.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+        canvas.configure(yscrollcommand=scrollbar.set)
+        body = tk.Frame(canvas, bg=BACKGROUND)
+        item = canvas.create_window((0, 0), window=body, anchor="nw")
+        canvas.bind(CONFIGURE_EVENT, lambda event: canvas.itemconfigure(item, width=event.width))
+        body.bind(CONFIGURE_EVENT, lambda _event: canvas.configure(scrollregion=canvas.bbox("all")))
+        self.status_canvas = canvas
+        paired = self.snapshot.get("paired", False)
+        enabled = self.snapshot.get("measurements_enabled", False)
+        state, detail = self._status_state(paired, enabled)
+        panel = tk.Frame(body, bg=PAPER, padx=16, pady=12)
+        panel.pack(fill="x", pady=(0, 12))
+        self.label(panel, self.t(state), bold=True, size=15).pack(fill="x")
+        problem_key, explanation = self._status_explanation(paired, enabled, detail)
         self.label(panel, explanation, size=11, width=580,
             color="#705016" if problem_key else MUTED).pack(fill="x", pady=(6, 0))
         zone = (self.snapshot.get("configuration") or {}).get("timezone", self.schedule_timezone)
@@ -616,35 +665,10 @@ class Installer(HistoryScreen, tk.Tk):
                 self.label(row, self.t(key), size=10, width=270).pack(side="left")
                 self.label(row, value, bold=True, size=10, width=360).pack(side="right")
         comparison = self.snapshot.get("plan_comparison") or {}
-        plan_rows = []
-        for metric in ("download", "upload"):
-            item = comparison.get(metric) or {}
-            if item.get("contracted_bps"):
-                measured = item.get("measured_bps")
-                value = self.t("plan_result").format(contracted=format_mbps(item["contracted_bps"]),
-                    measured=format_mbps(measured), percent=format(item["percent"], ".1f")) if measured is not None else self.t("plan_waiting").format(contracted=format_mbps(item["contracted_bps"]))
-                plan_rows.append(self.t("metric_" + metric) + ": " + value)
+        plan_rows = self._plan_rows(comparison)
         if plan_rows:
             self.label(body, "\n".join(plan_rows), size=10, color=MUTED).pack(fill="x", pady=(2, 0))
-        primary = tk.Frame(actions, bg=BACKGROUND)
-        primary.pack(fill="x", pady=(10, 0))
-        if self.snapshot.get("contribute") and not paired:
-            self.button(primary, "resume_pair", self.begin_pairing, primary=True).pack(side="left")
-        elif paired:
-            key = "pause" if enabled else "enable"
-            activate = self.button(primary, key, lambda action=key: self.schedule(action), primary=True)
-            if not enabled and self.snapshot.get("runner_available") is False:
-                activate.configure(state="disabled")
-            activate.pack(side="left")
-        self.button(primary, "refresh_status", self.load_status).pack(side="right")
-        secondary = tk.Frame(actions, bg=BACKGROUND)
-        secondary.pack(fill="x", pady=(10, 0))
-        for key, command in (("manage", self.configure_existing), ("account", self.open_account),
-                             ("copy_info", self.copy_information), ("home", lambda: self.show("welcome"))):
-            index = ("manage", "account", "copy_info", "home").index(key)
-            button = self.button(secondary, key, command)
-            button.configure(font=("Helvetica", 10, "bold"), pady=8, padx=10)
-            button.grid(row=index // 2, column=index % 2, sticky="w", padx=(0, 8), pady=(0, 6))
+        self._status_actions(actions, paired, enabled)
 
     @staticmethod
     def status_problem(code):
@@ -727,6 +751,21 @@ class Installer(HistoryScreen, tk.Tk):
                 self.events.put((False, None, completed))
         threading.Thread(target=worker, daemon=True).start()
 
+    def _finish_work(self, success, result, completed):
+        if success and isinstance(result, dict) and result.get("ok"):
+            try:
+                completed(result)
+            except Exception:
+                # A failed UI callback must not kill the event pump forever.
+                messagebox.showerror(self.t("title"), self.t("error"), parent=self)
+        else:
+            if self.page == "pair" and self.pairing_state == "generating":
+                self.pairing_state = "failed"
+                self.render()
+            code = result.get("code") if isinstance(result, dict) else None
+            key = self.status_problem(code) or "error"
+            messagebox.showerror(self.t("title"), problem_text(self.locale, key), parent=self)
+
     def drain(self):
         try:
             success, result, completed = self.events.get_nowait()
@@ -735,19 +774,7 @@ class Installer(HistoryScreen, tk.Tk):
         else:
             self.busy = False
             self.feedback.configure(text="")
-            if success and isinstance(result, dict) and result.get("ok"):
-                try:
-                    completed(result)
-                except Exception:
-                    # A failed UI callback must not kill the event pump forever.
-                    messagebox.showerror(self.t("title"), self.t("error"), parent=self)
-            else:
-                if self.page == "pair" and self.pairing_state == "generating":
-                    self.pairing_state = "failed"
-                    self.render()
-                code = result.get("code") if isinstance(result, dict) else None
-                key = self.status_problem(code) or "error"
-                messagebox.showerror(self.t("title"), problem_text(self.locale, key), parent=self)
+            self._finish_work(success, result, completed)
         try:
             while True:
                 origin = self.portal_requests.get_nowait()
@@ -768,60 +795,60 @@ class Installer(HistoryScreen, tk.Tk):
         if not self.busy:
             self.destroy()
 
-    def smoke_test(self):
-        # Real Tk widgets and all translations; the controller never touches I/O.
-        for locale in TEXT:
-            self.locale = locale
-            confirmation_errors = []
-            def dismiss_confirmation():
-                popup = self.confirmation_window
-                if not popup.winfo_viewable():
-                    self.after(20, dismiss_confirmation)
-                    return
-                try:
-                    buttons = [w for child in popup.winfo_children() for w in child.winfo_children() if isinstance(w, tk.Button)]
-                    assert {w.cget("text") for w in buttons} == {self.t("yes"), self.t("no")}
-                    next(w for w in buttons if w.cget("text") == self.t("no")).invoke()
-                except Exception as exc:
-                    confirmation_errors.append(exc)
-                    popup.destroy()
-            self.after(20, dismiss_confirmation)
-            assert not self.ask_confirmation("enable", "enable_confirm")
-            assert not confirmation_errors, confirmation_errors
-            for page in ("welcome", "configure", "pair", "status", "history", "remove"):
-                self.show(page)
-                self.update()
-                assert self.winfo_exists()
-                assert CLIENT_VERSION in self.title()
-                if page=="configure":
-                    assert not {"host", "port", "hours"}.intersection(self.fields)
-                    assert self.t("schedule_short").format(timezone=self.schedule_timezone)
-                    before = {key: value.get() for key, value in self.fields.items()}
-                    self.fields["origin"].set("not a valid server address")
-                    before["origin"] = self.fields["origin"].get()
-                    self.data_button.invoke()
-                    self.update()
-                    assert self.disclosure_window.winfo_exists()
-                    assert self.disclosure_window.title() == self.t("data")
-                    original_window = self.disclosure_window
-                    self.data_button.invoke()
-                    assert self.disclosure_window is original_window
-                    body = self.disclosure_text.get("1.0", "end")
-                    for title, description in DISCLOSURE_CATALOG[locale]["sections"]:
-                        assert title in body and description in body
-                    assert self.disclosure_text.cget("state") == "disabled"
-                    self.disclosure_text.yview_moveto(1)
-                    self.update()
-                    assert self.disclosure_text.yview()[1] == 1.0
-                    self.disclosure_window.destroy()
-                    assert {key: value.get() for key, value in self.fields.items()} == before
-                    self.show_portal_link("https://server.example/data?locale="+locale)
-                    self.update()
-                    for window in self.winfo_children():
-                        if isinstance(window, tk.Toplevel):
-                            window.destroy()
+    def _smoke_dismiss_confirmation(self, popup):
+        buttons = [widget for child in popup.winfo_children()
+                   for widget in child.winfo_children() if isinstance(widget, tk.Button)]
+        assert {widget.cget("text") for widget in buttons} == {self.t("yes"), self.t("no")}
+        next(widget for widget in buttons if widget.cget("text") == self.t("no")).invoke()
+
+    def _smoke_confirmation(self):
+        confirmation_errors = []
+        def dismiss_confirmation():
+            popup = self.confirmation_window
+            if not popup.winfo_viewable():
+                self.after(20, dismiss_confirmation)
+                return
+            try:
+                self._smoke_dismiss_confirmation(popup)
+            except Exception as exc:
+                confirmation_errors.append(exc)
+                popup.destroy()
+        self.after(20, dismiss_confirmation)
+        assert not self.ask_confirmation("enable", "enable_confirm")
+        assert not confirmation_errors, confirmation_errors
+
+    def _smoke_configuration(self, locale):
+        assert not {"host", "port", "hours"}.intersection(self.fields)
+        assert self.t("schedule_short").format(timezone=self.schedule_timezone)
+        before = {key: value.get() for key, value in self.fields.items()}
+        self.fields["origin"].set("not a valid server address")
+        before["origin"] = self.fields["origin"].get()
+        self.data_button.invoke()
+        self.update()
+        assert self.disclosure_window.winfo_exists()
+        assert self.disclosure_window.title() == self.t("data")
+        original_window = self.disclosure_window
+        self.data_button.invoke()
+        assert self.disclosure_window is original_window
+        body = self.disclosure_text.get("1.0", "end")
+        for title, description in DISCLOSURE_CATALOG[locale]["sections"]:
+            assert title in body
+            assert description in body
+        assert self.disclosure_text.cget("state") == "disabled"
+        self.disclosure_text.yview_moveto(1)
+        self.update()
+        assert self.disclosure_text.yview()[1] >= 1.0
+        self.disclosure_window.destroy()
+        assert {key: value.get() for key, value in self.fields.items()} == before
+        self.show_portal_link("https://server.example/data?locale=" + locale)
+        self.update()
+        for window in self.winfo_children():
+            if isinstance(window, tk.Toplevel):
+                window.destroy()
+
+    def _smoke_timezone_database(self):
         from zoneinfo import ZoneInfo, reset_tzpath, TZPATH
-        paths=TZPATH
+        paths = TZPATH
         try:
             reset_tzpath(())
             ZoneInfo.clear_cache()
@@ -830,6 +857,20 @@ class Installer(HistoryScreen, tk.Tk):
         finally:
             reset_tzpath(paths)
             ZoneInfo.clear_cache()
+
+    def smoke_test(self):
+        # Real Tk widgets and all translations; the controller never touches I/O.
+        for locale in TEXT:
+            self.locale = locale
+            self._smoke_confirmation()
+            for page in ("welcome", "configure", "pair", "status", "history", "remove"):
+                self.show(page)
+                self.update()
+                assert self.winfo_exists()
+                assert CLIENT_VERSION in self.title()
+                if page=="configure":
+                    self._smoke_configuration(locale)
+        self._smoke_timezone_database()
         import os
         if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted":
             from .machine import machine_identity

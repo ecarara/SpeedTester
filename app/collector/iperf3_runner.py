@@ -28,6 +28,21 @@ class Iperf3Timeout(RuntimeError):
     """Raised when one complete iPerf3 measurement exceeds its wall-clock budget."""
 
 
+def _initial_identity(server, location, enabled, timeout, deadline):
+    if (server and server.strip()) or location:
+        return {}
+    if not enabled:
+        raise TargetSelectionError("A localização automática está desativada. Confirme sua localização ou informe um servidor opcional.")
+    return resolve_network_identity(min(timeout, _remaining_timeout(deadline)))
+
+
+def _enrich_identity(identity, enabled, timeout, deadline):
+    remaining = max(deadline - time.monotonic(), 0.0)
+    if enabled and not identity and remaining > 0.1:
+        return resolve_network_identity(min(timeout, remaining))
+    return identity
+
+
 def run_iperf3(
     duration_seconds: int = 10,
     share: bool = False,
@@ -54,11 +69,7 @@ def run_iperf3(
     deadline = started + timeout_seconds
     if binary == "iperf3":
         binary = iperf_binary()
-    identity = {}
-    if (not server or not server.strip()) and not location:
-        if not isp_lookup_enabled:
-            raise TargetSelectionError("A localização automática está desativada. Confirme sua localização ou informe um servidor opcional.")
-        identity = resolve_network_identity(min(isp_lookup_timeout_seconds, _remaining_timeout(deadline)))
+    identity = _initial_identity(server, location, isp_lookup_enabled, isp_lookup_timeout_seconds, deadline)
     target = select_target(server, port, location=location or identity)
     server, port = target.host, target.port
     upload_metrics = _run_once_metrics(
@@ -92,14 +103,8 @@ def run_iperf3(
     retransmits = _sum_optional(
         upload_metrics.retransmits, download_metrics.retransmits
     )
-    if isp_lookup_enabled:
-        # Metadata enrichment is optional and must not extend the 60s
-        # measurement budget.  Skip it when the budget has already elapsed.
-        remaining_for_identity = max(deadline - time.monotonic(), 0.0)
-        if not identity and remaining_for_identity > 0.1:
-            identity = resolve_network_identity(
-                min(isp_lookup_timeout_seconds, remaining_for_identity)
-            )
+    # Optional enrichment shares the total measurement deadline.
+    identity = _enrich_identity(identity, isp_lookup_enabled, isp_lookup_timeout_seconds, deadline)
     return SpeedTestResult(
         download_mbps=download_metrics.speed_mbps,
         upload_mbps=upload_metrics.speed_mbps,

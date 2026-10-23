@@ -94,7 +94,8 @@ class ControlHandler(BaseHTTPRequestHandler):
         self.connection.settimeout(3)
 
     def log_message(self, *_args):
-        pass
+        # IPC diagnostics must never print request bodies or local credentials.
+        return
 
     def do_POST(self):
         self.connection.settimeout(3)

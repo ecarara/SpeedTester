@@ -2,6 +2,8 @@
 # Copyright (C) 2026 Edson Angelo Carara
 """Locate the Xlib locale payload belonging to the frozen Linux runtime."""
 import os
+import subprocess
+import time
 from pathlib import Path
 import sys
 
@@ -89,6 +91,25 @@ def bind_dead_keys(entry):
         entry.bind(sequence, composer.reset, add="+")
     return composer
 
+def _type_smoke_keys(window, entry, keys, expected=None):
+    if expected is not None:
+        from .profile_text import uppercase_text
+        expected = uppercase_text(expected)
+    entry.delete(0, "end")
+    entry.focus_force()
+    window.update()
+    subprocess.run(["xdotool", "key", "--clearmodifiers", *keys], check=True, timeout=10)
+    deadline = time.monotonic() + (3 if expected is not None else .3)
+    while time.monotonic() < deadline:
+        window.update()
+        if expected is not None and entry.get() == expected:
+            return
+        time.sleep(.01)
+    if expected is not None:
+        raise AssertionError("ABNT2 expected " + repr(expected) + "; got " + repr(entry.get()))
+
+
+
 def smoke_dead_keys(window):
     """Real key events on disposable CI displays, including unavailable XIM."""
     import subprocess
@@ -102,23 +123,6 @@ def smoke_dead_keys(window):
     window.update()
     assert "host" not in window.fields and "port" not in window.fields
 
-    def type_keys(entry, keys, expected=None):
-        if expected is not None:
-            from .profile_text import uppercase_text
-            expected = uppercase_text(expected)
-        entry.delete(0, "end")
-        entry.focus_force()
-        window.update()
-        subprocess.run(["xdotool", "key", "--clearmodifiers", *keys], check=True, timeout=10)
-        deadline = time.monotonic() + (3 if expected is not None else .3)
-        while time.monotonic() < deadline:
-            window.update()
-            if expected is not None and entry.get() == expected:
-                return
-            time.sleep(.01)
-        if expected is not None:
-            raise AssertionError("ABNT2 expected " + repr(expected) + "; got " + repr(entry.get()))
-
     keys = ["S", "dead_tilde", "a", "o"]
     if fallback:
         # Establish that this display/input mode reproduces the actual failure.
@@ -127,7 +131,7 @@ def smoke_dead_keys(window):
         # A synthetic control must remain visible regardless of form height.
         control.place(x=270, y=170, width=230, height=32)
         window.update()
-        type_keys(control, keys)
+        _type_smoke_keys(window, control, keys)
         assert control.get() == "S~ao", "Control did not reproduce raw dead keys: " + repr(control.get())
         control.destroy()
     entry = window.entries["region"]
@@ -140,7 +144,7 @@ def smoke_dead_keys(window):
         ("~", ["dead_tilde", "space"]),
         ("S~ao", ["S", "dead_tilde", "space", "a", "o"]),
     ]:
-        type_keys(entry, keys, expected)
+        _type_smoke_keys(window, entry, keys, expected)
     # Pasting must never repair or reinterpret literal text.
     entry.delete(0, "end")
     window.clipboard_clear()
@@ -149,17 +153,17 @@ def smoke_dead_keys(window):
     window.update()
     assert entry.get() == "S~AO / SÃO / Ç / MÉXICO"
     if fallback:
-        type_keys(entry, ["dead_tilde", "BackSpace", "a"], "a")
-        type_keys(entry, ["dead_acute", "Escape", "e"], "e")
-        type_keys(entry, ["a", "b"], "ab")
+        _type_smoke_keys(window, entry, ["dead_tilde", "BackSpace", "a"], "a")
+        _type_smoke_keys(window, entry, ["dead_acute", "Escape", "e"], "e")
+        _type_smoke_keys(window, entry, ["a", "b"], "ab")
         entry.selection_range(0, "end")
         subprocess.run(["xdotool", "key", "dead_tilde", "a"], check=True, timeout=10)
         for _ in range(30):
             window.update()
             time.sleep(.01)
         assert entry.get() == "Ã"
-        type_keys(entry, ["dead_tilde"], "")
+        _type_smoke_keys(window, entry, ["dead_tilde"], "")
         city = window.entries["city"]
-        type_keys(city, ["a"], "a")
-        type_keys(entry, ["a"], "a")
+        _type_smoke_keys(window, city, ["a"], "a")
+        _type_smoke_keys(window, entry, ["a"], "a")
     print("packaged_linux_dead_keys_ok: " + ("unavailable-XIM control=S~ao; fallback=SÃO" if fallback else "native-XIM"), flush=True)

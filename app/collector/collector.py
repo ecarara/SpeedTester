@@ -14,6 +14,7 @@ import signal
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
+from dataclasses import replace
 from contextlib import contextmanager
 from threading import Event, Thread
 from typing import Optional
@@ -27,6 +28,14 @@ from collector.quadrants import local_date_now, plan_day_slots
 from collector.runner_dispatch import Iperf3Target, run_named_runner
 from shared.settings import Settings, load_settings
 from shared.observation import start_observation
+
+
+def _with_target_evidence(snapshot, source):
+    """Attach bounded destination diagnostics without changing probe evidence."""
+    attempts = getattr(source, "target_attempts", None)
+    if not attempts:
+        return snapshot
+    return replace(snapshot, evidence={**snapshot.evidence, "target_attempts": attempts})
 
 
 class ConnectivityFailure(RuntimeError):
@@ -190,7 +199,7 @@ class Collector:
             power_state="UNKNOWN",
             gateway_reachable=connectivity.gateway_reachable,
             external_reachable=connectivity.external_reachable,
-            evidence_json=json.dumps(connectivity.evidence, sort_keys=True),
+            evidence_json=json.dumps(_with_target_evidence(connectivity, result).evidence, sort_keys=True),
         )
         sample_id = self.store.add_sample(sample)
         self._evaluate_alerts(sample, sample_id)
@@ -211,7 +220,8 @@ class Collector:
         try:
             result = self._dispatch_speedtest()
         except Exception as exc:
-            self._record_attempt("timeout" if isinstance(exc, Iperf3Timeout) else "error", str(exc)[:400], {})
+            metrics = {"target_attempts": getattr(exc, "target_attempts", [])}
+            self._record_attempt("timeout" if isinstance(exc, Iperf3Timeout) else "error", str(exc)[:400], metrics)
             raise
         metrics = {name: getattr(result, name, None) for name in (
             "download_mbps", "upload_mbps", "ping_ms", "jitter_ms", "duration_sec",
@@ -219,7 +229,7 @@ class Collector:
             "server_name", "interface", "isp", "country", "country_code", "city",
             "public_ip", "isp_organization", "asn", "isp_source", "isp_confidence",
             "isp_observed_at", "transfer_bytes", "target_selection",
-            "target_distance_km", "target_catalog_revision", "server_location")}
+            "target_distance_km", "target_catalog_revision", "server_location", "target_attempts")}
         self._record_attempt("candidate", None, metrics)
         return result
 
@@ -354,7 +364,7 @@ class Collector:
             cause=cause,
             origin="MEASUREMENT",
             note=str(exc)[:400],
-            snapshot=connectivity,
+            snapshot=_with_target_evidence(connectivity, exc),
         )
 
     def _save_failure(

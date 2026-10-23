@@ -16,6 +16,20 @@ desempatar destinos na mesma cidade. Não mede todos os destinos nem escolhe
 o resultado mais alto. A resolução de localização participa do limite total
 de 60 segundos; instalar não executa teste de banda.
 
+Se o destino automático recusar a conexão ou informar que está ocupado antes
+de produzir o primeiro resultado de upload, o coletor tenta o próximo da mesma
+ordenação. São no máximo três destinos por tentativa, incluindo o primeiro,
+todos compartilhando o mesmo orçamento de 60 segundos, inclusive geolocalização,
+upload, download e ping. Não há varredura de hosts nem comparação de velocidades
+para escolher um resultado favorável.
+
+Depois de um upload bem-sucedido, o download usa obrigatoriamente o mesmo
+destino. Uma falha posterior não mistura resultados entre servidores. Velocidade
+baixa não provoca troca de destino: continua submetida à regra de anomalia já
+existente. Timeouts mantêm a política de diagnóstico de conectividade e nova
+primeira tentativa; não são convertidos em conexão recusada. Um servidor manual
+nunca é substituído automaticamente.
+
 O catálogo inicial fica em `app/collector/target_selection.py`, com data e
 fonte explícitas: [catálogo público iPerf3](https://github.com/R0GGER/public-iperf3-servers).
 Os hosts/portas e suporte a upload/download foram conferidos nos metadados
@@ -24,6 +38,11 @@ capacidade anunciada, disponibilidade e proximidade geográfica não garantem
 roteamento, velocidade ou SLA. O destino efetivo é persistido com cada
 resultado; modo de seleção, distância estimada e revisão do catálogo ficam
 no registro de tentativa.
+O histórico de destinos tentados (`target_attempts`) também é persistido nos
+metadados da tentativa e na evidência da amostra, inclusive quando todos falham.
+Os erros mostram host/porta e a mensagem do iPerf3 sem o envelope de informações
+do sistema. Conexão recusada/servidor ocupado permanece erro de medição, não
+prova de indisponibilidade da operadora. Registros antigos são preservados.
 
 Se a consulta retornar somente cidade/país, o resultado registra explicitamente
 a precisão reduzida (`automatic-city` ou `automatic-country`). Se não houver

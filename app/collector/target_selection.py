@@ -8,7 +8,7 @@ packets to candidates and never uses throughput to choose a favorable result.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import ipaddress
 import math
 import re
@@ -101,16 +101,21 @@ def distance_km(origin, destination):
 
 
 def select_target(host=None, port=5201, *, location=None, targets=TARGETS):
-    """Manual host wins. Otherwise use the nearest catalog city by distance.
+    """Return the first geographically ranked destination, without probing."""
+    return rank_targets(host, port, location=location, targets=targets)[0]
+
+
+def rank_targets(host=None, port=5201, *, location=None, targets=TARGETS):
+    """Manual host wins; otherwise order the finite catalog by geography.
 
     If IP geolocation has only a city or country, return an explicitly coarse
     match. If it has no location at all, fail rather than choose a random host.
+    This function performs no network I/O and never ranks by measured speed.
     """
-    from dataclasses import replace
     if type(port) is not int or not 1 <= port <= 65535:
         raise ValueError("porta de medição inválida")
     if host and host.strip():
-        return Target(validate_host(host), port, mode="manual")
+        return (Target(validate_host(host), port, mode="manual"),)
     location = location or {}
     available = [t for t in targets if coordinates({"latitude": t.latitude, "longitude": t.longitude})]
     if not available:
@@ -118,13 +123,18 @@ def select_target(host=None, port=5201, *, location=None, targets=TARGETS):
     origin = coordinates(location)
     if origin:
         ranked = [(distance_km(origin, (t.latitude, t.longitude)), t) for t in available]
-        distance, target = min(ranked, key=lambda pair: (round(pair[0], 3), -pair[1].capacity_gbps, pair[1].host))
-        return replace(target, distance_km=round(distance, 1))
+        ranked.sort(key=lambda pair: (round(pair[0], 3), -pair[1].capacity_gbps, pair[1].host, pair[1].port))
+        return tuple(replace(target, distance_km=round(distance, 1)) for distance, target in ranked)
+    return _coarse_targets(location, available)
+
+
+def _coarse_targets(location, available):
     country, city = _key(location.get("country_code")), _key(location.get("city"))
     exact = [t for t in available if country and _key(t.country_code) == country and city and _key(t.city) == city]
     regional = [t for t in available if country and _key(t.country_code) == country]
     candidates = exact or regional
     if candidates:
-        target = min(candidates, key=lambda t: (-t.capacity_gbps, t.city, t.host))
-        return replace(target, mode="automatic-city" if exact else "automatic-country")
+        candidates.sort(key=lambda t: (-t.capacity_gbps, t.city, t.host, t.port))
+        mode = "automatic-city" if exact else "automatic-country"
+        return tuple(replace(target, mode=mode) for target in candidates)
     raise TargetSelectionError("Não foi possível detectar sua localização. Confirme país/cidade na configuração ou informe um servidor de medição opcional.")

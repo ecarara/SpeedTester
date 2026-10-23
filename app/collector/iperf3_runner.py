@@ -13,7 +13,7 @@ from typing import Optional
 from collector.network_metrics import measure_ping
 from collector.network_identity import resolve_network_identity
 from collector.speedtest_runner import SpeedTestResult, _detect_interface
-from collector.target_selection import select_target, TargetSelectionError, CATALOG_REVISION
+from collector.target_selection import rank_targets, TargetSelectionError, CATALOG_REVISION
 from shared.native_tools import iperf_binary
 
 
@@ -26,6 +26,66 @@ class IperfRunMetrics:
 
 class Iperf3Timeout(RuntimeError):
     """Raised when one complete iPerf3 measurement exceeds its wall-clock budget."""
+
+
+class Iperf3TargetUnavailable(RuntimeError):
+    """Connection refused or server busy before any throughput result exists."""
+
+
+MAX_AUTOMATIC_TARGETS = 3
+
+
+def _target_evidence(target, outcome, detail=None):
+    return {"server_name": f"iperf3:{target.host}:{target.port}",
+            "target_selection": target.mode, "target_distance_km": target.distance_km,
+            "server_location": f"{target.city}, {target.country_code}" if target.city else None,
+            "target_catalog_revision": CATALOG_REVISION if target.mode != "manual" else None,
+            "outcome": outcome, "detail": detail}
+
+
+def _upload_on_available_target(targets, execute, deadline):
+    """Try at most three ordered targets, only before a successful upload.
+
+    Refusal/busy is not an internet timeout. Timeouts and all other errors keep
+    their original type, so collector connectivity diagnostics still apply.
+    """
+    if not targets:
+        raise TargetSelectionError("Nenhum destino de medição disponível no catálogo.")
+    attempts = []
+    for target in targets[:MAX_AUTOMATIC_TARGETS]:
+        remaining = _target_timeout(deadline, attempts)
+        try:
+            metrics = execute(target, remaining)
+        except RuntimeError as exc:
+            attempts.append(_target_evidence(target, "error", str(exc)[:400]))
+            exc.target_attempts = attempts
+            if not isinstance(exc, Iperf3TargetUnavailable) or target.mode == "manual":
+                raise
+            last_error = exc
+        else:
+            attempts.append(_target_evidence(target, "selected"))
+            return target, metrics, attempts
+    raise last_error
+
+
+def _target_timeout(deadline, attempts):
+    try:
+        return _remaining_timeout(deadline)
+    except Iperf3Timeout as exc:
+        exc.target_attempts = attempts
+        raise
+
+
+def _failure_detail(completed):
+    """Extract iPerf's error, not its machine/system-info JSON envelope."""
+    detail = (completed.stderr or completed.stdout or "sem detalhes").strip()
+    try:
+        payload = json.loads(completed.stdout)
+    except (TypeError, ValueError):
+        return detail[-240:]
+    if isinstance(payload, dict) and isinstance(payload.get("error"), str):
+        return payload["error"][:240]
+    return detail[-240:]
 
 
 def _initial_identity(server, location, enabled, timeout, deadline):
@@ -58,7 +118,7 @@ def run_iperf3(
     timeout_seconds: float = 60.0,
     location: Optional[dict] = None,
 ) -> SpeedTestResult:
-    """Run upload and reverse/download iperf3 tests against one server."""
+    """Use one live geographic target, or exactly the user's manual target."""
     del share, server_ids, max_bytes
     if duration_seconds < 1 or parallel_streams < 1:
         raise ValueError("iperf3 duration and parallel streams must be positive")
@@ -70,26 +130,22 @@ def run_iperf3(
     if binary == "iperf3":
         binary = iperf_binary()
     identity = _initial_identity(server, location, isp_lookup_enabled, isp_lookup_timeout_seconds, deadline)
-    target = select_target(server, port, location=location or identity)
+    targets = rank_targets(server, port, location=location or identity)
+
+    def upload(target, remaining):
+        return _run_once_metrics(binary, target.host, target.port, duration_seconds,
+                                 parallel_streams, reverse=False, timeout_seconds=remaining)
+
+    target, upload_metrics, target_attempts = _upload_on_available_target(targets, upload, deadline)
     server, port = target.host, target.port
-    upload_metrics = _run_once_metrics(
-        binary,
-        server,
-        port,
-        duration_seconds,
-        parallel_streams,
-        reverse=False,
-        timeout_seconds=_remaining_timeout(deadline),
-    )
-    download_metrics = _run_once_metrics(
-        binary,
-        server,
-        port,
-        duration_seconds,
-        parallel_streams,
-        reverse=True,
-        timeout_seconds=_remaining_timeout(deadline),
-    )
+    try:
+        download_metrics = _run_once_metrics(
+            binary, server, port, duration_seconds, parallel_streams,
+            reverse=True, timeout_seconds=_remaining_timeout(deadline))
+    except RuntimeError as exc:
+        target_attempts[-1] = _target_evidence(target, "download_error", str(exc)[:400])
+        exc.target_attempts = target_attempts
+        raise
     remaining = _remaining_timeout(deadline)
     if remaining <= 5.0:
         raise Iperf3Timeout(
@@ -120,6 +176,7 @@ def run_iperf3(
         target_selection=target.mode,
         target_distance_km=target.distance_km,
         target_catalog_revision=CATALOG_REVISION if target.mode != "manual" else None,
+        target_attempts=target_attempts,
         country=identity.get("country"),
         interface=_detect_interface(),
         bandwidth_contracted_mbps=bandwidth_contracted_mbps,
@@ -198,8 +255,11 @@ def _run_once_metrics(
             ) from exc
         raise RuntimeError("iperf3 excedeu o timeout") from exc
     if completed.returncode != 0:
-        detail = (completed.stderr or completed.stdout or "sem detalhes").strip()
-        raise RuntimeError(f"iperf3 falhou ({completed.returncode}): {detail[-400:]}")
+        detail = _failure_detail(completed)
+        message = f"iperf3 {server}:{port} falhou ({completed.returncode}): {detail}"
+        if any(marker in detail.lower() for marker in ("connection refused", "server is busy")):
+            raise Iperf3TargetUnavailable(message)
+        raise RuntimeError(message)
 
     try:
         payload = json.loads(completed.stdout)

@@ -88,6 +88,7 @@ class SpeedTestResult:
     target_selection: Optional[str] = None
     target_distance_km: Optional[float] = None
     target_catalog_revision: Optional[str] = None
+    target_attempts: Optional[list[dict]] = None
 
 
 def run_speedtest(

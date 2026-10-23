@@ -46,6 +46,30 @@ em <https://github.com/ecarara/SpeedTester>.
   existente;
 - documentação do épico E-01 e testes unitários do launcher.
 
+## [0.4.38] - 2026-10-23
+
+### Corrigido
+
+- Seleção automática tenta até três destinos iPerf3 em ordem geográfica quando
+  há conexão recusada ou servidor ocupado antes do primeiro upload, dentro do
+  mesmo limite de 60 segundos por tentativa. O destino manual é preservado.
+- Upload e download permanecem no mesmo servidor; resultado baixo, timeout ou
+  falha posterior ao upload não provocam escolha de um resultado mais favorável.
+- Erros mostram host/porta e mensagem concisa; os destinos tentados ficam
+  persistidos na tentativa e na evidência da amostra, sem atribuir recusa do
+  servidor à operadora e sem apagar o histórico existente.
+- A detecção auxiliar da interface respeita o tempo restante da medição.
+
+### Qualidade e atualização
+
+- Quality Gate restaurado sem reduzir critérios ou alterar o baseline:
+  cobertura de código novo de 84,8%, zero novos problemas e 0% de duplicação.
+- 380 testes aprovados; regressões de escolha geográfica, persistência,
+  orçamento de tempo e interface, além de validação nativa nos três sistemas.
+- Atualização sem migração de schema: preserva configurações e dados existentes.
+  Distribuição GPL-3.0-or-later com os mesmos formatos de instalador, código-fonte,
+  SBOM e SHA-256. As limitações de assinatura/notarização continuam documentadas.
+
 ## [0.2.1] - 2026-10-11
 
 - Snapshot e restauração do deploy usam rotulagem privada de bind mounts em

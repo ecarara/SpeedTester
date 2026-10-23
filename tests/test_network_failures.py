@@ -51,8 +51,9 @@ class ConnectivityTests(unittest.TestCase):
 
 class RunnerFailureTests(unittest.TestCase):
     def test_iperf_errors_do_not_become_zero_bandwidth(self):
-        for args in ({}, {'server':'example.com','duration_seconds':0},{'server':'example.com','timeout_seconds':0}):
-            with self.assertRaises((RuntimeError,ValueError)):run_iperf3(**args)
+        with patch('collector.iperf3_runner.resolve_network_identity', return_value={}):
+            for args in ({}, {'server':'example.com','duration_seconds':0},{'server':'example.com','timeout_seconds':0}):
+                with self.assertRaises((RuntimeError,ValueError)):run_iperf3(**args)
         for failure in (FileNotFoundError(),subprocess.TimeoutExpired('iperf3',1)):
             with patch('collector.iperf3_runner.subprocess.run',side_effect=failure):
                 with self.assertRaises(RuntimeError):_run_once_metrics('iperf3','example.com',5201,1,1,False)

@@ -102,6 +102,8 @@ def _copy_windows_runtime(bundle, binary, tools, pins, work, environment, versio
 
 
 def build(bundle, version):
+    # Native verification changes cwd; never resolve the binary relative to it.
+    bundle = bundle.resolve()
     pins = json.loads((ROOT/'security/iperf3.json').read_text())
     work = ROOT/'build/native-iperf'
     work.mkdir(parents=True, exist_ok=True)

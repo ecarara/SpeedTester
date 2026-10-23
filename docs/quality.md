@@ -30,6 +30,10 @@ No macOS ou Windows com sessão gráfica, remova apenas `xvfb-run -a`. Os testes
 usam respostas assinadas sintéticas e adaptadores de sistema simulados; não
 executam medições operacionais nem instalam serviços na estação. Os testes
 destrutivos de ciclo de vida continuam restritos às VMs descartáveis da CI.
+Na análise Linux, a CI também compila o iPerf3 de fonte com checksum fixado e
+executa o contrato RSA já existente, exclusivamente em loopback com 8 KiB de
+payload. Essa cobertura de empacotamento é combinada com a suíte; não é uma
+medição da conexão do usuário nem uma autorização para testar destinos externos.
 
 ### Revisões de aplicabilidade
 

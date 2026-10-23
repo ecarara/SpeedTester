@@ -578,6 +578,33 @@ async def _one_rtt(host: str, timeout: float) -> float:
                 pass
 
 
+def _eligible_interface(line: str) -> Optional[str]:
+    """Keep the existing active-link and virtual/link-local exclusions."""
+    parts = line.split()
+    if len(parts) < 2:
+        return None
+    iface = parts[0]
+    if iface == "lo" or iface.startswith(("veth", "br-")):
+        return None
+    if "LOWER_UP" not in line or "169.254" in line:
+        return None
+    return iface
+
+
+def _preferred_interface(output: str) -> Optional[str]:
+    """First eligible wired link wins; otherwise keep the first wireless."""
+    wireless = None
+    for line in output.splitlines():
+        iface = _eligible_interface(line)
+        if iface is None:
+            continue
+        if iface.startswith(("eth", "enp", "ene", "ens", "enx", "ecm", "enq", "enO")):
+            return iface
+        if wireless is None and iface.startswith(("wl", "wlan", "wlp")):
+            wireless = iface
+    return wireless
+
+
 def _detect_interface(timeout_seconds: float = 5.0) -> Optional[str]:
     """Best-effort detection of the primary wired (RJ45) interface name.
 
@@ -594,26 +621,7 @@ def _detect_interface(timeout_seconds: float = 5.0) -> Optional[str]:
             text=True,
             timeout=timeout_seconds,
         ).stdout
-        best_wired = None
-        best_wireless = None
-        for line in out.splitlines():
-            parts = line.split()
-            if len(parts) < 2:
-                continue
-            iface = parts[0]
-            if iface in ("lo",) or iface.startswith("veth") or iface.startswith("br-"):
-                continue
-            is_up = "LOWER_UP" in line
-            is_link_local = "169.254" in line
-            if not is_up or is_link_local:
-                continue
-            if iface.startswith(("eth", "enp", "ene", "ens", "enx", "ecm", "enq", "enO")):
-                if best_wired is None:
-                    best_wired = iface
-            elif iface.startswith(("wl", "wlan", "wlp")):
-                if best_wireless is None:
-                    best_wireless = iface
-        return best_wired or best_wireless
+        return _preferred_interface(out)
     except Exception:  # pragma: no cover - best effort
         return None
 

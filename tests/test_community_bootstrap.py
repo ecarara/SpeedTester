@@ -24,10 +24,11 @@ class BootstrapTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        self.version = '0.4.9'
 
     def archive(self, extra=None):
         path = self.root / 'fixture.tar.gz'
-        prefix = 'SpeedTester-' + installer.CLIENT_REVISION
+        prefix = 'SpeedTester-' + self.version
         with tarfile.open(path, 'w:gz') as archive:
             for name in ('install-community.sh', 'pyproject.toml', 'app/requirements-community.txt',
                          'app/speedtester_protocol/cli.py', 'LICENSE'):
@@ -39,51 +40,72 @@ class BootstrapTests(unittest.TestCase):
                 archive.addfile(extra)
         return path
 
-    def response(self, data, url=installer.ARCHIVE_URL):
+    def release(self, archive):
+        archive_name = f'SpeedTester-{self.version}.tar.gz'
+        archive_url = 'https://github.com/ecarara/SpeedTester/releases/download/v' + self.version + '/' + archive_name
+        checksum_url = 'https://github.com/ecarara/SpeedTester/releases/download/v' + self.version + '/SHA256SUMS'
+        return self.version, archive_name, archive_url, checksum_url
+
+    def response(self, data, url):
         stream = io.BytesIO(data)
         stream.geturl = lambda: url
         return stream
 
+    def opener(self, archive, checksums):
+        def open_url(request, **kwargs):
+            url = request.full_url
+            return self.response(checksums if url.endswith('SHA256SUMS') else archive, url)
+        return open_url
+
     def test_download_checks_digest_and_refuses_tampering_or_foreign_origin(self):
         data = self.archive().read_bytes()
-        checksum = hashlib.sha256(data).hexdigest()
-        with patch.object(installer, 'ARCHIVE_SHA256', checksum):
-            installer.download_archive(self.root / 'download.tar.gz', lambda *a, **kw: self.response(data))
+        release = self.release(data)
+        checksums = (hashlib.sha256(data).hexdigest() + '  ' + release[1] + '\n').encode()
+        installer.download_archive(self.root / 'download.tar.gz', release, self.opener(data, checksums))
+        tampered_opener = self.opener(data + b'changed', checksums)
+        with self.assertRaises(installer.InstallationError):
+            installer.download_archive(self.root / 'modified.tar.gz', release, tampered_opener)
+
+        foreign = (release[0], release[1], 'http://codeload.github.com/archive', release[3])
+        foreign_opener = self.opener(data, checksums)
+        with self.assertRaises(installer.InstallationError):
+            installer.download_archive(self.root / 'foreign.tar.gz', foreign, foreign_opener)
+
+        with patch.object(installer, 'MAX_DOWNLOAD_BYTES', 1):
+            oversized_opener = self.opener(data, checksums)
             with self.assertRaises(installer.InstallationError):
-                installer.download_archive(self.root / 'modified.tar.gz', lambda *a, **kw: self.response(data + b'changed'))
-            with self.assertRaises(installer.InstallationError):
-                installer.download_archive(self.root / 'foreign.tar.gz', lambda *a, **kw: self.response(data, 'http://codeload.github.com/archive'))
-            with patch.object(installer, 'MAX_DOWNLOAD_BYTES', 1):
-                with self.assertRaises(installer.InstallationError):
-                    installer.download_archive(self.root / 'oversized.tar.gz', lambda *a, **kw: self.response(data))
+                installer.download_archive(self.root / 'oversized.tar.gz', release, oversized_opener)
+
+
 
     def test_complete_package_is_extracted_and_keeps_the_existing_installer(self):
-        project = installer.extract_archive(self.archive(), self.root / 'source')
+        project = installer.extract_archive(self.archive(), self.root / 'source', self.version)
         self.assertTrue((project / 'install-community.sh').is_file())
         self.assertTrue((project / 'app/speedtester_protocol/cli.py').is_file())
 
     def test_traversal_links_and_unpacking_limits_are_rejected_before_extraction(self):
         for name, kind in (('../escape', tarfile.REGTYPE),
-                           ('SpeedTester-' + installer.CLIENT_REVISION + '/link', tarfile.SYMTYPE)):
+                           ('SpeedTester-' + self.version + '/link', tarfile.SYMTYPE)):
             self.archive().unlink(missing_ok=True)
             extra = tarfile.TarInfo(name)
             extra.type = kind
             extra.linkname = '/etc/passwd'
             archive = self.archive(extra)
             with self.assertRaises(installer.InstallationError):
-                installer.extract_archive(archive, self.root / 'source')
+                installer.extract_archive(archive, self.root / 'source', self.version)
             self.assertFalse((self.root / 'source').exists())
         with patch.object(installer, 'MAX_UNPACKED_BYTES', 1):
             with self.assertRaises(installer.InstallationError):
-                installer.extract_archive(self.root / 'fixture.tar.gz', self.root / 'large')
+                installer.extract_archive(self.root / 'fixture.tar.gz', self.root / 'large', self.version)
 
     def test_failed_verification_never_launches_installation_and_success_passes_server(self):
-        with patch.object(installer, 'check_requirements'), patch.object(installer, 'download_archive', side_effect=installer.InstallationError('invalid')), patch.object(installer.subprocess, 'call') as child:
+        release = self.release(b'')
+        with patch.object(installer, 'check_requirements'), patch.object(installer, 'latest_release', return_value=release), patch.object(installer, 'download_archive', side_effect=installer.InstallationError('invalid')), patch.object(installer.subprocess, 'call') as child:
             with self.assertRaises(installer.InstallationError):
                 installer.install('https://server.example')
             child.assert_not_called()
         project = self.root / 'package'
-        with patch.object(installer, 'check_requirements'), patch.object(installer, 'download_archive'), patch.object(installer, 'extract_archive', return_value=project), patch.object(installer.subprocess, 'call', return_value=0) as child:
+        with patch.object(installer, 'check_requirements'), patch.object(installer, 'latest_release', return_value=release), patch.object(installer, 'download_archive'), patch.object(installer, 'extract_archive', return_value=project), patch.object(installer.subprocess, 'call', return_value=0) as child:
             self.assertEqual(installer.install('https://server.example'), 0)
             child.assert_called_once_with(['bash', str(project / 'install-community.sh'), '--server', 'https://server.example'], cwd=project)
 

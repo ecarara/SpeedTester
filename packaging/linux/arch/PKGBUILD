@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+pkgname=speedtester
+pkgver="${APP_VERSION:-0.3.0}"
+pkgrel=1
+pkgdesc='Broadband measurement client and local dashboard'
+arch=('x86_64' 'aarch64')
+url='https://github.com/ecarara/SpeedTester'
+license=('GPL-3.0-or-later')
+depends=('python>=3.11' 'iperf3' 'python-aiohttp' 'python-fastapi' 'python-matplotlib' 'python-pandas' 'python-pydantic' 'uvicorn')
+install=speedtester.install
+source=("https://github.com/ecarara/SpeedTester/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=("${SOURCE_SHA256:-SKIP}")
+
+package() {
+  local source_root="${srcdir}/SpeedTester-${pkgver}"
+  install -dm755 "${pkgdir}/usr/lib/speedtester/app"
+  cp -a "${source_root}/app/." "${pkgdir}/usr/lib/speedtester/app/"
+
+  install -Dm755 "${source_root}/packaging/linux/arch/speedtester-launcher" \
+    "${pkgdir}/usr/bin/speedtester-launcher"
+  install -Dm755 "${source_root}/packaging/linux/configure-user.sh" \
+    "${pkgdir}/usr/lib/speedtester/configure-user.sh"
+  install -Dm644 "${source_root}/packaging/linux/arch/speedtester.desktop" \
+    "${pkgdir}/usr/share/applications/speedtester.desktop"
+  install -Dm644 "${source_root}/packaging/linux/arch/speedtester-api.service" \
+    "${pkgdir}/usr/lib/systemd/user/speedtester-api.service"
+  install -Dm644 "${source_root}/packaging/linux/arch/speedtester-client.service" \
+    "${pkgdir}/usr/lib/systemd/user/speedtester-client.service"
+  install -Dm644 "${source_root}/packaging/linux/speedtester.env.example" \
+    "${pkgdir}/usr/share/speedtester/speedtester.env.example"
+
+  for size in 16 32 48 64 128 256 512; do
+    install -Dm644 "${source_root}/assets/icons/hicolor/${size}/apps/speedtester.png" \
+      "${pkgdir}/usr/share/icons/hicolor/${size}x${size}/apps/speedtester.png"
+  done
+  install -Dm644 "${source_root}/LICENSE" \
+    "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

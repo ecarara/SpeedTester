@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 Edson Angelo Carara -->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities">
+  <Identity Name="ecarara.SpeedTester"
+            Publisher="CN=Edson Angelo Carara"
+            Version="@VERSION@"
+            ProcessorArchitecture="@ARCH@" />
+  <Properties>
+    <DisplayName>SpeedTester</DisplayName>
+    <PublisherDisplayName>Edson Angelo Carara</PublisherDisplayName>
+    <Description>Dashboard e cliente de medições de banda larga</Description>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+  <Resources>
+    <Resource Language="pt-BR" />
+  </Resources>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+  <Applications>
+    <Application Id="SpeedTester" Executable="SpeedTesterLauncher.exe"
+                 uap10:RuntimeBehavior="packagedClassicApp"
+                 uap10:TrustLevel="mediumIL">
+      <uap:VisualElements DisplayName="SpeedTester"
+                           Description="Dashboard e cliente de medições de banda larga"
+                           Square150x150Logo="Assets\Square150x150Logo.png"
+                           Square44x44Logo="Assets\Square44x44Logo.png"
+                           BackgroundColor="#123d32" />
+    </Application>
+  </Applications>
+</Package>

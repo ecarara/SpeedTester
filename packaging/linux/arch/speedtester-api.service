@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+[Unit]
+Description=SpeedTester local dashboard API
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/usr/lib/speedtester/app
+EnvironmentFile=-%h/.config/speedtester/speedtester.env
+Environment=DB_PATH=%h/.local/share/speedtester/data/speedtester.db
+Environment=SPEEDTESTER_LOCAL_MODE=true
+Environment=API_PORT=8000
+Environment=PYTHONPATH=/usr/lib/speedtester/app
+ExecStart=/usr/bin/python3 -m uvicorn api.server:app --host 127.0.0.1 --port ${API_PORT}
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+
+[Install]
+WantedBy=default.target

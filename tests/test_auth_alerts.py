@@ -34,6 +34,13 @@ class AccessTests(IntegrationFixture):
         self.assertNotIn('rows', self.client.get('/health').json())
         self.assertEqual(self.client.get('/', follow_redirects=False).headers['location'], '/login')
 
+    def test_local_mode_never_serves_the_login_page(self):
+        server.settings = replace(self.settings, api_require_login=False)
+        response = self.client.get('/login', follow_redirects=False)
+        self.assertEqual(response.status_code, 303)
+        self.assertEqual(response.headers['location'], '/')
+        self.assertEqual(self.client.get('/api/auth/session').json()['login_required'], False)
+
     def test_viewer_reads_and_exports_but_cannot_write_even_with_valid_csrf(self):
         csrf = self.sign_in('viewer','viewer-password-example')
         self.assertEqual(self.client.get('/api/export').status_code, 200)

@@ -142,7 +142,7 @@
     detail.append(listTitle);
     const list = document.createElement('div');
     list.className = 'network-map-list';
-    for (const point of filtered.slice(0, 12)) {
+    for (const [index, point] of filtered.slice(0, 12).entries()) {
       const item = document.createElement('button');
       item.type = 'button';
       item.className = 'network-map-list-item';
@@ -152,7 +152,7 @@
       });
       const swatch = document.createElement('span');
       swatch.className = 'network-map-swatch';
-      swatch.style.background = COLORS[points.indexOf(point) % COLORS.length];
+      swatch.style.background = COLORS[index % COLORS.length];
       const copy = document.createElement('span');
       const name = document.createElement('strong');
       name.textContent = point.operator;

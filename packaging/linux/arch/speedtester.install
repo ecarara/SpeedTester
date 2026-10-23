@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+post_install() {
+  _speedtester_configure_user 0
+  _speedtester_reload_and_start
+}
+
+post_upgrade() {
+  _speedtester_migrate_legacy_user_units
+  _speedtester_configure_user 1
+  _speedtester_reload_and_start
+}
+
+_speedtester_user_name() {
+  local user_name="${SUDO_USER:-}"
+  if [[ -n "$user_name" && "$user_name" != "root" ]]; then
+    printf '%s\n' "$user_name"
+    return 0
+  fi
+
+  user_name=$(logname 2>/dev/null || true)
+  [[ -n "$user_name" && "$user_name" != "root" ]] || return 1
+  printf '%s\n' "$user_name"
+}
+
+_speedtester_configure_user() {
+  local user_name upgrade="${1:-0}"
+  user_name=$(_speedtester_user_name) || return 0
+  command -v runuser >/dev/null 2>&1 || return 0
+  [[ -x /usr/lib/speedtester/configure-user.sh ]] || return 0
+
+  runuser -u "$user_name" -- env \
+    SPEEDTESTER_CONFIRM_EXISTING="$upgrade" \
+    SPEEDTESTER_ENV_TEMPLATE=/usr/share/speedtester/speedtester.env.example \
+    /usr/lib/speedtester/configure-user.sh
+}
+
+_speedtester_migrate_legacy_user_units() {
+  # Older install-user.sh versions placed units in ~/.config/systemd/user.
+  # Those files override the package units in /usr/lib and can keep running
+  # an obsolete private copy of the application after a pacman upgrade.
+  local user_name="${SUDO_USER:-}"
+  [[ -n "$user_name" && "$user_name" != "root" ]] || return 0
+  command -v getent >/dev/null 2>&1 || return 0
+
+  local user_home
+  user_home=$(getent passwd "$user_name" | cut -d: -f6)
+  [[ -n "$user_home" && -d "$user_home" ]] || return 0
+
+  local unit_dir="$user_home/.config/systemd/user"
+  local unit
+  for unit in speedtester-api.service speedtester-client.service; do
+    local unit_path="$unit_dir/$unit"
+    if [[ -f "$unit_path" ]] && grep -q 'WorkingDirectory=%h/.local/share/speedtester/app' "$unit_path"; then
+      rm -f "$unit_path"
+    fi
+  done
+}
+
+_speedtester_reload_and_start() {
+  # Package hooks run as root, while the services belong to the installing
+  # user's systemd --user manager.  pacman exposes that user through SUDO_USER
+  # for sudo installs; without it, leave the units installed and let the
+  # desktop launcher report the actionable service error.
+  local user_name="${SUDO_USER:-}"
+  if [[ -z "$user_name" || "$user_name" == "root" ]] || ! command -v runuser >/dev/null 2>&1; then
+    cat <<'EOF'
+SpeedTester installed. Configure ~/.config/speedtester/speedtester.env (especially
+IPERF3_SERVER), then
+enable the per-user services with:
+  systemctl --user daemon-reload
+  systemctl --user enable --now speedtester-api.service speedtester-client.service
+EOF
+    return 0
+  fi
+
+  runuser -u "$user_name" -- systemctl --user daemon-reload >/dev/null 2>&1 || true
+  if ! runuser -u "$user_name" -- systemctl --user enable --now \
+      speedtester-api.service speedtester-client.service >/dev/null 2>&1; then
+    cat <<'EOF'
+SpeedTester installed, but the per-user services could not be started.
+Check them with:
+  systemctl --user status speedtester-api.service speedtester-client.service
+EOF
+  fi
+}
+
+post_remove() {
+  systemctl --user daemon-reload >/dev/null 2>&1 || true
+  echo 'SpeedTester removed; user configuration and history were preserved.'
+}

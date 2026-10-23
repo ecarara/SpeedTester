@@ -7,6 +7,45 @@ ideia de [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e
 Projeto mantido por [Edson Angelo Carara (`ecarara`)](https://github.com/ecarara)
 em <https://github.com/ecarara/SpeedTester>.
 
+## [Unreleased]
+
+### Corrigido
+
+- launcher desktop inicia o `speedtester-api.service` e aguarda o healthcheck
+  local antes de abrir o navegador, evitando a página inacessível em
+  `127.0.0.1:8000` na primeira execução;
+
+### Adicionado
+
+- contrato inicial do launcher desktop multiplataforma, com abertura segura do
+  dashboard e controle nativo do serviço em Linux, Windows e macOS;
+- símbolo quadrado, SVG, PNGs FreeDesktop, ICO Windows e ICNS macOS para o
+  empacotamento desktop;
+- integração Linux inicial com arquivo FreeDesktop, serviços `systemd --user`,
+  instalador e desinstalador por usuário;
+- opção `uninstall`/`--uninstall` exposta diretamente pelo instalador Linux;
+- manifests e builders para `.deb`, `.rpm` e AppImage, com caminhos de remoção
+  que preservam os dados do usuário;
+- manifest, builder e instalação/remoção de Flatpak para o launcher do
+  dashboard;
+- `PKGBUILD` Arch/pacman, builder e callback de remoção preservando dados do
+  usuário;
+- manifesto MSIX, assets Windows, builder PowerShell e scripts de instalação/
+  desinstalação com tarefa por usuário;
+- bundle macOS com `Info.plist`, `.icns`, builder `.app`/`.dmg`, LaunchAgent e
+  scripts de instalação/desinstalação preservando dados por padrão;
+- workflow de release por tag com quality gate, SBOM SPDX 2.3, checksums,
+  source archive e builds Linux `.deb`/`.rpm`, Flatpak, pacman, Windows/macOS;
+- validador de conteúdo dos artefatos antes da publicação e guia de instalação
+  desktop por sistema operacional;
+- smoke test Linux isolado cobrindo instalação, upgrade idempotente e remoção
+  completa sem tocar nos dados do usuário real;
+- smoke tests Windows/macOS cobrindo instalação, upgrade e remoção com
+  certificado temporário e HOME isolado, sem publicar credenciais de teste;
+- builder do source archive `.tar.gz`, preservando o formato de distribuição
+  existente;
+- documentação do épico E-01 e testes unitários do launcher.
+
 ## [0.2.1] - 2026-10-11
 
 - Snapshot e restauração do deploy usam rotulagem privada de bind mounts em

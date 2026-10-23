@@ -1,0 +1,311 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+name: Release artifacts
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  metadata:
+    name: Resolve release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      msix-version: ${{ steps.version.outputs.msix-version }}
+    steps:
+      - name: Validate semantic version tag
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          [[ "$TAG" == v* ]] || { echo "release must be triggered by a v* tag" >&2; exit 1; }
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "invalid version: $version" >&2; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "msix-version=$version.0" >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: Release quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: python -m pip install -r requirements-dev.txt
+      - run: make check
+
+  source:
+    name: Source archive, SBOM and checksums
+    needs: [metadata, quality]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Build release metadata
+        env:
+          APP_VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          mkdir -p dist/release
+          OUTPUT_DIR=dist/release ./scripts/build-source-tarball.sh
+          python3 scripts/build_sbom.py --version "$APP_VERSION" --output "dist/release/SpeedTester-$APP_VERSION.spdx.json"
+          python3 scripts/generate_checksums.py dist/release
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-source
+          path: dist/release/*
+          if-no-files-found: error
+
+  macos:
+    name: macOS ${{ matrix.arch }}
+    needs: [metadata, quality]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15-intel
+            arch: x86_64
+          - os: macos-14
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Install packaging dependencies
+        run: python -m pip install -r app/requirements.txt pyinstaller==6.16.0
+      - name: Build unsigned macOS package
+        env:
+          APP_VERSION: ${{ needs.metadata.outputs.version }}
+          MACOS_ARCH: ${{ matrix.arch }}
+          OUTPUT_DIR: dist/macos
+        run: ./packaging/macos/build-app.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-macos-${{ matrix.arch }}
+          path: dist/macos/*
+          if-no-files-found: error
+
+  windows:
+    name: Windows x64 MSIX
+    needs: [metadata, quality]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Install packaging dependencies
+        run: python -m pip install -r app/requirements.txt pyinstaller==6.16.0
+      - name: Add Windows SDK packaging tools to PATH
+        shell: pwsh
+        run: |
+          $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\\10\\bin'
+          $makeAppx = Get-ChildItem $sdkRoot -Filter MakeAppx.exe -Recurse -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $makeAppx) { throw 'MakeAppx.exe não encontrado no Windows SDK do runner' }
+          $makeAppx.DirectoryName | Out-File -FilePath ${env:GITHUB_PATH} -Append -Encoding utf8
+          Write-Host "Using Windows SDK tools from $($makeAppx.DirectoryName)"
+      - name: Build unsigned MSIX
+        env:
+          MSIX_VERSION: ${{ needs.metadata.outputs.msix-version }}
+        shell: pwsh
+        run: |
+          ./packaging/windows/build-launchers.ps1 -OutputDirectory dist/windows
+          ./packaging/windows/build-msix.ps1 -Version $env:MSIX_VERSION -Architecture x64 -OutputDirectory dist/windows
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-windows-x64
+          path: dist/windows/*.msix
+          if-no-files-found: error
+
+  linux:
+    name: Linux ${{ matrix.format }}
+    needs: [metadata, quality]
+    strategy:
+      fail-fast: false
+      matrix:
+        format: [deb, rpm]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Install RPM toolchain
+        if: matrix.format == 'rpm'
+        run: sudo apt-get update && sudo apt-get install --yes rpm
+      - name: Prepare isolated runtime
+        run: |
+          python -m venv .release-venv
+          .release-venv/bin/python -m pip install -r app/requirements.txt
+      - name: Build Debian package
+        if: matrix.format == 'deb'
+        env:
+          APP_VERSION: ${{ needs.metadata.outputs.version }}
+          SPEEDTESTER_VENV: ${{ github.workspace }}/.release-venv
+          OUTPUT_DIR: dist/linux
+        run: ./packaging/linux/build-deb.sh
+      - name: Build RPM package
+        if: matrix.format == 'rpm'
+        env:
+          APP_VERSION: ${{ needs.metadata.outputs.version }}
+          SPEEDTESTER_VENV: ${{ github.workspace }}/.release-venv
+          OUTPUT_DIR: dist/linux
+        run: ./packaging/linux/build-rpm.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-linux-${{ matrix.format }}
+          path: dist/linux/*
+          if-no-files-found: error
+
+  flatpak:
+    name: Linux Flatpak
+    needs: [metadata, quality]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install Flatpak toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes flatpak flatpak-builder
+          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak install --system --noninteractive flathub org.freedesktop.Sdk//24.08 org.freedesktop.Platform//24.08
+      - name: Build Flatpak bundle
+        env:
+          APP_VERSION: ${{ needs.metadata.outputs.version }}
+          OUTPUT_DIR: dist/linux
+        run: ./packaging/linux/build-flatpak.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-linux-flatpak
+          path: dist/linux/*.flatpak
+          if-no-files-found: error
+
+  pacman:
+    name: Arch pacman
+    needs: [metadata, quality]
+    runs-on: ubuntu-latest
+    container: archlinux/archlinux:base-devel-20260925.0.599509
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install pinned build utilities
+        run: pacman -Sy --noconfirm --needed curl git
+      - name: Build package as an unprivileged user
+        env:
+          APP_VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          useradd --create-home builder
+          mkdir -p "$GITHUB_WORKSPACE/dist/linux"
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          su builder -s /bin/bash -c "APP_VERSION='$APP_VERSION' OUTPUT_DIR='$GITHUB_WORKSPACE/dist/linux' ./packaging/linux/build-pacman.sh"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-linux-pacman
+          path: dist/linux/*.pkg.tar.*
+          if-no-files-found: error
+
+  linux-install-smoke:
+    name: Linux installer smoke test
+    needs: quality
+    runs-on: ubuntu-latest
+    env:
+      SPEEDTESTER_NONINTERACTIVE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Install installer prerequisites
+        run: sudo apt-get update && sudo apt-get install --yes iperf3
+      - name: Run isolated install, upgrade and removal test
+        run: ./scripts/smoke_linux_install.sh
+
+  macos-install-smoke:
+    name: macOS app install smoke test
+    needs: macos
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-macos-arm64
+          path: dist/macos
+      - name: Install, upgrade and remove the app bundle
+        env:
+          SMOKE_HOME: ${{ runner.temp }}/speedtester-home
+          SMOKE_SOURCE: ${{ runner.temp }}/speedtester-source
+          SPEEDTESTER_SKIP_LAUNCHCTL: '1'
+          SPEEDTESTER_NONINTERACTIVE: '1'
+        run: |
+          mkdir -p "$SMOKE_HOME" "$SMOKE_SOURCE"
+          APP_ZIP="$(find dist/macos -name '*.app.zip' -print -quit)"
+          test -n "$APP_ZIP"
+          ditto -x -k "$APP_ZIP" "$SMOKE_SOURCE"
+          export HOME="$SMOKE_HOME"
+          SOURCE_APP="$SMOKE_SOURCE/SpeedTester.app"
+          ./packaging/macos/install-dmg.sh "$SOURCE_APP"
+          test -f "$HOME/Library/LaunchAgents/speedtester-client.service.plist"
+          test -x "$HOME/Applications/SpeedTester.app/Contents/MacOS/SpeedTesterLauncher" || test -x "/Applications/SpeedTester.app/Contents/MacOS/SpeedTesterLauncher"
+          ./packaging/macos/install-dmg.sh "$SOURCE_APP"
+          ./packaging/macos/uninstall-app.sh
+          test ! -e "$HOME/Library/LaunchAgents/speedtester-client.service.plist"
+          test ! -e "$HOME/Applications/SpeedTester.app"
+
+  validate:
+    name: Validate release contents
+    needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist/release
+          merge-multiple: true
+      - name: Install RPM inspection tool
+        run: sudo apt-get update && sudo apt-get install --yes rpm
+      - name: Generate aggregate checksums
+        run: python3 scripts/generate_checksums.py dist/release
+      - name: Validate checksums and package contents
+        run: python3 scripts/validate_release_artifacts.py dist/release
+
+  publish:
+    name: Publish GitHub Release
+    needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke, validate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist/release
+          merge-multiple: true
+      - name: Generate final checksums
+        run: python3 scripts/generate_checksums.py dist/release
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/release/* --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            gh release create "$TAG" dist/release/* --repo "$GITHUB_REPOSITORY" \
+              --title "SpeedTester $TAG" --generate-notes --verify-tag
+          fi

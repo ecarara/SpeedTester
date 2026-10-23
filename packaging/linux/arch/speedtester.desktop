@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=SpeedTester
+GenericName=Teste de banda larga
+Comment=Abre o dashboard e controla as medições do SpeedTester
+Exec=/usr/bin/speedtester-launcher open
+Icon=speedtester
+Terminal=false
+Categories=Network;Utility;
+Keywords=banda larga;internet;velocidade;iperf3;
+StartupNotify=true

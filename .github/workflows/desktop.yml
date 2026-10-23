@@ -1,0 +1,119 @@
+name: Desktop Client preview
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native:
+    name: Desktop ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, macos-15]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements-desktop.txt
+      - name: Native Linux graphical libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb libtk8.6 xdotool x11-xkb-utils xdg-utils build-essential libssl-dev patchelf pkg-config
+      - name: Native Windows compiler from MSYS2
+        id: msys2
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e
+        with:
+          msystem: MSYS
+          location: C:\speedtester-msys64
+          update: true
+          install: gcc make diffutils openssl-devel openssl pkgconf tar zstd
+      - name: Native macOS OpenSSL
+        if: runner.os == 'macOS'
+        run: brew install openssl@3
+      - name: Install public native build dependencies
+        run: python -m pip install -r requirements-desktop.txt '.[desktop]'
+      - name: Audit native build and runtime dependencies
+        run: python -m pip_audit -r requirements-desktop.txt
+      - name: Check platform code for undefined names
+        run: python -m ruff check --select F821 app/speedtester_protocol tests/test_desktop_client.py tests/test_desktop_maintenance.py scripts/build_desktop.py
+      - name: Portable service and maintenance contract, no measurements
+        env:
+          PYTHONPATH: app
+        run: |
+          python -m unittest discover -s tests -p 'test_desktop_*.py' -v
+          python -m unittest discover -s tests -p 'test_local_history.py' -v
+      - name: Graphical smoke and packaged runtime (Linux)
+        id: build_linux
+        if: runner.os == 'Linux'
+        env:
+          SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: xvfb-run -a python scripts/build_desktop.py
+      - name: Graphical smoke and packaged runtime (Windows/macOS)
+        id: build_other
+        if: runner.os != 'Linux'
+        env:
+          SOURCE_REVISION: ${{ github.event.pull_request.head.sha || github.sha }}
+          SPEEDTESTER_MSYS_ROOT: ${{ steps.msys2.outputs.msys2-location }}
+        run: python scripts/build_desktop.py
+      - name: Graphical workflow acceptance with authenticated local IPC (Linux)
+        if: runner.os == 'Linux'
+        env:
+          PYTHONPATH: app
+          SPEEDTESTER_GUI_TESTS: '1'
+        run: xvfb-run -a python scripts/test_graphical_flows.py
+      - name: Graphical workflow acceptance with authenticated local IPC (Windows/macOS)
+        if: runner.os != 'Linux'
+        env:
+          PYTHONPATH: app
+          SPEEDTESTER_GUI_TESTS: '1'
+        run: python scripts/test_graphical_flows.py
+      - name: Frozen app opens an actual browser page (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python scripts/test_frozen_browser.py
+      - name: Frozen app opens an actual browser page (Windows/macOS)
+        if: runner.os != 'Linux'
+        run: python scripts/test_frozen_browser.py
+      - name: Real system service installation, repair and removal (Linux/macOS)
+        if: ${{ !cancelled() && runner.os != 'Windows' && (steps.build_linux.outcome == 'success' || steps.build_other.outcome == 'success') }}
+        run: sudo env GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted "$(command -v python)" scripts/test_native_lifecycle.py
+      - name: Real system service installation, repair and removal (Windows)
+        if: ${{ !cancelled() && runner.os == 'Windows' && steps.build_other.outcome == 'success' }}
+        run: python scripts/test_native_lifecycle.py
+      - name: Packaged iPerf3 RSA loopback test on disposable VM
+        run: python scripts/test_packaged_iperf.py
+      - name: Pinned native vulnerability scanner
+        run: python scripts/install_security_tools.py grype --destination .native-scanners
+      - name: Native component vulnerability policy
+        shell: bash
+        run: |
+          bundle=$(find dist/desktop/raw -name native-sbom.cdx.json -print -quit)
+          .native-scanners/grype "sbom:$bundle" -o json > dist/desktop/acceptance-native-grype.json
+          python scripts/check_image_report.py dist/desktop/acceptance-native-grype.json
+      - name: Preserve acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: desktop-acceptance-${{ runner.os }}-${{ runner.arch }}
+          path: dist/desktop/acceptance-*.json
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Preserve experimental bundles and checksums
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: desktop-preview-${{ runner.os }}-${{ runner.arch }}
+          path: dist/desktop/releases/*
+          if-no-files-found: error
+          retention-days: 7

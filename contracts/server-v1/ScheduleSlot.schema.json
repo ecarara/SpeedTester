@@ -1,0 +1,33 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "local_date": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "title": "Local Date",
+      "type": "string"
+    },
+    "quadrant": {
+      "enum": [
+        "madrugada",
+        "manha",
+        "tarde",
+        "noite"
+      ],
+      "title": "Quadrant",
+      "type": "string"
+    },
+    "index": {
+      "maximum": 2,
+      "minimum": 1,
+      "title": "Index",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "local_date",
+    "quadrant",
+    "index"
+  ],
+  "title": "ScheduleSlot",
+  "type": "object"
+}

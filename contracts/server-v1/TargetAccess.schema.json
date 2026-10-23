@@ -1,0 +1,80 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "request_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "attempt_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Attempt Id",
+      "type": "string"
+    },
+    "client_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Client Id",
+      "type": "string"
+    },
+    "target_id": {
+      "pattern": "^central-[0-9a-f]{64}$",
+      "title": "Target Id",
+      "type": "string"
+    },
+    "host": {
+      "maxLength": 253,
+      "minLength": 1,
+      "title": "Host",
+      "type": "string"
+    },
+    "upload_port": {
+      "maximum": 65535,
+      "minimum": 1,
+      "title": "Upload Port",
+      "type": "integer"
+    },
+    "download_port": {
+      "maximum": 65535,
+      "minimum": 1,
+      "title": "Download Port",
+      "type": "integer"
+    },
+    "username": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Username",
+      "type": "string"
+    },
+    "password": {
+      "maxLength": 128,
+      "minLength": 32,
+      "title": "Password",
+      "type": "string"
+    },
+    "rsa_public_key": {
+      "maxLength": 4096,
+      "minLength": 200,
+      "title": "Rsa Public Key",
+      "type": "string"
+    },
+    "expires_at": {
+      "minimum": 0,
+      "title": "Expires At",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "request_id",
+    "attempt_id",
+    "client_id",
+    "target_id",
+    "host",
+    "upload_port",
+    "download_port",
+    "username",
+    "password",
+    "rsa_public_key",
+    "expires_at"
+  ],
+  "title": "TargetAccess",
+  "type": "object"
+}

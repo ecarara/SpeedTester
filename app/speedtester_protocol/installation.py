@@ -2,31 +2,25 @@
 # Copyright (C) 2026 Edson Angelo Carara
 
 """Private installation state; user services need no machine-wide credentials."""
-import os,secrets,stat
+import os,secrets
 from pathlib import Path
 from .queue import EncryptedQueue
+from .local_security import private_directory,private_open
 
 
 def protected_queue(directory):
-    directory=Path(directory).absolute()
-    if any(path.is_symlink() for path in (directory,*directory.parents)):
-        raise ValueError("symlinked_state_directory")
-    directory.mkdir(parents=True,exist_ok=True,mode=0o700)
-    if directory.stat().st_uid!=os.getuid():raise ValueError("state_owner_mismatch")
-    os.chmod(directory,0o700)
+    directory=private_directory(directory)
     keyfile=directory/"storage.key"
-    flags=os.O_RDWR|os.O_NOFOLLOW
+    if (directory/"index.sqlite").exists() and not keyfile.exists():
+        raise ValueError("storage_key_missing")
     try:
-        fd=os.open(keyfile,flags|os.O_CREAT|os.O_EXCL,0o600)
+        fd=private_open(keyfile,os.O_WRONLY|os.O_CREAT|os.O_EXCL)
         with os.fdopen(fd,"wb") as stream:
             stream.write(secrets.token_bytes(32));stream.flush();os.fsync(stream.fileno())
     except FileExistsError:
         pass
-    fd=os.open(keyfile,os.O_RDONLY|os.O_NOFOLLOW)
+    fd=private_open(keyfile,os.O_RDONLY)
     with os.fdopen(fd,"rb") as stream:
-        metadata=os.fstat(stream.fileno())
-        if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid!=os.getuid() or stat.S_IMODE(metadata.st_mode)&0o077:
-            raise ValueError("insecure_storage_key")
         key=stream.read(33)
     if len(key)!=32:raise ValueError("invalid_storage_key")
     return EncryptedQueue(directory,key)

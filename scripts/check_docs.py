@@ -21,7 +21,7 @@ def main() -> int:
     failures: list[str] = []
     markdown_files = sorted(root.rglob("*.md"))
     for document in markdown_files:
-        if {".git", "node_modules", "releases", ".security-tools"}.intersection(document.parts) or any(part.startswith(".venv") for part in document.parts):
+        if {".git", "node_modules", "releases", ".security-tools", "build", "dist"}.intersection(document.parts) or any(part.startswith(".venv") for part in document.parts):
             continue
         content = document.read_text(encoding="utf-8")
         for raw_target in LINK_PATTERN.findall(content):

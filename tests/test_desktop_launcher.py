@@ -53,7 +53,7 @@ class DesktopLauncherTests(TestCase):
 
     def test_macos_service_commands_use_current_user_launchd_domain(self):
         controller = ServiceController("com.ecarara.speedtester", "Darwin")
-        with patch("desktop_launcher._run") as run, patch("desktop_launcher.os.getuid", return_value=501):
+        with patch("desktop_launcher._run") as run, patch("desktop_launcher.os.getuid", return_value=501, create=True):
             run.return_value.returncode = 0
             self.assertEqual(controller.execute("status"), "active")
             run.assert_called_once_with(["launchctl", "print", "gui/501/com.ecarara.speedtester"])

@@ -79,7 +79,7 @@ class ContractTests(unittest.TestCase):
     def test_published_schemas_match_consumer_models(self):
         from speedtester_protocol import models
         root=Path(__file__).resolve().parents[1]/"contracts/server-v1"
-        for name in ("Profile","GrantRequest","Grant","Observation","Manifest","Envelope","Receipt","Enrollment","Acceptance","PairingRequest","Pairing","CredentialBundle","RotationRequest","PairingApproval","SystemEnvironment","EnvironmentReport","EnvironmentReceipt"):
+        for name in ("Profile","GrantRequest","Grant","Observation","Manifest","Envelope","Receipt","Enrollment","Acceptance","PairingRequest","Pairing","CredentialBundle","RotationRequest","PairingApproval","SystemEnvironment","EnvironmentReport","EnvironmentReceipt","ScheduleSlot","MachineReport","MachinePolicy","MachinePermissionRequest","MachinePermission"):
             self.assertEqual(json.loads((root/(name+".schema.json")).read_text()),getattr(models,name).model_json_schema())
 
     def test_https_origin_and_no_redirect_contract(self):
@@ -210,6 +210,21 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(len(executed),1);self.assertNotEqual(executed[0],old["attempt_id"])
         self.assertEqual(agent.state("quarantine:"+old["attempt_id"])["grant"],old)
         self.assertIsNone(agent.state("active_attempt"))
+
+    def test_recovery_only_never_creates_another_grant_after_expiration(self):
+        agent,result,state=self.agent_fixture()
+        with self.assertRaises(SystemExit):agent.run_once(lambda grant:(_ for _ in ()).throw(SystemExit()))
+        old=agent.state("active_attempt");transport=agent.client.transport
+        def expire_old(method,path,headers,payload):
+            if path=="/api/v1/attempts/"+old["attempt_id"]+"/start":return 409,{}, {"code":"start_expired"}
+            return transport(method,path,headers,payload)
+        agent.client.transport=expire_old
+        self.assertIsNone(agent.run_once(lambda grant:self.fail("Recovery must not execute"),allow_new=False))
+        self.assertEqual(len(state["grants"]),1)
+        self.assertIsNone(agent.state("active_attempt"))
+        self.assertEqual(agent.state("quarantine:"+old["attempt_id"])["grant"],old)
+        self.assertIsNone(agent.run_once(None,allow_new=False))
+        self.assertEqual(len(state["grants"]),1)
 
     def test_terminal_pending_attempt_is_quarantined_without_false_acceptance(self):
         agent,result,state=self.agent_fixture();transport=agent.client.transport;observations=[0]

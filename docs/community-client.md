@@ -10,11 +10,11 @@ Suporte inicial: Linux amd64/arm64, Python 3.11, 3.12 ou 3.13 com módulo `venv`
 ./install-community.sh --server https://speedtester.cararalab.com.br
 ```
 
-O assistente pede operadora, país, região, cidade, tecnologia de acesso, cabeado/Ethernet ou Wi-Fi, destino iPerf3 e intervalo. Não tenta inferir fibra pelo endereço IP. O intervalo inicial é de uma a 24 horas e permanece sujeito às cotas do Server.
+O assistente pede operadora, país, região, cidade, tecnologia de acesso e cabeado/Ethernet ou Wi-Fi. Não tenta inferir fibra pelo endereço IP. O destino de teste é configurado automaticamente pelo Server. A agenda fixa programa dois testes por período (00h–06h, 06h–12h, 12h–18h e 18h–24h), oito por dia completo, no fuso da instalação, sujeita à autorização e às cotas centrais. Não existe intervalo em horas a configurar.
 
 O terminal exibe um código, endereço HTTPS e impressão digital. Abra o endereço no seu navegador, entre pelo provedor disponível, revise os Termos e a Política de Privacidade e registre a autorização de contribuição. Na página de pareamento, digite o código e confirme a impressão digital da instalação que você iniciou. Não aprove códigos enviados por terceiros.
 
-A instalação termina automaticamente após a aprovação. Não é necessário copiar tokens, escolher chaves criptográficas nem editar `.env`. Nenhuma medição é executada pelo instalador; o primeiro slot é reservado para um intervalo após o pareamento.
+A instalação termina automaticamente após a aprovação. Não é necessário copiar tokens, escolher chaves criptográficas nem editar `.env`. Nenhuma medição é executada pelo instalador; apenas horários futuros podem ser executados, sem compensar horários perdidos. A agenda do instalador gráfico começa pausada e depende de ativação explícita. Veja os detalhes de [agenda e consumo](desktop-client.md#agenda-de-medições).
 
 O instalador usa `~/.local/lib/speedtester-client/venv`, estado privado em `~/.local/share/speedtester-client` e `speedtester-client.service` do usuário. Não instala daemon como root. Para executar após boot sem login, um administrador pode habilitar `loginctl enable-linger USUARIO` explicitamente. Sem linger, o serviço segue o ciclo da sessão do usuário.
 

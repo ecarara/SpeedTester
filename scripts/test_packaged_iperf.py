@@ -23,6 +23,11 @@ from cryptography.hazmat.primitives import serialization
 from speedtester_protocol.runner import IperfRunner
 
 
+def _observe_listener(child, event):
+    for line in child.stdout:
+        if 'Server listening on' in line:event.set()
+
+
 def main():
     system=platform.system()
     bundle=ROOT/'dist/desktop/raw'/('SpeedTesterClient.app' if system=='Darwin' else 'SpeedTesterClient')
@@ -54,17 +59,16 @@ def main():
                     stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,**options)
                 children.append(process)
                 ready=threading.Event()
-                def observe(child=process,event=ready):
-                    for line in child.stdout:
-                        if 'Server listening on' in line:event.set()
-                threading.Thread(target=observe,daemon=True).start()
+                threading.Thread(target=_observe_listener,args=(process,ready),daemon=True).start()
                 assert ready.wait(10),'Loopback server did not become ready'
             access=SimpleNamespace(upload_port=ports[0],download_port=ports[1],username=username,password=password,
                 rsa_public_key=key.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo).decode(),expires_at=int(time.time())+30)
             grant=SimpleNamespace(runner='iperf3',target_id='loopback-only',target_scope='lan',max_bytes=8192,max_duration_ms=30000)
             runner=IperfRunner('127.0.0.1',binary=str(binary),target_id='loopback-only',target_scope='lan',authorize=lambda _grant:access)
             result=runner(grant)
-            assert result.transfer_bytes==8192 and result.upload_mbps>=0 and result.download_mbps>=0
+            assert result.transfer_bytes==8192
+            assert result.upload_mbps>=0
+            assert result.download_mbps>=0
             for process in children:assert process.wait(timeout=10)==0
             # Per-attempt one-off listeners are gone; no second transfer can run.
             for port in ports:

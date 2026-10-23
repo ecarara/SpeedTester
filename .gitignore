@@ -15,6 +15,7 @@ data/
 *.log
 .DS_Store
 .coverage*
+!.coveragerc
 coverage.xml
 htmlcov/
 .scannerwork/

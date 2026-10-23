@@ -10,6 +10,8 @@ from .models import METRICS
 from .central_slots import central_zone
 from .desktop_text import problem_text
 
+CONFIGURE_EVENT = "<Configure>"
+
 BACKGROUND, PAPER, INK, MUTED, ACCENT = (
     "#f2f1e9",
     "#ffffff",
@@ -110,6 +112,71 @@ class HistoryScreen:
             self.history_cursor = self.history_stack.pop()
         self.load_history()
 
+    def _history_result_rows(self, tree, data):
+        quality = {
+            "valid": "history_valid",
+            "error": "history_error",
+            "not-supported": "history_unavailable",
+            "not-collected": "history_not_collected",
+        }
+        for index, row in enumerate(data.get("rows", [])):
+            tree.insert(
+                "",
+                "end",
+                iid=str(index),
+                values=(
+                    self.history_time(row["at"]),
+                    self.history_value(row),
+                    self.t(quality[row["quality"]]),
+                    self.t("history_" + row["delivery"]),
+                    self.t(
+                        "history_complete"
+                        if row["attempt_complete"]
+                        else "history_incomplete"
+                    ),
+                ),
+            )
+
+    def _history_note(self, data):
+        if data.get("unreadable"):
+            return self.t("history_corrupt").format(count=data["unreadable"])
+        if not data.get("rows"):
+            return self.t("history_empty")
+        return self.t("history_page").format(count=len(data["rows"]))
+
+    @staticmethod
+    def _history_point_color(row):
+        if row["attempt_complete"]:
+            return ACCENT
+        return "#edba72" if row["delivery"] == "pending" else "#c5d6cf"
+
+    def _create_history_filters(self, filters, definitions):
+        self.history_filters = {}
+        for column, (label, options, selected) in enumerate(definitions):
+            filters.columnconfigure(column, weight=1)
+            box = tk.Frame(filters, bg=BACKGROUND)
+            box.grid(row=0, column=column, sticky="ew", padx=(0, 8))
+            self.label(box, self.t(label), size=9, color=MUTED).pack(anchor="w")
+            variable = tk.StringVar(
+                value=next(self.t(key) for value, key in options if value == selected)
+            )
+            control = ttk.Combobox(
+                box,
+                textvariable=variable,
+                values=[self.t(key) for _, key in options],
+                state="readonly",
+                width=16,
+            )
+            control.pack(fill="x")
+            attribute = ("history_metric", "history_days", "history_delivery")[column]
+            control.bind(
+                "<<ComboboxSelected>>",
+                lambda _event, c=control, opts=options, attr=attribute: (
+                    self.history_filter(attr, opts[c.current()][0])
+                ),
+            )
+            self.history_filters[attribute] = control
+
     def page_history(self):
         self.heading("history_title", "history_detail")
         tabs = ttk.Notebook(self.content)
@@ -126,11 +193,11 @@ class HistoryScreen:
         integration = tk.Frame(canvas, bg=BACKGROUND, padx=16, pady=14)
         item = canvas.create_window(0, 0, window=integration, anchor="nw")
         integration.bind(
-            "<Configure>",
+            CONFIGURE_EVENT,
             lambda _event: canvas.configure(scrollregion=canvas.bbox("all")),
         )
         canvas.bind(
-            "<Configure>", lambda event: canvas.itemconfigure(item, width=event.width)
+            CONFIGURE_EVENT, lambda event: canvas.itemconfigure(item, width=event.width)
         )
         tabs.add(results, text=self.t("history_results"))
         tabs.add(integration_container, text=self.t("history_integration"))
@@ -183,31 +250,7 @@ class HistoryScreen:
                 self.history_delivery,
             ),
         )
-        self.history_filters = {}
-        for column, (label, options, selected) in enumerate(definitions):
-            filters.columnconfigure(column, weight=1)
-            box = tk.Frame(filters, bg=BACKGROUND)
-            box.grid(row=0, column=column, sticky="ew", padx=(0, 8))
-            self.label(box, self.t(label), size=9, color=MUTED).pack(anchor="w")
-            variable = tk.StringVar(
-                value=next(self.t(key) for value, key in options if value == selected)
-            )
-            control = ttk.Combobox(
-                box,
-                textvariable=variable,
-                values=[self.t(key) for _, key in options],
-                state="readonly",
-                width=16,
-            )
-            control.pack(fill="x")
-            attribute = ("history_metric", "history_days", "history_delivery")[column]
-            control.bind(
-                "<<ComboboxSelected>>",
-                lambda _event, c=control, opts=options, attr=attribute: (
-                    self.history_filter(attr, opts[c.current()][0])
-                ),
-            )
-            self.history_filters[attribute] = control
+        self._create_history_filters(filters, definitions)
         data = self.history_data or {}
         if data.get("history_error"):
             self.label(results, self.t(data["history_error"]), size=12, width=570).pack(
@@ -235,7 +278,7 @@ class HistoryScreen:
         )
         chart = tk.Canvas(results, bg=INK, height=105, highlightthickness=0)
         chart.pack(fill="x", pady=(5, 4))
-        chart.bind("<Configure>", lambda _event: self.draw_history_chart(chart))
+        chart.bind(CONFIGURE_EVENT, lambda _event: self.draw_history_chart(chart))
         self.history_chart = chart
         table_frame = tk.Frame(results, bg=BACKGROUND)
         table_frame.pack(fill="both", expand=True)
@@ -260,37 +303,9 @@ class HistoryScreen:
         ):
             tree.heading(column, text=self.t(key))
             tree.column(column, width=width, minwidth=60, stretch=True)
-        quality = {
-            "valid": "history_valid",
-            "error": "history_error",
-            "not-supported": "history_unavailable",
-            "not-collected": "history_not_collected",
-        }
-        for index, row in enumerate(data.get("rows", [])):
-            tree.insert(
-                "",
-                "end",
-                iid=str(index),
-                values=(
-                    self.history_time(row["at"]),
-                    self.history_value(row),
-                    self.t(quality[row["quality"]]),
-                    self.t("history_" + row["delivery"]),
-                    self.t(
-                        "history_complete"
-                        if row["attempt_complete"]
-                        else "history_incomplete"
-                    ),
-                ),
-            )
+        self._history_result_rows(tree, data)
         self.history_tree = tree
-        note = (
-            self.t("history_corrupt").format(count=data["unreadable"])
-            if data.get("unreadable")
-            else self.t("history_empty")
-            if not data.get("rows")
-            else self.t("history_page").format(count=len(data["rows"]))
-        )
+        note = self._history_note(data)
         self.label(results, note, size=9, color=MUTED, width=600).pack(
             fill="x", pady=(4, 0)
         )
@@ -398,13 +413,7 @@ class HistoryScreen:
             y = bottom - row["value"] / top * (bottom - 34)
             if previous:
                 canvas.create_line(*previous, x, y, fill=ACCENT, width=2)
-            color = (
-                ACCENT
-                if row["attempt_complete"]
-                else "#edba72"
-                if row["delivery"] == "pending"
-                else "#c5d6cf"
-            )
+            color = self._history_point_color(row)
             canvas.create_oval(x - 3, y - 3, x + 3, y + 3, fill=color, outline=INK)
             previous = (x, y)
         best = max(

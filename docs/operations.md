@@ -146,7 +146,8 @@ Sinais úteis:
 
 ```bash
 python3 -m pip install -r requirements-dev.txt
-PYTHONPATH=app python3 -m coverage run --source=app,scripts -m unittest discover -s tests -v
+PYTHONPATH=app python3 -m coverage run -m unittest discover -s tests -v
+python3 -m coverage combine
 python3 -m coverage xml
 npm ci --ignore-scripts
 npx playwright install chromium

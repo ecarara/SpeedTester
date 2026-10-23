@@ -10,7 +10,8 @@ from pathlib import Path
 import re
 
 
-_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_KEY = re.compile(r"^[A-Za-z_]\w*$", re.ASCII)
+ENV_FILENAME = "speedtester.env"
 
 
 def config_path() -> Path:
@@ -21,12 +22,12 @@ def config_path() -> Path:
 
     system = platform.system()
     if system == "Darwin":
-        return Path.home() / "Library" / "Application Support" / "SpeedTester" / "speedtester.env"
+        return Path.home() / "Library" / "Application Support" / "SpeedTester" / ENV_FILENAME
     if system == "Windows":
         app_data = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
-        return Path(app_data) / "SpeedTester" / "speedtester.env"
+        return Path(app_data) / "SpeedTester" / ENV_FILENAME
     config_home = os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")
-    return Path(config_home) / "speedtester" / "speedtester.env"
+    return Path(config_home) / "speedtester" / ENV_FILENAME
 
 
 def _value(raw: str) -> str:
@@ -36,6 +37,13 @@ def _value(raw: str) -> str:
     return value
 
 
+def _configuration_lines(path):
+    try:
+        return path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+
+
 def load_user_environment() -> Path:
     """Load simple KEY=VALUE settings without overriding process variables.
 
@@ -43,12 +51,7 @@ def load_user_environment() -> Path:
     process values therefore win over the persisted desktop configuration.
     """
     path = config_path()
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except (FileNotFoundError, OSError):
-        return path
-
-    for line in lines:
+    for line in _configuration_lines(path):
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue

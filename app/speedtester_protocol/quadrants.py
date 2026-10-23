@@ -41,6 +41,23 @@ def local_date_now(tz_name: str, now: datetime | None = None) -> date:
     return current.astimezone(zone).date()
 
 
+def _random_offsets(schedule_seed, local_day, quadrant, count_per_quadrant, available):
+    # Intentional non-cryptographic PRNG: only reproducible measurement
+    # times are generated; never credentials, identifiers or access decisions.
+    rng = random.Random(f"{schedule_seed}:{local_day.isoformat()}:{quadrant}")
+    offsets: list[int] = []
+    attempts = 0
+    while len(offsets) < count_per_quadrant and attempts < 10_000:
+        candidate = rng.randint(0, available)
+        if all(abs(candidate - current) >= MIN_SLOT_GAP_SECONDS for current in offsets):
+            offsets.append(candidate)
+        attempts += 1
+    if len(offsets) != count_per_quadrant:
+        raise ValueError(f"could not create spaced slots for quadrant {quadrant}")
+
+    return sorted(offsets)
+
+
 def plan_day_slots(
     local_day: date,
     tz_name: str,
@@ -75,20 +92,7 @@ def plan_day_slots(
         if available < required:
             raise ValueError(f"quadrant {quadrant} is too short for requested slots")
 
-        # Intentional non-cryptographic PRNG: only reproducible measurement
-        # times are generated; never credentials, identifiers or access decisions.
-        rng = random.Random(f"{schedule_seed}:{local_day.isoformat()}:{quadrant}")
-        offsets: list[int] = []
-        attempts = 0
-        while len(offsets) < count_per_quadrant and attempts < 10_000:
-            candidate = rng.randint(0, available)
-            if all(abs(candidate - current) >= MIN_SLOT_GAP_SECONDS for current in offsets):
-                offsets.append(candidate)
-            attempts += 1
-        if len(offsets) != count_per_quadrant:
-            raise ValueError(f"could not create spaced slots for quadrant {quadrant}")
-
-        for index, offset in enumerate(sorted(offsets), start=1):
+        for index, offset in enumerate(_random_offsets(schedule_seed, local_day, quadrant, count_per_quadrant, available), start=1):
             scheduled = start + timedelta(seconds=offset)
             planned.append(
                 PlannedSlot(

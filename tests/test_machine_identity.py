@@ -122,8 +122,9 @@ class MachineProtocolTests(unittest.TestCase):
     def test_pending_acceptance_blocks_identifier_collection_and_transmission(self):
         from speedtester_protocol.machine import sync_machine
         self.supported=True;self.permission_denied=True
+        installed = self.queue.state('installation')
         with patch('speedtester_protocol.machine.machine_identity',side_effect=AssertionError('No machine identifier before current consent')) as collect:
-            with self.assertRaises(ProtocolError) as error:sync_machine(self.credentials,self.measurement,self.queue.state('installation'))
+            with self.assertRaises(ProtocolError) as error:sync_machine(self.credentials,self.measurement,installed)
             self.assertEqual(error.exception.code,'terms_acceptance_required')
             collect.assert_not_called()
         self.assertEqual(self.requests,[])
@@ -132,8 +133,9 @@ class MachineProtocolTests(unittest.TestCase):
     def test_permission_for_another_client_is_rejected_before_reading_identity(self):
         from speedtester_protocol.machine import sync_machine
         self.supported=True;self.permission_tamper=True
+        installed = self.queue.state('installation')
         with patch('speedtester_protocol.machine.machine_identity',side_effect=AssertionError('No identifier from an unbound permission')) as collect:
-            with self.assertRaises(ProtocolError) as error:sync_machine(self.credentials,self.measurement,self.queue.state('installation'))
+            with self.assertRaises(ProtocolError) as error:sync_machine(self.credentials,self.measurement,installed)
             self.assertEqual(error.exception.code,'invalid_machine_permission')
             collect.assert_not_called()
         self.assertEqual(self.requests,[])

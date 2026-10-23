@@ -13,7 +13,7 @@ def parse_mbps(value):
         return None
     # Decimal separators accepted in all three interface languages; no ambiguous
     # thousands separators, exponents, NaN or silent truncation to integer bps.
-    if not re.fullmatch(r"[0-9]{1,7}(?:[.,][0-9]{1,6})?", value):
+    if not re.fullmatch(r"(?a)\d{1,7}(?:[.,]\d{1,6})?", value):
         raise ValueError("invalid_plan_speed")
     try:
         bps = Decimal(value.replace(",", ".")) * 1_000_000
@@ -28,6 +28,20 @@ def format_mbps(bps):
     if bps is None:
         return ""
     return format(Decimal(bps) / 1_000_000, "f").rstrip("0").rstrip(".") if bps % 1_000_000 else str(bps // 1_000_000)
+
+
+def _current_attempt_payloads(queue, rows, current, destination):
+    latest = None
+    for identifier, ciphertext in rows:
+        record = queue.open(ciphertext, identifier + ":" + destination)
+        payload = record["envelope"]["payload"]
+        if record["kind"] != "observation" or payload["profile_digest"] != current:
+            continue
+        if latest is None:
+            latest = payload["attempt_id"]
+        if payload["attempt_id"] != latest:
+            continue
+        yield payload
 
 
 def comparison(queue, installed):
@@ -45,16 +59,7 @@ def comparison(queue, installed):
     current = digest(profile)
     with queue.connection() as conn:
         rows = conn.execute("SELECT id,ciphertext FROM entries WHERE destination=? AND status='accepted' ORDER BY rowid DESC LIMIT 128", (destination,)).fetchall()
-    latest = None
-    for identifier, ciphertext in rows:
-        record = queue.open(ciphertext, identifier + ":" + destination)
-        payload = record["envelope"]["payload"]
-        if record["kind"] != "observation" or payload["profile_digest"] != current:
-            continue
-        if latest is None:
-            latest = payload["attempt_id"]
-        if payload["attempt_id"] != latest:
-            continue
+    for payload in _current_attempt_payloads(queue, rows, current, destination):
         metric = payload["metric"]
         if metric in result and payload["status"] == "valid" and payload["value"] is not None:
             item = result[metric]

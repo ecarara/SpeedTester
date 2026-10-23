@@ -54,6 +54,52 @@ def notices(bundle):
         shutil.copyfile(python_license, bundle / "PYTHON-LICENSE.txt")
 
 
+def _linux_input_flags():
+    flags = []
+    data=Path("/usr/share/X11/locale")
+    if not data.is_dir():raise RuntimeError("Xlib locale data required for Linux package")
+    flags.extend(("--add-data",str(data)+":x11/locale"))
+    modules=[Path("/usr/lib/X11/locale"),*Path("/usr/lib").glob("*/X11/locale")]
+    for directory in modules:
+        for library in directory.rglob("*.so*") if directory.is_dir() else ():
+            if library.is_file():
+                destination="x11/modules/"+library.parent.relative_to(directory).as_posix()
+                flags.extend(("--add-binary",str(library)+":"+destination))
+    return flags
+
+
+def _smoke_bundle(executable, system):
+    with __import__("tempfile").TemporaryDirectory() as temporary:
+        environment=os.environ.copy()
+        if system=="Linux":
+            environment.update(SPEEDTESTER_INPUT_SMOKE="1",XMODIFIERS="@im=none")
+        subprocess.run([str(executable), "--ui-smoke"], check=True, timeout=120, cwd=temporary,env=environment)
+        if system == "Linux":
+            environment.update(SPEEDTESTER_INPUT_SMOKE="fallback", XMODIFIERS="@im=cararalab-ci-unavailable")
+            subprocess.run([str(executable), "--ui-smoke"], check=True, timeout=120, cwd=temporary, env=environment)
+
+
+def _bundle_executable(bundle, system):
+    names = {"Darwin": "Contents/MacOS/SpeedTesterClient", "Windows": "SpeedTesterClient.exe"}
+    return bundle / names.get(system, "SpeedTesterClient")
+
+
+def _archive_bundle(output, bundle, version, system):
+    releases = output / "releases"
+    releases.mkdir(parents=True, exist_ok=True)
+    name = "SpeedTesterClient-" + version + "-" + system.lower() + "-" + platform.machine().lower()
+    if system == "Darwin":
+        archive = releases / (name + ".zip")
+        subprocess.run(["/usr/bin/ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(bundle), str(archive)], check=True)
+    else:
+        archive = Path(shutil.make_archive(str(releases / name), "zip" if system == "Windows" else "gztar",
+            root_dir=bundle.parent, base_dir=bundle.name))
+    archive.with_name(archive.name + ".sha256").write_text(checksum(archive) + "  " + archive.name + "\n")
+    shutil.copyfile(bundle / "runtime-components.json", releases / (name + "-components.json"))
+    print("experimental-native-bundle-ok: " + archive.name)
+
+
+
 def build(smoke=True):
     output = ROOT / "dist/desktop"
     work = ROOT / "build/desktop"
@@ -70,15 +116,7 @@ def build(smoke=True):
         "--collect-all", "tzdata", "--name", "SpeedTesterClient", "--paths", str(ROOT / "app"),
         "--distpath", str(output / "raw"), "--workpath", str(work / "cache"), "--specpath", str(work)]
     if platform.system()=="Linux":
-        data=Path("/usr/share/X11/locale")
-        if not data.is_dir():raise RuntimeError("Xlib locale data required for Linux package")
-        command.extend(("--add-data",str(data)+":x11/locale"))
-        modules=[Path("/usr/lib/X11/locale"),*Path("/usr/lib").glob("*/X11/locale")]
-        for directory in modules:
-            for library in directory.rglob("*.so*") if directory.is_dir() else ():
-                if library.is_file():
-                    destination="x11/modules/"+library.parent.relative_to(directory).as_posix()
-                    command.extend(("--add-binary",str(library)+":"+destination))
+        command.extend(_linux_input_flags())
     if platform.system() in ("Windows", "Darwin"):
         command.append("--windowed")
     if platform.system() == "Darwin":
@@ -105,28 +143,10 @@ def build(smoke=True):
         "Pairing after current legal acceptance enables future scheduled slots, never an immediate test. Upgrades retain existing data, pairing and active/paused choice.\n"
         "Measurements require a centrally signed destination, valid credentials and authorization for the scheduled attempt.\n")
     manifest(bundle)
-    executable = bundle / ("Contents/MacOS/SpeedTesterClient" if system == "Darwin" else "SpeedTesterClient.exe" if system == "Windows" else "SpeedTesterClient")
+    executable = _bundle_executable(bundle, system)
     if smoke:
-        with __import__("tempfile").TemporaryDirectory() as temporary:
-            environment=os.environ.copy()
-            if system=="Linux":
-                environment.update(SPEEDTESTER_INPUT_SMOKE="1",XMODIFIERS="@im=none")
-            subprocess.run([str(executable), "--ui-smoke"], check=True, timeout=120, cwd=temporary,env=environment)
-            if system == "Linux":
-                environment.update(SPEEDTESTER_INPUT_SMOKE="fallback", XMODIFIERS="@im=cararalab-ci-unavailable")
-                subprocess.run([str(executable), "--ui-smoke"], check=True, timeout=120, cwd=temporary, env=environment)
-    releases = output / "releases"
-    releases.mkdir(parents=True, exist_ok=True)
-    name = "SpeedTesterClient-" + CLIENT_VERSION + "-" + system.lower() + "-" + platform.machine().lower()
-    if system == "Darwin":
-        archive = releases / (name + ".zip")
-        subprocess.run(["/usr/bin/ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(bundle), str(archive)], check=True)
-    else:
-        archive = Path(shutil.make_archive(str(releases / name), "zip" if system == "Windows" else "gztar",
-            root_dir=bundle.parent, base_dir=bundle.name))
-    archive.with_name(archive.name + ".sha256").write_text(checksum(archive) + "  " + archive.name + "\n")
-    shutil.copyfile(bundle / "runtime-components.json", releases / (name + "-components.json"))
-    print("experimental-native-bundle-ok: " + archive.name)
+        _smoke_bundle(executable, system)
+    _archive_bundle(output, bundle, CLIENT_VERSION, system)
 
 
 if __name__ == "__main__":

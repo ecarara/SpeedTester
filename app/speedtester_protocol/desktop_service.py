@@ -22,6 +22,8 @@ from .runner import IperfRunner
 from .schedule import DailySchedule, local_timezone, migrate_installation, policy
 from zoneinfo import ZoneInfo
 
+LAST_PROBLEM = "desktop:last_problem"
+
 CONFIGURATION = "desktop:configuration"
 ENABLED = "desktop:measurements_enabled"
 MAX_DATABASE_BYTES = 128 * 1024 * 1024
@@ -118,7 +120,7 @@ class DesktopEngine:
             "accepted": counts.get("accepted", 0), "observed_at": int(self.clock()),
             "runner_available": self.runner is not None or iperf_binary() is not None,
             "last_attempt_at": self.queue.state("desktop:last_attempt_at"),
-            "problem": self.queue.state("desktop:last_problem") or None,
+            "problem": self.queue.state(LAST_PROBLEM) or None,
             "quarantined": counts.get("quarantined", 0), "database_bytes": self.queue.path.stat().st_size,
             "plan_comparison": comparison(self.queue, self.installation()),
             "last_tick": self.last_tick, "configuration": configuration.model_dump() if configuration else None}
@@ -131,7 +133,7 @@ class DesktopEngine:
 
     def record_problem(self, code):
         self.last_code = code if code in DISPLAY_CODES else "server_rejected"
-        self.queue.state("desktop:last_problem", {"code": self.last_code, "at": int(self.clock())})
+        self.queue.state(LAST_PROBLEM, {"code": self.last_code, "at": int(self.clock())})
         # An explicit authorization block also pauses the schedule, so the
         # displayed recovery action is available. A transient/unknown refusal
         # must not be mistaken for withdrawn consent or account suspension.
@@ -168,7 +170,7 @@ class DesktopEngine:
             installed.pop("port", None)
             self.queue.state("installation", installed)
         if not unchanged and not continuing:
-            self.queue.state("desktop:last_problem", {})
+            self.queue.state(LAST_PROBLEM, {})
         self.last_code = "ready" if old else "configured"
         return self.status()
 
@@ -219,7 +221,7 @@ class DesktopEngine:
         self.maintenance = False
         DailySchedule(self.queue, installed["schedule"]).refresh(int(self.clock()), activate=True)
         self.queue.state(ENABLED, True)
-        self.queue.state("desktop:last_problem", {})
+        self.queue.state(LAST_PROBLEM, {})
         self.last_code = "ready"
 
     def dispatch(self, operation, arguments):
@@ -232,22 +234,25 @@ class DesktopEngine:
             if operation not in {"status", "history"}:
                 self.wake.set()
 
+    def _history(self, arguments):
+        from .local_history import read_history
+        result = read_history(self.queue, self.installation(), arguments, now=int(self.clock()))
+        installed = self.installation()
+        credentials, _ = self.credentials()
+        result["integration"] = {"paired": bool(credentials and credentials.bundle),
+            "origin": installed["origin"] if installed else None,
+            "enabled": bool(self.queue.state(ENABLED)) and not self.maintenance,
+            "problem": (self.queue.state(LAST_PROBLEM) or {}).get("code"),
+            "observed_at": int(self.clock()), "timezone": installed["schedule"]["timezone"] if installed else "UTC"}
+        return {"ok": True, **result}
+
     def _dispatch(self, operation, arguments):
         with self.lock:
             try:
                 if operation == "configure":
                     return self.configure(arguments)
                 if operation == "history":
-                    from .local_history import read_history
-                    result = read_history(self.queue, self.installation(), arguments, now=int(self.clock()))
-                    installed = self.installation()
-                    credentials, _ = self.credentials()
-                    result["integration"] = {"paired": bool(credentials and credentials.bundle),
-                        "origin": installed["origin"] if installed else None,
-                        "enabled": bool(self.queue.state(ENABLED)) and not self.maintenance,
-                        "problem": (self.queue.state("desktop:last_problem") or {}).get("code"),
-                        "observed_at": int(self.clock()), "timezone": installed["schedule"]["timezone"] if installed else "UTC"}
-                    return {"ok": True, **result}
+                    return self._history(arguments)
                 if arguments:
                     raise ProtocolError("invalid_local_arguments")
                 if operation == "status":
@@ -275,6 +280,34 @@ class DesktopEngine:
                 self.record_problem(exc.code)
                 return {"ok": False, "code": self.last_code}
 
+    def _poll_pairing(self, credentials, measurement):
+        if self.pairing.expires_at <= self.last_tick:
+            self.pairing = None
+            self.last_code = "pairing_expired"
+            return self.last_code
+        self.next_poll = self.last_tick + self.pairing.interval
+        try:
+            PairingClient(credentials, measurement).poll(self.pairing)
+        except ProtocolError as exc:
+            if exc.code == "authorization_pending":
+                return exc.code
+            if exc.code == "slow_down":
+                self.next_poll += 5
+                return exc.code
+            raise
+        self.pairing = None
+        try:
+            sync_environment(credentials, measurement)
+            self.enable_schedule()
+        except (OSError, ValueError, ProtocolError) as exc:
+            # Pairing stays saved if activation is blocked. Do not pretend
+            # it is active, loop into a measurement, or auto-resume a pause.
+            self.queue.state(ENABLED, False)
+            self.record_problem(exc.code if isinstance(exc, ProtocolError) else "local_or_network_failure")
+            return "paired"
+        self.last_code = "paired"
+        return self.last_code
+
     def tick(self):
         with self.lock:
             self.last_tick = int(self.clock())
@@ -283,32 +316,7 @@ class DesktopEngine:
                 return "idle"
             credentials, measurement = self.credentials()
             if self.pairing and self.last_tick >= self.next_poll:
-                if self.pairing.expires_at <= self.last_tick:
-                    self.pairing = None
-                    self.last_code = "pairing_expired"
-                    return self.last_code
-                self.next_poll = self.last_tick + self.pairing.interval
-                try:
-                    PairingClient(credentials, measurement).poll(self.pairing)
-                except ProtocolError as exc:
-                    if exc.code == "authorization_pending":
-                        return exc.code
-                    if exc.code == "slow_down":
-                        self.next_poll += 5
-                        return exc.code
-                    raise
-                self.pairing = None
-                try:
-                    sync_environment(credentials, measurement)
-                    self.enable_schedule()
-                except (OSError, ValueError, ProtocolError) as exc:
-                    # Pairing stays saved if activation is blocked. Do not pretend
-                    # it is active, loop into a measurement, or auto-resume a pause.
-                    self.queue.state(ENABLED, False)
-                    self.record_problem(exc.code if isinstance(exc, ProtocolError) else "local_or_network_failure")
-                    return "paired"
-                self.last_code = "paired"
-                return self.last_code
+                return self._poll_pairing(credentials, measurement)
             if not credentials or not credentials.bundle:
                 return "unpaired"
             if self.maintenance:
@@ -329,7 +337,7 @@ class DesktopEngine:
                 self.last_code = cycle(self.queue, transport=self.transport, runner=self.runner, now=self.last_tick, clock=self.clock)
                 if self.last_code == "attempt_completed":
                     self.queue.state("desktop:last_attempt_at", self.last_tick)
-                self.queue.state("desktop:last_problem", {})
+                self.queue.state(LAST_PROBLEM, {})
             except ProtocolError as exc:
                 if exc.code not in {"test_target_unavailable", "invalid_test_target", "test_target_changed"}:
                     raise

@@ -12,7 +12,7 @@ if __name__ == '__main__':
     parser.add_argument('app', type=Path)
     parser.add_argument('version')
     args = parser.parse_args()
-    if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', args.version):
+    if not re.fullmatch(r'(?a)\d+\.\d+\.\d+', args.version):
         parser.error('semantic package version required')
     (args.app / 'shared/_build_version.py').write_text(
         '# SPDX-License-Identifier: GPL-3.0-or-later\n'

@@ -14,6 +14,9 @@ import subprocess
 import tarfile
 import urllib.request
 
+OPENSSL_NOTICES = "THIRD-PARTY-LICENSES/OpenSSL"
+MSYS_RUNTIME_DLL = "msys-2.0.dll"
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -33,7 +36,74 @@ def run(command, **options):
     return subprocess.check_output(command, text=True, **options).strip()
 
 
+def _copy_linux_runtime(bundle, binary, tools):
+    libraries = re.findall(r'=> (/[^ ]+)',run(['ldd',str(binary)]))
+    crypto = [p for p in libraries if Path(p).name.startswith('libcrypto.so')]
+    if len(crypto)!=1:
+        raise ValueError('Expected OpenSSL crypto runtime')
+    shutil.copy2(crypto[0],tools/Path(crypto[0]).name)
+    subprocess.run(['patchelf','--set-rpath','$ORIGIN',str(binary)],check=True)
+    notice=bundle/OPENSSL_NOTICES;notice.mkdir(exist_ok=True)
+    shutil.copy2('/usr/share/doc/libssl3t64/copyright' if Path('/usr/share/doc/libssl3t64/copyright').exists() else '/usr/share/doc/libssl3/copyright',notice/'copyright')
+
+
+def _copy_darwin_runtime(bundle, binary, tools, prefix):
+    libraries=[line.strip().split(' (')[0] for line in run(['/usr/bin/otool','-L',str(binary)]).splitlines()[1:]]
+    crypto=[p for p in libraries if Path(p).name.startswith('libcrypto')]
+    if len(crypto)!=1:
+        raise ValueError('Expected OpenSSL crypto runtime')
+    library=tools/Path(crypto[0]).name;shutil.copy2(crypto[0],library)
+    subprocess.run(['/usr/bin/install_name_tool','-change',crypto[0],'@loader_path/'+library.name,str(binary)],check=True)
+    subprocess.run(['/usr/bin/install_name_tool','-id','@loader_path/'+library.name,str(library)],check=True)
+    for item in (library,binary):subprocess.run(['/usr/bin/codesign','--force','--sign','-',str(item)],check=True)
+    notice=bundle/OPENSSL_NOTICES;notice.mkdir(exist_ok=True)
+    shutil.copy2(Path(prefix)/'LICENSE.txt',notice/'LICENSE.txt')
+
+
+def _copy_msys_dependencies(binary, tools, bash, msys, environment):
+    pending=[binary];seen=set()
+    while pending:
+        item=pending.pop()
+        imports=re.findall(r'DLL Name:\s*(\S+)',run([str(bash),'-lc','objdump -p '+shlex.quote(item.as_posix())],env=environment))
+        for name in imports:
+            if not name.lower().startswith('msys-') or name.lower() in seen:continue
+            if name.lower() not in (MSYS_RUNTIME_DLL,'msys-crypto-3.dll','msys-z.dll'):
+                raise ValueError('Unexpected native dependency: '+name)
+            seen.add(name.lower())
+            destination=tools/name
+            if name.lower()!=MSYS_RUNTIME_DLL:shutil.copy2(msys/'usr/bin'/name,destination)
+            pending.append(destination)
+
+
+def _copy_windows_runtime(bundle, binary, tools, pins, work, environment, version):
+    msys = Path(environment['SPEEDTESTER_MSYS_ROOT'])
+    bash = msys / 'usr/bin/bash.exe'
+    # Compile ourselves; copy only known dependency DLLs from the official
+    # package installation. The POSIX runtime itself is independently pinned.
+    runtime=fetch(pins['windows_runtime'],work/'runtime.pkg.tar.zst')
+    extraction=work/'runtime';extraction.mkdir(exist_ok=True)
+    command='tar --force-local -xf '+shlex.quote(runtime.as_posix())+' -C '+shlex.quote(extraction.as_posix())+' usr/bin/msys-2.0.dll usr/share/doc/Cygwin/COPYING usr/share/doc/Cygwin/CYGWIN_LICENSE'
+    run([str(bash),'-lc',command],env=environment)
+    shutil.copy2(extraction/'usr/bin/msys-2.0.dll',tools/MSYS_RUNTIME_DLL)
+    _copy_msys_dependencies(binary, tools, bash, msys, environment)
+    license_dir=bundle/'THIRD-PARTY-LICENSES/MSYS2';license_dir.mkdir(exist_ok=True)
+    for item in (extraction/'usr/share/doc/Cygwin').iterdir():shutil.copy2(item,license_dir/item.name)
+    notice=bundle/OPENSSL_NOTICES;notice.mkdir(exist_ok=True)
+    candidates=list((msys/'usr/share/licenses').glob('*openssl*/LICENSE*'))
+    if not candidates:candidates=list((msys/'usr/share/doc/openssl').glob('LICENSE*'))
+    if not candidates:raise ValueError('OpenSSL license required')
+    for item in candidates:shutil.copy2(item,notice/item.name)
+    releases=ROOT/'dist/desktop/releases';releases.mkdir(parents=True,exist_ok=True)
+    source_name=pins['windows_source']['url'].rsplit('/',1)[1]
+    fetch(pins['windows_source'],releases/source_name)
+    tag=('v0.3.0-desktop-preview.'+version.split('dev')[1]) if 'dev' in version else 'v'+version
+    (license_dir/'SOURCE.txt').write_text('Corresponding MSYS2 runtime sources, including upstream source and distribution patches:\nhttps://github.com/ecarara/SpeedTester/releases/download/'+tag+'/'+source_name+'\nSHA256: '+pins['windows_source']['sha256']+'\n')
+    return {'name':'msys2-runtime','version':pins['windows_runtime']['version'],'source':pins['windows_source']}
+
+
 def build(bundle, version):
+    # Native verification changes cwd; never resolve the binary relative to it.
+    bundle = bundle.resolve()
     pins = json.loads((ROOT/'security/iperf3.json').read_text())
     work = ROOT/'build/native-iperf'
     work.mkdir(parents=True, exist_ok=True)
@@ -53,7 +123,6 @@ def build(bundle, version):
     shutil.copy2(archive, notices/'iperf-3.22.tar.gz')
     environment = os.environ.copy()
     configure = ['./configure','--disable-shared','--enable-static','--without-sctp']
-    bash = None
     if system=='Darwin':
         prefix = run([shutil.which('brew') or '/opt/homebrew/bin/brew','--prefix','openssl@3'])
         configure.append('--with-openssl='+prefix)
@@ -77,59 +146,12 @@ def build(bundle, version):
     binary.chmod(0o755)
     native = [{'name':'iperf3','version':pins['version'],'source':pins['source']},
               {'name':'openssl','version':crypto_version}]
-    if system=='Linux':
-        libraries = re.findall(r'=> (/[^ ]+)',run(['ldd',str(binary)]))
-        crypto = [p for p in libraries if Path(p).name.startswith('libcrypto.so')]
-        if len(crypto)!=1:
-            raise ValueError('Expected OpenSSL crypto runtime')
-        shutil.copy2(crypto[0],tools/Path(crypto[0]).name)
-        subprocess.run(['patchelf','--set-rpath','$ORIGIN',str(binary)],check=True)
-        notice=bundle/'THIRD-PARTY-LICENSES/OpenSSL';notice.mkdir(exist_ok=True)
-        shutil.copy2('/usr/share/doc/libssl3t64/copyright' if Path('/usr/share/doc/libssl3t64/copyright').exists() else '/usr/share/doc/libssl3/copyright',notice/'copyright')
-    elif system=='Darwin':
-        libraries=[line.strip().split(' (')[0] for line in run(['/usr/bin/otool','-L',str(binary)]).splitlines()[1:]]
-        crypto=[p for p in libraries if Path(p).name.startswith('libcrypto')]
-        if len(crypto)!=1:
-            raise ValueError('Expected OpenSSL crypto runtime')
-        library=tools/Path(crypto[0]).name;shutil.copy2(crypto[0],library)
-        subprocess.run(['/usr/bin/install_name_tool','-change',crypto[0],'@loader_path/'+library.name,str(binary)],check=True)
-        subprocess.run(['/usr/bin/install_name_tool','-id','@loader_path/'+library.name,str(library)],check=True)
-        for item in (library,binary):subprocess.run(['/usr/bin/codesign','--force','--sign','-',str(item)],check=True)
-        notice=bundle/'THIRD-PARTY-LICENSES/OpenSSL';notice.mkdir(exist_ok=True)
-        shutil.copy2(Path(prefix)/'LICENSE.txt',notice/'LICENSE.txt')
+    if system == 'Linux':
+        _copy_linux_runtime(bundle, binary, tools)
+    elif system == 'Darwin':
+        _copy_darwin_runtime(bundle, binary, tools, prefix)
     else:
-        # Compile ourselves; copy only known dependency DLLs from the official
-        # package installation. The POSIX runtime itself is independently pinned.
-        runtime=fetch(pins['windows_runtime'],work/'runtime.pkg.tar.zst')
-        extraction=work/'runtime';extraction.mkdir(exist_ok=True)
-        command='tar --force-local -xf '+shlex.quote(runtime.as_posix())+' -C '+shlex.quote(extraction.as_posix())+' usr/bin/msys-2.0.dll usr/share/doc/Cygwin/COPYING usr/share/doc/Cygwin/CYGWIN_LICENSE'
-        run([str(bash),'-lc',command],env=environment)
-        shutil.copy2(extraction/'usr/bin/msys-2.0.dll',tools/'msys-2.0.dll')
-        pending=[binary];seen=set()
-        while pending:
-            item=pending.pop()
-            imports=re.findall(r'DLL Name:\s*(\S+)',run([str(bash),'-lc','objdump -p '+shlex.quote(item.as_posix())],env=environment))
-            for name in imports:
-                if not name.lower().startswith('msys-') or name.lower() in seen:continue
-                if name.lower() not in ('msys-2.0.dll','msys-crypto-3.dll','msys-z.dll'):
-                    raise ValueError('Unexpected native dependency: '+name)
-                seen.add(name.lower())
-                destination=tools/name
-                if name.lower()!='msys-2.0.dll':shutil.copy2(msys/'usr/bin'/name,destination)
-                pending.append(destination)
-        license_dir=bundle/'THIRD-PARTY-LICENSES/MSYS2';license_dir.mkdir(exist_ok=True)
-        for item in (extraction/'usr/share/doc/Cygwin').iterdir():shutil.copy2(item,license_dir/item.name)
-        notice=bundle/'THIRD-PARTY-LICENSES/OpenSSL';notice.mkdir(exist_ok=True)
-        candidates=list((msys/'usr/share/licenses').glob('*openssl*/LICENSE*'))
-        if not candidates:candidates=list((msys/'usr/share/doc/openssl').glob('LICENSE*'))
-        if not candidates:raise ValueError('OpenSSL license required')
-        for item in candidates:shutil.copy2(item,notice/item.name)
-        releases=ROOT/'dist/desktop/releases';releases.mkdir(parents=True,exist_ok=True)
-        source_name=pins['windows_source']['url'].rsplit('/',1)[1]
-        fetch(pins['windows_source'],releases/source_name)
-        tag=('v0.3.0-desktop-preview.'+version.split('dev')[1]) if 'dev' in version else 'v'+version
-        (license_dir/'SOURCE.txt').write_text('Corresponding MSYS2 runtime sources, including upstream source and distribution patches:\nhttps://github.com/ecarara/SpeedTester/releases/download/'+tag+'/'+source_name+'\nSHA256: '+pins['windows_source']['sha256']+'\n')
-        native.append({'name':'msys2-runtime','version':pins['windows_runtime']['version'],'source':pins['windows_source']})
+        native.append(_copy_windows_runtime(bundle, binary, tools, pins, work, environment, version))
     # Invoking --version performs no network or measurement. Verify the exact
     # bundled program outside its build directory, without the build PATH.
     isolated={**os.environ,'PATH':str(tools)+os.pathsep+(os.environ.get('SystemRoot',r'C:\Windows')+'/System32' if system=='Windows' else '/usr/bin:/bin')}

@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
 """Complete installer copy; Portuguese is always the initial language."""
+WINDOW_TITLE = "SpeedTester Client · CararaLab"
+
 TEXT = {
 "pt-BR": {
 "experimental":"VERSÃO EXPERIMENTAL · Instalação nativa ainda em homologação. Não usar em produção.",
-"title":"SpeedTester Client · CararaLab", "tagline":"A sua conexão,\ncom evidências.",
+"title":WINDOW_TITLE, "tagline":"A sua conexão,\ncom evidências.",
 "navigation":"INSTALAÇÃO E MANUTENÇÃO", "footer":"CararaLab · Software livre", "language":"Idioma",
 "welcome":"Bem-vindo ao seu Client", "intro":"Instale o serviço uma vez. Ele funciona em segundo plano, mesmo sem esta janela aberta ou uma sessão de usuário.",
 "install":"Instalar", "install_detail":"Preparar o serviço e escolher se deseja contribuir.",
@@ -43,7 +45,7 @@ TEXT = {
 },
 "en": {
 "experimental":"EXPERIMENTAL VERSION · Native installation is still under validation. Not for production use.",
-"title":"SpeedTester Client · CararaLab", "tagline":"Your connection,\nbacked by evidence.",
+"title":WINDOW_TITLE, "tagline":"Your connection,\nbacked by evidence.",
 "navigation":"INSTALLATION & MAINTENANCE", "footer":"CararaLab · Free software", "language":"Language",
 "welcome":"Welcome to your Client", "intro":"Install the service once. It runs in the background, even with this window closed and no user signed in.",
 "install":"Install", "install_detail":"Set up the service and choose whether to contribute.",
@@ -82,7 +84,7 @@ TEXT = {
 },
 "es": {
 "experimental":"VERSIÓN EXPERIMENTAL · Instalación nativa en validación. No usar en producción.",
-"title":"SpeedTester Client · CararaLab", "tagline":"Tu conexión,\ncon evidencias.",
+"title":WINDOW_TITLE, "tagline":"Tu conexión,\ncon evidencias.",
 "navigation":"INSTALACIÓN Y MANTENIMIENTO", "footer":"CararaLab · Software libre", "language":"Idioma",
 "welcome":"Bienvenido a tu Client", "intro":"Instala el servicio una vez. Funciona en segundo plano, incluso con esta ventana cerrada y sin sesión de usuario.",
 "install":"Instalar", "install_detail":"Preparar el servicio y elegir si deseas contribuir.",

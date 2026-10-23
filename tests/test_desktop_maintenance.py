@@ -9,6 +9,7 @@ import plistlib
 import tempfile
 from types import SimpleNamespace
 import unittest
+from nacl.exceptions import CryptoError
 from unittest.mock import patch
 from speedtester_protocol.installation import protected_queue
 from speedtester_protocol.native_services import (Layout, MARKER, BOOTSTRAP, native_layout,
@@ -118,7 +119,7 @@ class MaintenanceTests(unittest.TestCase):
         with queue.connection() as connection:
             connection.execute("UPDATE state SET value=? WHERE key=?", (b"x" * 64, "important"))
         before = queue.path.read_bytes()
-        with self.assertRaises(Exception):native_operation({**self.request, "operation": "repair"})
+        with self.assertRaises(CryptoError):native_operation({**self.request, "operation": "repair"})
         self.assertEqual(queue.path.read_bytes(), before)
 
     def test_uninstall_preserves_data_then_reinstall_and_explicit_purge_remove_it(self):

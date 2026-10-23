@@ -8,6 +8,19 @@ from pathlib import Path
 from .bundled_tools import iperf_binary
 
 
+def _stop_process(process):
+    if process.poll() is None:
+        if os.name=="nt":process.kill()
+        else:
+            try:
+                os.killpg(process.pid,signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                # It may have exited between poll and kill, or
+                # the host may restrict process-group signals.
+                if process.poll() is None:process.kill()
+        process.wait()
+
+
 class IperfRunner:
     def __init__(self,host,port=5201,*,binary=None,authorize=None,target_id="participant-configured",target_scope=None,expires_at=None):
         if not isinstance(host,str) or not re.fullmatch(r"[A-Za-z0-9:.\[\]-]{1,253}",host) or host.startswith("-") or not 1<=port<=65535:
@@ -34,16 +47,7 @@ class IperfRunner:
                         time.sleep(min(.01,remaining))
                     if process.returncode:raise RuntimeError("iperf_failed")
                 finally:
-                    if process.poll() is None:
-                        if os.name=="nt":process.kill()
-                        else:
-                            try:
-                                os.killpg(process.pid,signal.SIGKILL)
-                            except (ProcessLookupError, PermissionError):
-                                # It may have exited between poll and kill, or
-                                # the host may restrict process-group signals.
-                                if process.poll() is None:process.kill()
-                        process.wait()
+                    _stop_process(process)
             output.seek(0);raw=output.read(65537)
             if len(raw)>65536:raise RuntimeError("iperf_output_too_large")
         return raw
@@ -63,6 +67,18 @@ class IperfRunner:
                 or (self.target_scope is not None and grant.target_scope!=self.target_scope)
                 or (self.expires_at is not None and time.time()>=self.expires_at)):
             raise ValueError("unsupported measurement policy")
+
+    def _direction_command(self, reverse, budget, access, public_key):
+        port = self.port
+        if access:
+            port = access.download_port if reverse else access.upload_port
+        command = [self.binary, "--client", self.host, "--port", str(port), "--parallel", "1",
+                   "--bytes", str(budget), "--length", "1024", "--json", "--connect-timeout", "5000"]
+        if access:
+            command.extend(("--username", access.username, "--rsa-public-key-path", public_key.as_posix()))
+        if reverse:
+            command.append("--reverse")
+        return command
 
     def __call__(self,grant):
         self.check_policy(grant)
@@ -84,11 +100,7 @@ class IperfRunner:
             for reverse in (False,True):
                 if deadline-time.monotonic()<=0 or (access and time.time() >= access.expires_at):
                     raise RuntimeError("measurement_deadline")
-                port = (access.download_port if reverse else access.upload_port) if access else self.port
-                command=[self.binary,"--client",self.host,"--port",str(port),"--parallel","1","--bytes",str(budget),"--length","1024","--json","--connect-timeout","5000"]
-                if access:
-                    command.extend(("--username",access.username,"--rsa-public-key-path",public_key.as_posix()))
-                if reverse:command.append("--reverse")
+                command = self._direction_command(reverse, budget, access, public_key)
                 raw=self._capture(command,deadline,grant.max_duration_ms,environment) if access else self._capture(command,deadline,grant.max_duration_ms)
                 samples.append(self._summary(raw,reverse,budget))
         elapsed=time.monotonic()-started

@@ -29,13 +29,7 @@ def windows_identity():
         token.Close()
 
 
-def windows_acl(path, *, principal=None, apply=False, directory=False, read_only=False):
-    import ntsecuritycon as rights
-    import win32con
-    import win32security as security
-    principal = principal or windows_identity()
-    allowed = [principal, security.CreateWellKnownSid(security.WinLocalSystemSid),
-               security.CreateWellKnownSid(security.WinBuiltinAdministratorsSid)]
+def _ensure_windows_owner(path, allowed, apply, security):
     descriptor = security.GetNamedSecurityInfo(str(path), security.SE_FILE_OBJECT, security.OWNER_SECURITY_INFORMATION)
     owner = descriptor.GetSecurityDescriptorOwner()
     if owner not in allowed:
@@ -47,15 +41,9 @@ def windows_acl(path, *, principal=None, apply=False, directory=False, read_only
                 security.OWNER_SECURITY_INFORMATION, allowed[-1], None, None, None)
         else:
             raise ValueError("state_owner_mismatch")
-    if apply:
-        acl = security.ACL()
-        inherit = win32con.OBJECT_INHERIT_ACE | win32con.CONTAINER_INHERIT_ACE if directory else 0
-        for sid in allowed:
-            access = rights.FILE_GENERIC_READ | rights.FILE_GENERIC_EXECUTE if read_only and sid == principal else rights.FILE_ALL_ACCESS
-            acl.AddAccessAllowedAceEx(security.ACL_REVISION_DS, inherit, access, sid)
-        security.SetNamedSecurityInfo(str(path), security.SE_FILE_OBJECT,
-            security.DACL_SECURITY_INFORMATION | security.PROTECTED_DACL_SECURITY_INFORMATION,
-            None, None, acl, None)
+
+
+def _validate_windows_acl(path, principal, allowed, security, rights):
     descriptor = security.GetNamedSecurityInfo(str(path), security.SE_FILE_OBJECT, security.DACL_SECURITY_INFORMATION)
     acl = descriptor.GetSecurityDescriptorDacl()
     if acl is None or acl.GetAceCount() == 0:
@@ -69,6 +57,26 @@ def windows_acl(path, *, principal=None, apply=False, directory=False, read_only
             current_allowed = True
     if not current_allowed:
         raise ValueError("state_owner_mismatch")
+
+
+def windows_acl(path, *, principal=None, apply=False, directory=False, read_only=False):
+    import ntsecuritycon as rights
+    import win32con
+    import win32security as security
+    principal = principal or windows_identity()
+    allowed = [principal, security.CreateWellKnownSid(security.WinLocalSystemSid),
+               security.CreateWellKnownSid(security.WinBuiltinAdministratorsSid)]
+    _ensure_windows_owner(path, allowed, apply, security)
+    if apply:
+        acl = security.ACL()
+        inherit = win32con.OBJECT_INHERIT_ACE | win32con.CONTAINER_INHERIT_ACE if directory else 0
+        for sid in allowed:
+            access = rights.FILE_GENERIC_READ | rights.FILE_GENERIC_EXECUTE if read_only and sid == principal else rights.FILE_ALL_ACCESS
+            acl.AddAccessAllowedAceEx(security.ACL_REVISION_DS, inherit, access, sid)
+        security.SetNamedSecurityInfo(str(path), security.SE_FILE_OBJECT,
+            security.DACL_SECURITY_INFORMATION | security.PROTECTED_DACL_SECURITY_INFORMATION,
+            None, None, acl, None)
+    _validate_windows_acl(path, principal, allowed, security, rights)
 
 
 def private_directory(path):

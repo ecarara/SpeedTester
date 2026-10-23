@@ -291,7 +291,7 @@ class ServiceController:
 
 def open_dashboard(config: LauncherConfig) -> None:
     """Open the configured dashboard without exposing credentials in logs."""
-    url = validate_dashboard_url(config.dashboard_url)
+    validate_dashboard_url(config.dashboard_url)
     url = ensure_dashboard_ready(config)
     if not webbrowser.open(url, new=2):
         raise LauncherError("Não foi possível abrir o navegador padrão.")

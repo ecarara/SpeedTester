@@ -7,6 +7,8 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 from .quadrants import plan_day_slots, quadrant_for_timestamp, SLOT_END_MARGIN_SECONDS
 
+BEGIN_IMMEDIATE = "BEGIN IMMEDIATE"
+
 FORMAT = 'quadrants-v1'
 CENTRAL_FORMAT = 'quadrants-server-v1'
 HEADER = 'schedule:cursor'
@@ -89,6 +91,36 @@ class DailySchedule:
         self._save(conn, self.day_key(day), result)
         return result
 
+    def _expire_older_days(self, conn, header, today):
+        if not header['last_day']:
+            return
+        previous = datetime.fromisoformat(header['last_day']).date()
+        for day in {previous, previous + timedelta(days=1)}:
+            if day >= today:
+                continue
+            record = self.queue._read_state(conn, self.day_key(day))
+            if not record:
+                continue
+            self._expire_record(record)
+            self._save(conn, self.day_key(day), record)
+
+    @staticmethod
+    def _expire_record(record):
+        for slot in record['slots']:
+            if slot['state'] in {'pending', 'claimed'}:
+                slot['state'] = 'interrupted' if slot['state'] == 'claimed' else 'missed'
+
+    @staticmethod
+    def _classify_day_slots(record, not_before, effective, is_today, quadrant):
+        for slot in record['slots']:
+            if slot['state'] == 'claimed':
+                slot['state'] = 'interrupted'
+            elif slot['state'] == 'pending':
+                if slot['at'] < not_before:
+                    slot['state'] = 'skipped'
+                elif slot['deadline'] < effective or (is_today and slot['at'] <= effective and slot['quadrant'] != quadrant):
+                    slot['state'] = 'missed'
+
     def _refresh(self, conn, now, activate=False):
         header = self.queue._read_state(conn, self.header_key)
         if header is None:
@@ -100,31 +132,14 @@ class DailySchedule:
         effective = max(now, header['last_now'])
         today = datetime.fromtimestamp(effective, self.zone).date()
         # Classify only previously materialized days; never run a missed backlog.
-        if header['last_day']:
-            previous = datetime.fromisoformat(header['last_day']).date()
-            for day in {previous, previous + timedelta(days=1)}:
-                if day >= today:
-                    continue
-                record = self.queue._read_state(conn, self.day_key(day))
-                if record:
-                    for slot in record['slots']:
-                        if slot['state'] in {'pending', 'claimed'}:
-                            slot['state'] = 'interrupted' if slot['state'] == 'claimed' else 'missed'
-                    self._save(conn, self.day_key(day), record)
+        self._expire_older_days(conn, header, today)
         days = []
         quadrant = (('madrugada','manha','tarde','noite')[datetime.fromtimestamp(effective,self.zone).hour//6]
             if self.policy['format'] == CENTRAL_FORMAT
             else quadrant_for_timestamp(datetime.fromtimestamp(effective, timezone.utc), self.policy['timezone']))
         for day in (today, today + timedelta(days=1)):
             record = self._day(conn, day, header['not_before'])
-            for slot in record['slots']:
-                if slot['state'] == 'claimed':
-                    slot['state'] = 'interrupted'
-                elif slot['state'] == 'pending':
-                    if slot['at'] < header['not_before']:
-                        slot['state'] = 'skipped'
-                    elif slot['deadline'] < effective or (day == today and slot['at'] <= effective and slot['quadrant'] != quadrant):
-                        slot['state'] = 'missed'
+            self._classify_day_slots(record, header['not_before'], effective, day == today, quadrant)
             self._save(conn, self.day_key(day), record)
             days.append(record)
         header.update(last_now=effective, last_day=today.isoformat())
@@ -135,14 +150,14 @@ class DailySchedule:
 
     def refresh(self, now, *, activate=False):
         with self.queue.connection() as conn:
-            conn.execute('BEGIN IMMEDIATE')
+            conn.execute(BEGIN_IMMEDIATE)
             _, days = self._refresh(conn, int(now), activate)
             return days
 
     def claim(self, now, request_key):
         now = int(now)
         with self.queue.connection() as conn:
-            conn.execute('BEGIN IMMEDIATE')
+            conn.execute(BEGIN_IMMEDIATE)
             header, days = self._refresh(conn, now)
             if now < header['last_now']:
                 return None
@@ -160,7 +175,7 @@ class DailySchedule:
 
     def finish(self, slot, *, attempt_id=None):
         with self.queue.connection() as conn:
-            conn.execute('BEGIN IMMEDIATE')
+            conn.execute(BEGIN_IMMEDIATE)
             key = self.namespace + ':day:' + slot['date']
             day = self.queue._read_state(conn, key)
             original = next(s for s in day['slots'] if s['quadrant'] == slot['quadrant'] and s['index'] == slot['index'])

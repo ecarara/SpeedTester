@@ -42,7 +42,8 @@ PYTHONPATH=app DB_PATH=/tmp/speedtester-dev.db \
 
 ```bash
 make check
-PYTHONPATH=app python -m coverage run --source=app,scripts -m unittest discover -s tests -v
+PYTHONPATH=app python -m coverage run -m unittest discover -s tests -v
+python -m coverage combine
 python -m coverage xml
 npm ci --ignore-scripts
 npx playwright install chromium

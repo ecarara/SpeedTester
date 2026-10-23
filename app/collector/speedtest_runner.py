@@ -88,6 +88,7 @@ class SpeedTestResult:
     target_selection: Optional[str] = None
     target_distance_km: Optional[float] = None
     target_catalog_revision: Optional[str] = None
+    target_attempts: Optional[list[dict]] = None
 
 
 def run_speedtest(
@@ -577,7 +578,7 @@ async def _one_rtt(host: str, timeout: float) -> float:
                 pass
 
 
-def _detect_interface() -> Optional[str]:
+def _detect_interface(timeout_seconds: float = 5.0) -> Optional[str]:
     """Best-effort detection of the primary wired (RJ45) interface name.
 
     Prefers wired (eth*, enp*, ecm*, ...) over wireless (wl*, wlan, wlp) so
@@ -591,7 +592,7 @@ def _detect_interface() -> Optional[str]:
             ["ip", "-br", "addr"],
             capture_output=True,
             text=True,
-            timeout=5,
+            timeout=timeout_seconds,
         ).stdout
         best_wired = None
         best_wireless = None

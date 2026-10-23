@@ -15,6 +15,12 @@ Os testes gráficos existentes agora executam com Xvfb na análise. A configura�
 combinados antes de gerar o XML enviado ao SonarQube. Nenhum módulo de produção
 foi omitido da cobertura para elevar o percentual.
 
+A análise seguinte, do commit `35e04086af0357286807eccb4a986c8156f07456`,
+foi aprovada: cobertura de código novo de 84,7%, zero novas ocorrências e
+duplicação de 0%. A definição de código novo continuou em `PREVIOUS_VERSION`,
+com baseline de 11/10/2026; os limites do gate não foram alterados.
+Evidência: [execução SonarQube de 23/10/2026](https://github.com/ecarara/SpeedTester/actions/runs/39967510370).
+
 Para reproduzir em Linux, depois de instalar as dependências de desenvolvimento
 e disponibilizar Tk/Xvfb:
 

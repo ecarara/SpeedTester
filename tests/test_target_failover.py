@@ -137,6 +137,23 @@ class GeographicRecoveryTests(unittest.TestCase):
         self.assertEqual(self.mocks["_run_once_metrics"].call_count, 1)
         self.assertEqual(len(captured.exception.target_attempts), 1)
 
+    def test_optional_interface_probe_receives_only_the_remaining_budget(self):
+        def ping(*_args, **_kwargs):
+            self.now = 59
+            return PingMetrics()
+        self.mocks["measure_ping"].side_effect = ping
+        run_iperf3(timeout_seconds=60, **self.options)
+        self.mocks["_detect_interface"].assert_called_once_with(timeout_seconds=1)
+
+    def test_expired_optional_probe_does_not_return_an_over_budget_result(self):
+        def interface(**_kwargs):
+            self.now = 61
+            return "fixture"
+        self.mocks["_detect_interface"].side_effect = interface
+        with self.assertRaises(Iperf3Timeout) as captured:
+            run_iperf3(timeout_seconds=60, **self.options)
+        self.assertEqual(len(captured.exception.target_attempts), 1)
+
 
 class IperfDiagnosticTests(unittest.TestCase):
     def test_json_refusal_and_busy_are_concise_and_retryable(self):

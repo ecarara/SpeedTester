@@ -146,11 +146,13 @@ def run_iperf3(
         target_attempts[-1] = _target_evidence(target, "download_error", str(exc)[:400])
         exc.target_attempts = target_attempts
         raise
-    remaining = _remaining_timeout(deadline)
+    remaining = _target_timeout(deadline, target_attempts)
     if remaining <= 5.0:
-        raise Iperf3Timeout(
+        error = Iperf3Timeout(
             f"iperf3 excedeu o timeout total de {timeout_seconds:.0f} segundos"
         )
+        error.target_attempts = target_attempts
+        raise error
     # measure_ping has a minimum subprocess timeout of five seconds. Reduce
     # the per-packet budget so the quality probe also stays inside the total
     # measurement deadline.
@@ -161,6 +163,8 @@ def run_iperf3(
     )
     # Optional enrichment shares the total measurement deadline.
     identity = _enrich_identity(identity, isp_lookup_enabled, isp_lookup_timeout_seconds, deadline)
+    interface = _detect_interface(timeout_seconds=min(5.0, _target_timeout(deadline, target_attempts)))
+    _target_timeout(deadline, target_attempts)
     return SpeedTestResult(
         download_mbps=download_metrics.speed_mbps,
         upload_mbps=upload_metrics.speed_mbps,
@@ -178,7 +182,7 @@ def run_iperf3(
         target_catalog_revision=CATALOG_REVISION if target.mode != "manual" else None,
         target_attempts=target_attempts,
         country=identity.get("country"),
-        interface=_detect_interface(),
+        interface=interface,
         bandwidth_contracted_mbps=bandwidth_contracted_mbps,
         isp=identity.get("isp") if isp_lookup_enabled else None,
         duration_sec=time.monotonic() - started,

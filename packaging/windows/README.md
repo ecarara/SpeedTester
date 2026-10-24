@@ -37,6 +37,15 @@ configuração é persistida em `%APPDATA%\SpeedTester\speedtester.env` e é
 preservada em atualizações. Para instalação gráfica direta pelo MSIX, execute
 o instalador PowerShell uma vez antes de abrir o aplicativo.
 
+Em cada instalação/atualização, o script pede também download e upload
+contratados em Mbps, mesmo quando os demais parâmetros são confirmados.
+Enter mantém valores existentes; campos ausentes são solicitados. A gravação
+é atômica e preserva outras opções. Depois, as tarefas da API e do collector
+são iniciadas novamente para carregar a configuração. Para execução não
+interativa, use `$env:SPEEDTESTER_CONTRACTED_DOWNLOAD_MBPS` e
+`$env:SPEEDTESTER_CONTRACTED_UPLOAD_MBPS`; valores desconhecidos geram aviso,
+não uma estimativa inventada do contrato.
+
 São registradas duas tarefas por usuário: a API local e o collector. O launcher
 usa essas tarefas para abrir o dashboard e as medições compartilham a mesma
 configuração e banco local.

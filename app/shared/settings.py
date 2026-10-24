@@ -67,6 +67,7 @@ class Settings:
     api_max_body_bytes: int = 65536
     api_rate_limit_max_clients: int = 10000
     iperf3_location: Optional[dict] = None
+    bandwidth_contracted_upload_mbps: Optional[float] = None
 
     def __post_init__(self) -> None:
         ZoneInfo(self.timezone)
@@ -100,7 +101,8 @@ class Settings:
             raise ValueError('slot_lease_seconds must be at least 60')
         if self.scheduler_late_tolerance_seconds < 0 or self.alert_cooldown_seconds < 0:
             raise ValueError('tolerance and cooldown must not be negative')
-        for value in (self.bandwidth_contracted_mbps, self.anomaly_retry_min_download_mbps):
+        for value in (self.bandwidth_contracted_mbps, self.bandwidth_contracted_upload_mbps,
+                      self.anomaly_retry_min_download_mbps):
             if value is not None and (not isfinite(value) or value <= 0):
                 raise ValueError('contract and absolute retry threshold must be positive and finite')
         if not 0 < self.alert_speed_threshold_pct <= 100:
@@ -217,6 +219,7 @@ def load_settings() -> Settings:
         iperf3_parallel_streams=_env_int("IPERF3_PARALLEL_STREAMS", 5),
         measurement_timeout_seconds=_env_int("MEASUREMENT_TIMEOUT_SECONDS", 60),
         bandwidth_contracted_mbps=_env_float("BANDWIDTH_CONTRACTED_MBP", None),
+        bandwidth_contracted_upload_mbps=_env_float("BANDWIDTH_CONTRACTED_UPLOAD_MBPS", None),
         isp_lookup_enabled=_env_bool("ISP_LOOKUP_ENABLED", True),
         isp_lookup_timeout_seconds=_env_float("ISP_LOOKUP_TIMEOUT_SECONDS", 5.0),
         db_path=db_path,

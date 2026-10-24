@@ -27,7 +27,7 @@ detect_timezone() {
 read_tty() {
   local answer
   if [[ -r /dev/tty && -w /dev/tty ]]; then
-    IFS= read -r answer < /dev/tty || true
+    IFS= read -r answer < /dev/tty || return 1
     printf '%s' "$answer"
   fi
 }
@@ -39,13 +39,30 @@ ask() {
     return 0
   fi
   printf '%s' "$prompt" > /dev/tty
-  answer=$(read_tty)
+  answer=$(read_tty) || return 1
   printf '%s\n' "${answer:-$default}"
 }
 
 read_setting() {
   local key="$1"
   awk -F= -v key="$key" '$1 == key { sub(/^[^=]*=/, ""); print; exit }' "$ENV_FILE"
+}
+
+valid_speed() {
+  (( ${#1} <= 32 )) || return 1
+  [[ "$1" =~ ^[0-9]+([.][0-9]+)?$ ]] || return 1
+  LC_ALL=C awk -v value="$1" 'BEGIN { exit !(value+0>0) }'
+}
+
+ask_speed() {
+  local label="$1" value="$2"
+  while true; do
+    value=$(ask "$label contratado em Mbps [${value:-informe o valor}; Enter mantém]: " "$value") || die "configuração cancelada"
+    value="${value//,/.}"
+    if valid_speed "$value"; then printf '%s' "$value"; return 0; fi
+    printf 'Informe um número positivo em Mbps (ex.: 1000 ou 500).\n' > /dev/tty
+    value=""
+  done
 }
 
 [[ -f "$TEMPLATE" ]] || die "modelo de configuração não encontrado: $TEMPLATE"
@@ -62,6 +79,8 @@ server="${SPEEDTESTER_IPERF3_SERVER:-}"
 port="${SPEEDTESTER_IPERF3_PORT:-5201}"
 country="${SPEEDTESTER_COUNTRY_CODE:-}"
 city="${SPEEDTESTER_CITY:-}"
+download="${SPEEDTESTER_CONTRACTED_DOWNLOAD_MBPS:-}"
+upload="${SPEEDTESTER_CONTRACTED_UPLOAD_MBPS:-}"
 
 if (( existing )); then
   timezone="$(read_setting TZ || true)"
@@ -70,6 +89,8 @@ if (( existing )); then
   port="$(read_setting IPERF3_PORT || true)"
   country="$(read_setting SPEEDTESTER_COUNTRY_CODE || true)"
   city="$(read_setting SPEEDTESTER_CITY || true)"
+  download="$(read_setting BANDWIDTH_CONTRACTED_MBP || true)"
+  upload="$(read_setting BANDWIDTH_CONTRACTED_UPLOAD_MBPS || true)"
   timezone="${timezone:-$(detect_timezone)}"
   runner="${runner:-iperf3}"
   port="${port:-5201}"
@@ -81,7 +102,17 @@ if (( existing )); then
     port="$SPEEDTESTER_IPERF3_PORT"
     overridden=1
   fi
-  if [[ "${SPEEDTESTER_CONFIRM_EXISTING:-0}" != "1" && "$overridden" == "0" ]]; then
+fi
+if [[ -n "${SPEEDTESTER_CONTRACTED_DOWNLOAD_MBPS+x}" ]]; then
+  download="$SPEEDTESTER_CONTRACTED_DOWNLOAD_MBPS"
+  overridden=1
+fi
+if [[ -n "${SPEEDTESTER_CONTRACTED_UPLOAD_MBPS+x}" ]]; then
+  upload="$SPEEDTESTER_CONTRACTED_UPLOAD_MBPS"
+  overridden=1
+fi
+if (( existing )); then
+  if [[ "${SPEEDTESTER_CONFIRM_EXISTING:-0}" != "1" && "$overridden" == "0" && -n "$download" && -n "$upload" ]]; then
     echo "[speedtester] configuração existente preservada: $ENV_FILE"
     exit 0
   fi
@@ -114,10 +145,16 @@ if [[ "${SPEEDTESTER_NONINTERACTIVE:-0}" != "1" && -r /dev/tty && -w /dev/tty ]]
     selected_server=$(read_tty)
     if [[ "$selected_server" == "auto" ]]; then server=""; elif [[ -n "$selected_server" ]]; then server="$selected_server"; fi
     if [[ -n "$server" ]]; then port=$(ask "Porta [$port]: " "$port"); fi
-  elif (( existing && ! overridden )); then
-    echo "[speedtester] configuração confirmada: $ENV_FILE"
-    exit 0
   fi
+  download=$(ask_speed "Download" "$download")
+  upload=$(ask_speed "Upload" "$upload")
+fi
+download="${download//,/.}"
+upload="${upload//,/.}"
+[[ -z "$download" ]] || valid_speed "$download" || die "download contratado inválido"
+[[ -z "$upload" ]] || valid_speed "$upload" || die "upload contratado inválido"
+if [[ -z "$download" || -z "$upload" ]]; then
+  echo '[speedtester] AVISO: informe as velocidades contratadas para habilitar a repetição por percentual nas duas direções.' >&2
 fi
 
 [[ "$timezone" =~ ^[A-Za-z0-9._+-]+(/[A-Za-z0-9._+-]+)*$ ]] || die "fuso horário inválido: $timezone"
@@ -133,19 +170,23 @@ if (( ! existing )); then
   install -m 0600 "$TEMPLATE" "$ENV_FILE"
 fi
 temporary_env="${ENV_FILE}.tmp.$$"
-awk -v server="$server" -v port="$port" -v timezone="$timezone" -v country="$country" -v city="$city" '
+awk -v server="$server" -v port="$port" -v timezone="$timezone" -v country="$country" -v city="$city" -v download="$download" -v upload="$upload" '
   /^IPERF3_SERVER=/ { print "IPERF3_SERVER=" server; next }
   /^IPERF3_PORT=/ { print "IPERF3_PORT=" port; next }
   /^TZ=/ { print "TZ=" timezone; next }
   /^SPEEDTESTER_COUNTRY_CODE=/ { next }
   /^SPEEDTESTER_CITY=/ { next }
+  /^BANDWIDTH_CONTRACTED_MBP=/ { next }
+  /^BANDWIDTH_CONTRACTED_UPLOAD_MBPS=/ { next }
   { print }
-  END { print "SPEEDTESTER_COUNTRY_CODE=" country; print "SPEEDTESTER_CITY=" city }
+  END { print "SPEEDTESTER_COUNTRY_CODE=" country; print "SPEEDTESTER_CITY=" city;
+        print "BANDWIDTH_CONTRACTED_MBP=" download; print "BANDWIDTH_CONTRACTED_UPLOAD_MBPS=" upload }
 ' "$ENV_FILE" > "$temporary_env"
 chmod 0600 "$temporary_env"
 mv "$temporary_env" "$ENV_FILE"
 
 echo "[speedtester] configuração criada: $ENV_FILE"
+echo "[speedtester] contrato: download=${download:-não informado} Mbps; upload=${upload:-não informado} Mbps"
 if [[ -z "$server" ]]; then
   echo "[speedtester] seleção automática por localização habilitada; nenhum servidor precisa ser informado."
 fi

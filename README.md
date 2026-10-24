@@ -158,7 +158,17 @@ os binários `iperf3`, `ping` e `ip` no host Linux; eles já estão na imagem do
 collector. As imagens suportam Linux AMD64 e ARM64. O cliente Ookla incluído permanece
 restrito a AMD64; ARM64 usa iPerf3 ou fast.com.
 Configure `API_ADMIN_TOKEN` para habilitar ações administrativas e
-`BANDWIDTH_CONTRACTED_MBP` para comparar a banda com seu contrato.
+`BANDWIDTH_CONTRACTED_MBP` (download) e `BANDWIDTH_CONTRACTED_UPLOAD_MBPS`
+(upload) para comparar a banda com seu contrato.
+
+Os configuradores de instalação e atualização perguntam as duas velocidades em
+**Mbps** (ex.: `1000` e `500`), inclusive ao confirmar os demais parâmetros.
+Enter mantém um valor já informado; um valor ausente deve ser preenchido.
+Aceitam decimal com ponto ou vírgula e rejeitam zero, negativos e valores não
+finitos. Configuração existente, escolha do servidor e histórico são preservados.
+Em instalação não interativa, forneça `SPEEDTESTER_CONTRACTED_DOWNLOAD_MBPS`
+e `SPEEDTESTER_CONTRACTED_UPLOAD_MBPS`; sem valores conhecidos há aviso explícito,
+não é presumido um plano de banda nem ativado um limiar percentual fictício.
 
 Instalação no servidor:
 
@@ -191,7 +201,7 @@ backup externo criptografado e restauração.
 | `SPEEDTEST_RUNNER` | `iperf3` | runner principal do collector: `iperf3`, `ookla` ou `fast` |
 | `MEASUREMENTS_PER_QUADRANT` | `2` | quantidade mínima de slots em cada quadrante |
 | `SCHEDULER_LATE_TOLERANCE_SECONDS` | `900` | atraso máximo antes de marcar um slot como perdido |
-| `ANOMALY_RETRY_RATIO` | `0.5` | retesta a primeira medição se o download ficar abaixo desta fração do contratado |
+| `ANOMALY_RETRY_RATIO` | `0.5` | retesta uma vez o par completo se download ou upload ficar abaixo desta fração do respectivo contratado |
 | `ANOMALY_RETRY_MIN_DOWNLOAD_MBPS` | vazio | limiar absoluto opcional de download para acionar o reteste |
 | `MAX_BYTES` | `10000000` | teto por stream, conforme runner atual |
 | `SPEEDTEST_SERVER_IDS` | `29564` | compatibilidade; não usado pelo fast.com |
@@ -200,7 +210,8 @@ backup externo criptografado e restauração.
 | `IPERF3_DURATION_SECONDS` | `10` | duração de cada direção do iperf3 |
 | `IPERF3_PARALLEL_STREAMS` | `5` | fluxos TCP paralelos do iperf3 |
 | `MEASUREMENT_TIMEOUT_SECONDS` | `60` | limite total de uma medição iPerf3; timeout é descartado e repetido como primeira tentativa |
-| `BANDWIDTH_CONTRACTED_MBP` | vazio | banda contratada em Mbps; o nome contém `MBP` e deve ser preservado até uma migração |
+| `BANDWIDTH_CONTRACTED_MBP` | vazio | download contratado em Mbps; nome legado preservado para compatibilidade |
+| `BANDWIDTH_CONTRACTED_UPLOAD_MBPS` | vazio | upload contratado em Mbps |
 | `ISP_LOOKUP_ENABLED` | `true` | identificação best-effort da operadora |
 | `ISP_LOOKUP_TIMEOUT_SECONDS` | `5` | timeout da consulta de operadora |
 | `TZ` | `America/Sao_Paulo` | timezone operacional desejado |

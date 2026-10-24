@@ -30,6 +30,16 @@ modo de seleção. `IPERF3_SERVER` vazio seleciona o destino por localização
 geográfica; preencher host/porta fixa a escolha do usuário. Atualizações
 preservam essa escolha. Consulte [seleção do servidor](../../docs/server-selection.md).
 
+Instalação e atualização também perguntam download e upload contratados em
+Mbps. Enter mantém os valores existentes; os dois campos são persistidos no
+mesmo arquivo. Para execução sem terminal, forneça
+`SPEEDTESTER_CONTRACTED_DOWNLOAD_MBPS=1000` e
+`SPEEDTESTER_CONTRACTED_UPLOAD_MBPS=500` (exemplo de plano, nunca presumido).
+Sem esses valores ou uma configuração anterior, há aviso de que o reteste
+percentual não pode ser aplicado à direção sem contrato conhecido. Linux e
+macOS compartilham o configurador; os serviços ativos releem a configuração
+na atualização pelos instaladores que os gerenciam.
+
 Para remover o aplicativo sem apagar histórico e configuração:
 
 ```bash

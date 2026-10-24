@@ -49,8 +49,13 @@ install -m 0644 LICENSE %{buildroot}/usr/lib/speedtester/LICENSE
 %post
 if command -v runuser >/dev/null 2>&1 && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ] && [ -x /usr/lib/speedtester/configure-user.sh ]; then
     runuser -u "$SUDO_USER" -- env \
+        SPEEDTESTER_CONFIRM_EXISTING=1 \
         SPEEDTESTER_ENV_TEMPLATE=/usr/share/speedtester/speedtester.env.example \
         /usr/lib/speedtester/configure-user.sh || :
+fi
+if command -v runuser >/dev/null 2>&1 && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+    runuser -u "$SUDO_USER" -- systemctl --user daemon-reload >/dev/null 2>&1 || :
+    runuser -u "$SUDO_USER" -- systemctl --user try-restart speedtester-api.service speedtester-client.service >/dev/null 2>&1 || :
 fi
 
 %postun

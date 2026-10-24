@@ -62,13 +62,15 @@ um estado separado.
 
 Cada slot de velocidade tem uma primeira tentativa candidata. Quando o
 download dessa tentativa fica abaixo de `ANOMALY_RETRY_RATIO ×
-BANDWIDTH_CONTRACTED_MBP`, ela é considerada anômala, descartada e substituída
+BANDWIDTH_CONTRACTED_MBP`, ou o upload abaixo de `ANOMALY_RETRY_RATIO ×
+BANDWIDTH_CONTRACTED_UPLOAD_MBPS`, ela é considerada anômala, descartada e substituída
 por uma segunda medição imediata. O limiar absoluto opcional
 `ANOMALY_RETRY_MIN_DOWNLOAD_MBPS` também pode disparar o reteste, inclusive
 quando não há banda contratada configurada.
 
 Somente o resultado da segunda tentativa é persistido como representativo do
-slot. A primeira tentativa não aparece no histórico, não altera médias e não é
+slot. A primeira tentativa fica na auditoria de tentativas, não aparece como
+amostra representativa, não altera médias e não é
 tratada como falha. Se a segunda tentativa também for baixa, ela ainda assim é
 o resultado representativo e deve permanecer registrada para análise. Se não
 houver contrato nem limiar absoluto válido, o reteste automático fica

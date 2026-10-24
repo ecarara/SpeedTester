@@ -97,12 +97,16 @@ inclui upload, download reverso e o probe de qualidade da rota.
 
 Para evitar que uma leitura transitória muito baixa seja usada como evidência,
 o coletor aplica por padrão um reteste quando o download da primeira tentativa
-fica abaixo de 50% de `BANDWIDTH_CONTRACTED_MBP`. Ajuste
+fica abaixo de 50% de `BANDWIDTH_CONTRACTED_MBP`, ou seu upload fica abaixo de
+50% de `BANDWIDTH_CONTRACTED_UPLOAD_MBPS`. Ajuste
 `ANOMALY_RETRY_RATIO` para alterar a fração ou use
 `ANOMALY_RETRY_MIN_DOWNLOAD_MBPS` para adicionar um limiar absoluto. O reteste
 é único e imediato; a primeira leitura fica auditada como `discarded` e
 somente a segunda entra nas estatísticas representativas. Sem contrato e sem
-limiar absoluto, essa regra fica desabilitada.
+limiar absoluto, essa regra fica desabilitada para a direção desconhecida.
+Os instaladores interativos solicitam as duas velocidades também na atualização.
+Confira os valores e a política efetiva em `/api/config`; o histórico técnico
+de `/api/attempts?slot_id=...` preserva a leitura descartada e o motivo.
 
 ### Comparar os três runners
 
@@ -201,7 +205,10 @@ O flag `--services-stopped` é uma confirmação operacional: o script não pode
 verificar todos os processos em outro container. Não remova WAL/SHM de um
 banco ativo. Confirme o nome do volume com `docker volume ls`.
 
-Ao atualizar para schema 10, o banco migra automaticamente de forma aditiva.
+Ao atualizar para schema 11, o banco migra automaticamente de forma aditiva,
+acrescentando `bandwidth_contracted_upload_mbps` sem alterar leituras anteriores.
+Registros antigos conservam upload contratado nulo; ele não é retroativamente
+inferido a partir do contrato atual.
 Slots abandonados em `RUNNING` são recuperados após `SLOT_LEASE_SECONDS`
 (padrão 300s), renovada a cada 20s durante medições. Dentro da tolerância
 retornam a `PENDING`; fora dela ficam `MISSED_UNKNOWN`. Não use `/api/reset`

@@ -281,6 +281,9 @@ def api_config():
     """Return only public display settings, never credentials or hostnames."""
     return {"timezone": settings.timezone, "local_date": local_date_now(settings.timezone).isoformat(),
             "version": APP_VERSION, "bandwidth_contracted_mbps": settings.bandwidth_contracted_mbps,
+            "bandwidth_contracted_upload_mbps": settings.bandwidth_contracted_upload_mbps,
+            "anomaly_retry_ratio": settings.anomaly_retry_ratio,
+            "anomaly_retry_min_download_mbps": settings.anomaly_retry_min_download_mbps,
             "target_controlled": settings.measurement_target_controlled,
             "demo": (store.latest_heartbeat("collector") or {}).get("metadata", {}).get("demo", False)}
 

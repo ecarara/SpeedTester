@@ -175,7 +175,7 @@ def install(server=None, port=5201):
             archive = directory / 'client.tar.gz'
             version = download_archive(archive, release)
             project = extract_archive(archive, directory / 'source', version)
-            print('Pacote verificado. Confirme o fuso e o servidor automático ou sua escolha opcional…', flush=True)
+            print('Pacote verificado. Confirme fuso, servidor automático e velocidades contratadas de download/upload…', flush=True)
             environment = os.environ.copy()
             environment['APP_VERSION'] = version
             if server:

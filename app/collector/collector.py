@@ -21,7 +21,7 @@ from typing import Optional
 
 from api.store import MeasurementSlot, Sample, SampleStore
 from collector.alert_delivery import deliver_due
-from collector.anomaly import is_anomalous_download
+from collector.anomaly import anomalous_directions
 from collector.connectivity import ConnectivitySnapshot, probe_connectivity
 from collector.iperf3_runner import Iperf3TargetUnavailable, Iperf3Timeout
 from collector.quadrants import local_date_now, plan_day_slots
@@ -113,19 +113,23 @@ class Collector:
         except Exception as exc:
             return self._save_measurement_failure(slot, connectivity, exc)
 
-        if is_anomalous_download(
+        anomalies = anomalous_directions(
             result.download_mbps,
+            result.upload_mbps,
             self.settings.bandwidth_contracted_mbps,
+            getattr(self.settings, "bandwidth_contracted_upload_mbps", None),
             self.settings.anomaly_retry_ratio,
             self.settings.anomaly_retry_min_download_mbps,
-        ):
-            self._mark_attempt("discarded", "Download below anomaly threshold; immediate retry selected")
+        )
+        if anomalies:
+            self._mark_attempt("discarded", f"Below anomaly threshold: {', '.join(anomalies)}; immediate retry selected")
             first_started_at = datetime.now(timezone.utc).strftime(
                 "%Y-%m-%dT%H:%M:%SZ"
             )
             print(
                 f"[collector] {first_started_at} "
-                f"discarding anomalous first result down={result.download_mbps:.2f} Mbps; "
+                f"discarding anomalous first result ({', '.join(anomalies)}) "
+                f"down={result.download_mbps:.2f} Mbps up={result.upload_mbps:.2f} Mbps; "
                 "running immediate retry",
                 flush=True,
             )
@@ -194,6 +198,7 @@ class Collector:
             isp_confidence=getattr(result, "isp_confidence", None),
             isp_observed_at=getattr(result, "isp_observed_at", None),
             bandwidth_contracted_mbps=result.bandwidth_contracted_mbps,
+            bandwidth_contracted_upload_mbps=getattr(self.settings, "bandwidth_contracted_upload_mbps", None),
             test_duration_sec=round(result.duration_sec, 1),
             slot_id=slot["id"],
             local_date=slot["local_date"],
@@ -233,6 +238,9 @@ class Collector:
             "public_ip", "isp_organization", "asn", "isp_source", "isp_confidence",
             "isp_observed_at", "transfer_bytes", "target_selection",
             "target_distance_km", "target_catalog_revision", "server_location", TARGET_ATTEMPTS)}
+        metrics.update(bandwidth_contracted_mbps=self.settings.bandwidth_contracted_mbps,
+                       bandwidth_contracted_upload_mbps=getattr(self.settings, "bandwidth_contracted_upload_mbps", None),
+                       anomaly_retry_ratio=self.settings.anomaly_retry_ratio)
         self._record_attempt("candidate", None, metrics)
         return result
 

@@ -3,7 +3,7 @@
 ## Schema atual
 
 O SQLite atual contém `samples`, `measurement_slots`, `availability_events`,
-`service_heartbeats`, `alerts`, `measurement_attempts` e `schema_meta` (versão 10). A tabela de medições é descrita
+`service_heartbeats`, `alerts`, `measurement_attempts` e `schema_meta` (versão 11). A tabela de medições é descrita
 abaixo; as demais tabelas preservam a obrigação de medir, o contexto de
 indisponibilidade, a saúde operacional e os alertas.
 
@@ -35,7 +35,8 @@ O código atual cria uma única tabela `samples` com os campos abaixo:
 | `isp_source` | text | fonte da identificação, como `ipwho.is` ou runner |
 | `isp_confidence` | text | confiança declarada pelo enriquecimento |
 | `isp_observed_at` | text | instante UTC em que a identidade foi consultada |
-| `bandwidth_contracted_mbps` | real | banda contratada vigente na coleta |
+| `bandwidth_contracted_mbps` | real | download contratado vigente na coleta |
+| `bandwidth_contracted_upload_mbps` | real | upload contratado vigente na coleta; nulo em registros antigos ou quando desconhecido |
 | `test_duration_sec` | real | duração observada do teste |
 | `slot_id` | integer | slot esperado associado, quando aplicável |
 | `local_date` / `quadrant` | text | dia e quadrante operacional |

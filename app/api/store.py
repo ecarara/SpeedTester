@@ -51,7 +51,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Iterable, List, Optional
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 WRITE_TRANSACTION = "BEGIN IMMEDIATE"
 
 DB_SCHEMA = """
@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS samples (
     isp_confidence TEXT,
     isp_observed_at TEXT,
     bandwidth_contracted_mbps REAL,
+    bandwidth_contracted_upload_mbps REAL,
     test_duration_sec REAL
 );
 CREATE INDEX IF NOT EXISTS idx_samples_started_at ON samples(started_at);
@@ -207,6 +208,7 @@ class Sample:
     classification_confidence: Optional[str] = None
     evidence_json: Optional[str] = None
     runner: Optional[str] = None
+    bandwidth_contracted_upload_mbps: Optional[float] = None
 
     def to_row(self) -> tuple:
         """Return values in the exact order used by the INSERT statement."""
@@ -249,6 +251,7 @@ class Sample:
             self.classification_confidence,
             self.evidence_json,
             self.runner,
+            self.bandwidth_contracted_upload_mbps,
         )
 
     def to_dict(self) -> dict:
@@ -292,6 +295,7 @@ class Sample:
             "classification_confidence": self.classification_confidence,
             "evidence_json": self.evidence_json,
             "runner": self.runner,
+            "bandwidth_contracted_upload_mbps": self.bandwidth_contracted_upload_mbps,
         }
 
 
@@ -372,6 +376,7 @@ class SampleStore:
             ("isp_source", "TEXT"),
             ("isp_confidence", "TEXT"),
             ("isp_observed_at", "TEXT"),
+            ("bandwidth_contracted_upload_mbps", "REAL"),
         ):
             if name not in existing:
                 conn.execute(f"ALTER TABLE samples ADD COLUMN {name} {sql_type}")
@@ -433,7 +438,7 @@ class SampleStore:
                     "  bandwidth_contracted_mbps, test_duration_sec, "
                     "  slot_id, local_date, quadrant, failure_origin, power_state, "
                     "  gateway_reachable, external_reachable, classification_confidence, "
-                    "  evidence_json, runner) VALUES (" + ",".join("?" for _ in row) + ")",
+                    "  evidence_json, runner, bandwidth_contracted_upload_mbps) VALUES (" + ",".join("?" for _ in row) + ")",
                     row,
                 )
                 added += 1

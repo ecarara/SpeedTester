@@ -7,6 +7,28 @@ from __future__ import annotations
 from typing import Optional
 
 
+def anomalous_directions(
+    download_mbps: float,
+    upload_mbps: float,
+    contracted_download_mbps: Optional[float],
+    contracted_upload_mbps: Optional[float],
+    retry_ratio: Optional[float],
+    absolute_min_download_mbps: Optional[float] = None,
+) -> list[str]:
+    """List directions below configured thresholds; never infer an unknown plan.
+
+    The collector retries the complete pair only once if either direction is
+    anomalous. Equality at the threshold is not anomalous. The existing absolute
+    threshold remains download-only for backwards compatibility.
+    """
+    directions = []
+    if is_anomalous_download(download_mbps, contracted_download_mbps, retry_ratio, absolute_min_download_mbps):
+        directions.append("download")
+    if is_anomalous_download(upload_mbps, contracted_upload_mbps, retry_ratio, None):
+        directions.append("upload")
+    return directions
+
+
 def is_anomalous_download(
     download_mbps: float,
     contracted_mbps: Optional[float],

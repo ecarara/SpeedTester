@@ -11,6 +11,13 @@ em <https://github.com/ecarara/SpeedTester>.
 
 ### Corrigido
 
+- instaladores POSIX (Linux/macOS) e PowerShell perguntam e persistem download
+  e upload contratados em Mbps também na atualização; preservam opções anteriores,
+  validam os valores e recarregam os serviços gerenciados;
+- anomalias de download **ou upload** disparam um único reteste completo nos três
+  runners; só a segunda tentativa é representativa, mesmo se continuar baixa;
+- contrato de upload é persistido com a amostra e as tentativas, exposto na API
+  e acrescentado por migração aditiva para schema 11, sem alterar o histórico;
 - seleção automática iPerf3 recupera também recusa/servidor ocupado no download:
   descarta o upload parcial e repete ambas as direções no próximo destino
   geográfico, sem misturar métricas nem reiniciar o prazo total de 60 segundos;

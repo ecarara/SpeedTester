@@ -23,7 +23,7 @@ from api.store import MeasurementSlot, Sample, SampleStore
 from collector.alert_delivery import deliver_due
 from collector.anomaly import is_anomalous_download
 from collector.connectivity import ConnectivitySnapshot, probe_connectivity
-from collector.iperf3_runner import Iperf3Timeout
+from collector.iperf3_runner import Iperf3TargetUnavailable, Iperf3Timeout
 from collector.quadrants import local_date_now, plan_day_slots
 from collector.runner_dispatch import Iperf3Target, run_named_runner
 from shared.settings import Settings, load_settings
@@ -482,6 +482,8 @@ class Collector:
 
     def _classify_failure(self, exc: Exception) -> str:
         """Map a speedtest exception to a short, stable failure cause label."""
+        if isinstance(exc, Iperf3TargetUnavailable):
+            return "server"
         text = f"{exc!r}".lower()
         for cause, needles in (
             ("timeout", ("timed out", "timeout", "timedout")),

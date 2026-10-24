@@ -99,14 +99,97 @@ class GeographicRecoveryTests(unittest.TestCase):
             run_iperf3(**self.options)
         self.assertEqual(execute.call_count, 1)
 
-    def test_download_failure_does_not_mix_measurements(self):
+    def test_download_refusal_restarts_both_directions_on_next_target(self):
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = [IperfRunMetrics(123, 99, 100),
+                               Iperf3TargetUnavailable("Connection refused"),
+                               IperfRunMetrics(500, 2, 200), IperfRunMetrics(900, 3, 300)]
+        result = run_iperf3(**self.options)
+        self.assertEqual([c.args[1] for c in execute.call_args_list],
+                         [t.host for t in (self.targets[0], self.targets[0], self.targets[1], self.targets[1])])
+        self.assertEqual([c.kwargs["reverse"] for c in execute.call_args_list], [False, True, False, True])
+        self.assertEqual((result.upload_mbps, result.download_mbps, result.tcp_retransmits,
+                          result.transfer_bytes), (500, 900, 5, 500))
+        self.assertEqual(result.server_name, "iperf3:target-2.example:5201")
+        self.assertEqual([a["outcome"] for a in result.target_attempts], ["download_error", "selected"])
+
+    def test_download_busy_also_discards_the_partial_pair(self):
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = [self.metrics, Iperf3TargetUnavailable("the server is busy"),
+                               self.metrics, self.metrics]
+        result = run_iperf3(**self.options)
+        self.assertEqual(result.server_name, "iperf3:target-2.example:5201")
+        self.assertEqual([a["outcome"] for a in result.target_attempts], ["download_error", "selected"])
+
+    def test_manual_download_refusal_preserves_the_manual_choice(self):
+        self.mocks["rank_targets"].return_value = (replace(self.targets[0], mode="manual"),)
         execute = self.mocks["_run_once_metrics"]
         execute.side_effect = [self.metrics, Iperf3TargetUnavailable("Connection refused")]
         with self.assertRaises(Iperf3TargetUnavailable) as captured:
+            run_iperf3(server="target-1.example", **self.options)
+        self.assertEqual(execute.call_count, 2)
+        self.assertEqual(captured.exception.target_attempts[0]["outcome"], "download_error")
+
+    def test_download_timeout_still_requires_connectivity_diagnostics(self):
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = [self.metrics, Iperf3Timeout("timeout")]
+        with self.assertRaises(Iperf3Timeout) as captured:
             run_iperf3(**self.options)
         self.assertEqual(execute.call_count, 2)
-        self.assertEqual(execute.call_args_list[0].args[1], execute.call_args_list[1].args[1])
-        self.assertEqual(captured.exception.target_attempts[-1]["outcome"], "download_error")
+        self.assertEqual(captured.exception.target_attempts[0]["outcome"], "download_error")
+
+    def test_invalid_download_does_not_switch_targets_to_select_another_result(self):
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = [self.metrics, RuntimeError("invalid result")]
+        with self.assertRaisesRegex(RuntimeError, "invalid result") as captured:
+            run_iperf3(**self.options)
+        self.assertEqual(execute.call_count, 2)
+        self.assertEqual(captured.exception.target_attempts[0]["outcome"], "download_error")
+
+    def test_upload_and_download_failures_share_the_same_three_target_limit(self):
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = [Iperf3TargetUnavailable("Connection refused"), self.metrics,
+                               Iperf3TargetUnavailable("server is busy"), self.metrics, self.metrics]
+        result = run_iperf3(**self.options)
+        self.assertEqual(result.server_name, "iperf3:target-3.example:5201")
+        self.assertEqual([a["outcome"] for a in result.target_attempts],
+                         ["error", "download_error", "selected"])
+        self.assertEqual(execute.call_count, 5)
+
+    def test_repeated_download_refusals_are_bounded_to_three_targets(self):
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = [self.metrics, Iperf3TargetUnavailable("Connection refused")] * 3
+        with self.assertRaises(Iperf3TargetUnavailable) as captured:
+            run_iperf3(**self.options)
+        self.assertEqual(execute.call_count, 6)
+        self.assertEqual([a["outcome"] for a in captured.exception.target_attempts], ["download_error"] * 3)
+        self.assertEqual([a["server_name"] for a in captured.exception.target_attempts],
+                         [f"iperf3:{t.host}:{t.port}" for t in self.targets[:3]])
+
+    def test_download_recovery_uses_only_the_original_remaining_budget(self):
+        def execute(_binary, _host, *_args, reverse, **_kwargs):
+            self.now += 10
+            if self.now == 20:
+                raise Iperf3TargetUnavailable("Connection refused")
+            return self.metrics
+        self.mocks["_run_once_metrics"].side_effect = execute
+        result = run_iperf3(timeout_seconds=60, **self.options)
+        self.assertEqual([c.kwargs["timeout_seconds"] for c in self.mocks["_run_once_metrics"].call_args_list],
+                         [60, 50, 40, 30])
+        self.assertEqual(result.duration_sec, 40)
+
+    def test_no_new_target_after_download_refusal_exhausts_deadline(self):
+        def execute(_binary, _host, *_args, reverse, **_kwargs):
+            if reverse:
+                self.now = 60
+                raise Iperf3TargetUnavailable("Connection refused")
+            return self.metrics
+        self.mocks["_run_once_metrics"].side_effect = execute
+        with self.assertRaises(Iperf3Timeout) as captured:
+            run_iperf3(timeout_seconds=60, **self.options)
+        self.assertEqual(self.mocks["_run_once_metrics"].call_count, 2)
+        self.assertEqual(len(captured.exception.target_attempts), 1)
+        self.assertEqual(captured.exception.target_attempts[0]["outcome"], "download_error")
 
     def test_low_speed_never_changes_destination(self):
         self.mocks["_run_once_metrics"].return_value = IperfRunMetrics(10, 0, 8192)

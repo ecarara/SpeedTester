@@ -29,7 +29,7 @@ class Iperf3Timeout(RuntimeError):
 
 
 class Iperf3TargetUnavailable(RuntimeError):
-    """Connection refused or server busy before any throughput result exists."""
+    """Connection refused or server busy in either measurement direction."""
 
 
 MAX_AUTOMATIC_TARGETS = 3
@@ -43,28 +43,36 @@ def _target_evidence(target, outcome, detail=None):
             "outcome": outcome, "detail": detail}
 
 
-def _upload_on_available_target(targets, execute, deadline):
-    """Try at most three ordered targets, only before a successful upload.
+def _measure_on_available_target(targets, execute, deadline):
+    """Complete both directions on one of at most three geographic targets.
 
-    Refusal/busy is not an internet timeout. Timeouts and all other errors keep
-    their original type, so collector connectivity diagnostics still apply.
+    Refusal/busy in either direction discards the entire partial pair. The next
+    destination starts with a fresh upload, never retaining the old throughput,
+    transfer bytes or retransmits. The original wall-clock deadline is shared.
+    Timeouts and other errors retain their type for connectivity diagnostics.
     """
     if not targets:
         raise TargetSelectionError("Nenhum destino de medição disponível no catálogo.")
     attempts = []
     for target in targets[:MAX_AUTOMATIC_TARGETS]:
         remaining = _target_timeout(deadline, attempts)
+        outcome = "error"
         try:
-            metrics = execute(target, remaining)
+            upload = execute(target, False, remaining)
+            outcome = "download_error"
+            download = execute(target, True, _target_timeout(deadline, attempts))
         except RuntimeError as exc:
-            attempts.append(_target_evidence(target, "error", str(exc)[:400]))
+            attempts.append(_target_evidence(target, outcome, str(exc)[:400]))
             exc.target_attempts = attempts
             if not isinstance(exc, Iperf3TargetUnavailable) or target.mode == "manual":
                 raise
+            print(f"[iperf3] unavailable target {target.host}:{target.port} "
+                  f"phase={'download' if outcome == 'download_error' else 'upload'}; "
+                  "discarding partial measurement", flush=True)
             last_error = exc
         else:
             attempts.append(_target_evidence(target, "selected"))
-            return target, metrics, attempts
+            return target, upload, download, attempts
     raise last_error
 
 
@@ -133,20 +141,12 @@ def run_iperf3(
     identity = _initial_identity(server, location, isp_lookup_enabled, isp_lookup_timeout_seconds, deadline)
     targets = rank_targets(server, port, location=location or identity)
 
-    def upload(target, remaining):
+    def execute(target, reverse, remaining):
         return _run_once_metrics(binary, target.host, target.port, duration_seconds,
-                                 parallel_streams, reverse=False, timeout_seconds=remaining)
+                                 parallel_streams, reverse=reverse, timeout_seconds=remaining)
 
-    target, upload_metrics, target_attempts = _upload_on_available_target(targets, upload, deadline)
+    target, upload_metrics, download_metrics, target_attempts = _measure_on_available_target(targets, execute, deadline)
     server, port = target.host, target.port
-    try:
-        download_metrics = _run_once_metrics(
-            binary, server, port, duration_seconds, parallel_streams,
-            reverse=True, timeout_seconds=_remaining_timeout(deadline))
-    except RuntimeError as exc:
-        target_attempts[-1] = _target_evidence(target, "download_error", str(exc)[:400])
-        exc.target_attempts = target_attempts
-        raise
     remaining = _target_timeout(deadline, target_attempts)
     if remaining <= 5.0:
         error = Iperf3Timeout(

@@ -32,7 +32,8 @@ class InstallerFixture(unittest.TestCase):
             self.environment.pop(name, None)
 
     def settings(self):
-        with patch.dict(os.environ, {"SPEEDTESTER_CONFIG_FILE": str(self.config)}, clear=True):
+        with patch.dict(os.environ, {"SPEEDTESTER_CONFIG_FILE": str(self.config),
+                                    "HOME": str(self.root), "USERPROFILE": str(self.root)}, clear=True):
             return load_settings()
 
     def assert_contract(self, download, upload):

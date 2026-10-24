@@ -30,7 +30,8 @@ class ContractAnomalyTests(IntegrationFixture):
                 SPEEDTESTER_CONTRACTED_UPLOAD_MBPS="500", SPEEDTESTER_CONFIRM_EXISTING="1")
             subprocess.run(["bash", str(root / "packaging/linux/configure-user.sh")],
                            env=environment, capture_output=True, text=True, check=True, timeout=10)
-        with patch.dict(os.environ, {"SPEEDTESTER_CONFIG_FILE": str(config)}, clear=True):
+        with patch.dict(os.environ, {"SPEEDTESTER_CONFIG_FILE": str(config),
+                                    "HOME": self.tmp.name, "USERPROFILE": self.tmp.name}, clear=True):
             settings = load_settings()
         self.assertEqual((settings.bandwidth_contracted_mbps, settings.bandwidth_contracted_upload_mbps), (1000, 500))
         return replace(settings, isp_lookup_enabled=False, **values)
@@ -110,6 +111,7 @@ class ContractAnomalyTests(IntegrationFixture):
         for value in ("0", "-1", "nan", "inf", "1e309"):
             with self.subTest(value=value), patch.dict(os.environ, {
                 "SPEEDTESTER_CONFIG_FILE": str(Path(self.tmp.name) / "missing.env"),
+                "HOME": self.tmp.name, "USERPROFILE": self.tmp.name,
                 "BANDWIDTH_CONTRACTED_UPLOAD_MBPS": value}, clear=True):
                 with self.assertRaises(ValueError):
                     load_settings()

@@ -62,6 +62,31 @@ const reports = require('istanbul-reports');
       assert.match(await page.locator('#coveragePeriod').textContent(),new RegExp(period+' dias'));
       assert.equal(await page.locator('#chart circle').count(),112);
     }
+    // Each persisted sample keeps its own link, including historical unknowns.
+    await page.evaluate(() => {
+      window.originalSamples=state.samples;
+      const base=state.samples[0];
+      state.samples=[
+        {...base,connection_type:'wifi',interface:'<img src=x onerror="throw new Error(1)">',connection_scope:'runner_address'},
+        {...base,connection_type:'ethernet',interface:'enp1s0',connection_scope:'default_route'},
+        {...base,connection_type:null,interface:null,connection_scope:null},
+        {...base,connection_type:'mixed',interface:null,connection_scope:'runner_addresses'},
+      ];
+      renderMeasurements();
+    });
+    assert.match(await page.locator('#measurementRows').textContent(),/Wi-Fi/);
+    assert.match(await page.locator('#measurementRows').textContent(),/Cabeada \(Ethernet\)/);
+    assert.match(await page.locator('#measurementRows').textContent(),/Rota padrão · estimativa/);
+    assert.match(await page.locator('#measurementRows').textContent(),/Desconhecida/);
+    assert.match(await page.locator('#measurementRows').textContent(),/Mista/);
+    assert.equal(await page.locator('#measurementRows img').count(),0,'Adapter names must be escaped');
+    assert.equal(await page.locator('.measurement-table th').count(),9);
+    if(process.env.LINK_SCREENSHOT)await page.locator('#operatorActions').screenshot({path:process.env.LINK_SCREENSHOT});
+    await page.setViewportSize({width:390,height:844});
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'Connection table must stay inside the mobile page');
+    assert(await page.locator('.measurement-table-wrap').evaluate(node=>node.scrollWidth>node.clientWidth),'Mobile measurements scroll inside their own container');
+    await page.setViewportSize({width:1440,height:1100});
+    await page.evaluate(()=>{state.samples=window.originalSamples;delete window.originalSamples;renderMeasurements();});
     const downloadEvent = page.waitForEvent('download'); await page.locator('#exportJsonBtn').click();
     const download = await downloadEvent, file = await download.path();
     assert.equal(JSON.parse(fs.readFileSync(file,'utf8')).length,56);

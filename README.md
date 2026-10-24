@@ -66,6 +66,10 @@ IP, hostname ou credencial do ambiente interno foi usado. Veja como executar a
 - **Identidade da conexão:** cada medição bem-sucedida pode persistir operadora,
   país, cidade, ASN e IP público observados; a consulta é cacheada e não
   invalida uma medição quando o serviço externo não responde.
+- **Conexão local:** identificação automática de Wi-Fi, Ethernet e outros tipos
+  reconhecidos pelo sistema por medição e tentativa, disponível no painel e
+  nas exportações. Evidência insuficiente permanece desconhecida; consulte
+  [detecção e limites](docs/network-link.md).
 - **API:** FastAPI para saúde, amostras, resumo, gráfico PNG e limpeza dos
   dados, comparação histórica, alertas e eventos de disponibilidade.
 - **Dashboard:** gráficos SVG interativos, filtros de 7/30/90 dias, medianas e

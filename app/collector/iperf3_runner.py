@@ -12,7 +12,8 @@ from typing import Optional
 
 from collector.network_metrics import measure_ping
 from collector.network_identity import resolve_network_identity
-from collector.speedtest_runner import SpeedTestResult, _detect_interface
+from collector.speedtest_runner import SpeedTestResult
+from collector.network_link import NetworkLink, detect_link, literal_ip
 from collector.target_selection import rank_targets, TargetSelectionError, CATALOG_REVISION
 from shared.native_tools import iperf_binary
 
@@ -22,6 +23,8 @@ class IperfRunMetrics:
     speed_mbps: float
     retransmits: Optional[int]
     transfer_bytes: Optional[int] = None
+    local_ip: Optional[str] = None
+    remote_ip: Optional[str] = None
 
 
 class Iperf3Timeout(RuntimeError):
@@ -112,6 +115,22 @@ def _enrich_identity(identity, enabled, timeout, deadline):
     return identity
 
 
+def _measurement_link(upload, download, server, deadline, target_attempts):
+    """Use the native socket addresses; do not merge distinct direction links."""
+    budget = min(5.0, _target_timeout(deadline, target_attempts))
+    probe_deadline = time.monotonic() + budget
+    link = detect_link(local_ip=download.local_ip, remote_ip=download.remote_ip or literal_ip(server),
+                       timeout_seconds=budget)
+    if upload.local_ip and download.local_ip and upload.local_ip != download.local_ip:
+        other = detect_link(local_ip=upload.local_ip, remote_ip=upload.remote_ip,
+                            timeout_seconds=max(0.0, min(probe_deadline, deadline) - time.monotonic()))
+        if not other.interface or not link.interface:
+            return NetworkLink(source="iperf3-direction-comparison", scope="runner_addresses")
+        if (other.interface, other.connection_type) != (link.interface, link.connection_type):
+            return NetworkLink(connection_type="mixed", source="iperf3-direction-comparison", scope="runner_addresses")
+    return link
+
+
 def run_iperf3(
     duration_seconds: int = 10,
     share: bool = False,
@@ -164,7 +183,7 @@ def run_iperf3(
     )
     # Optional enrichment shares the total measurement deadline.
     identity = _enrich_identity(identity, isp_lookup_enabled, isp_lookup_timeout_seconds, deadline)
-    interface = _detect_interface(timeout_seconds=min(5.0, _target_timeout(deadline, target_attempts)))
+    link = _measurement_link(upload_metrics, download_metrics, server, deadline, target_attempts)
     _target_timeout(deadline, target_attempts)
     return SpeedTestResult(
         download_mbps=download_metrics.speed_mbps,
@@ -183,7 +202,7 @@ def run_iperf3(
         target_catalog_revision=CATALOG_REVISION if target.mode != "manual" else None,
         target_attempts=target_attempts,
         country=identity.get("country"),
-        interface=interface,
+        **link.result_fields(),
         bandwidth_contracted_mbps=bandwidth_contracted_mbps,
         isp=identity.get("isp") if isp_lookup_enabled else None,
         duration_sec=time.monotonic() - started,
@@ -277,9 +296,20 @@ def _run_once_metrics(
             speed_mbps=float(summary["bits_per_second"]) / 1_000_000,
             retransmits=int(retransmits) if retransmits is not None else None,
             transfer_bytes=int(summary["bytes"]) if summary.get("bytes") is not None else None,
+            local_ip=_connected_address(payload, "local_host"),
+            remote_ip=_connected_address(payload, "remote_host"),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise RuntimeError(f"iperf3 não retornou JSON reconhecível: {completed.stdout[-400:]}") from exc
+
+
+def _connected_address(payload, name):
+    start = payload.get("start")
+    rows = start.get("connected") if isinstance(start, dict) else None
+    if not isinstance(rows, list) or not rows or any(not isinstance(row, dict) for row in rows):
+        return None
+    addresses = {literal_ip(row.get(name)) for row in rows}
+    return next(iter(addresses)) if len(addresses) == 1 and None not in addresses else None
 
 
 def _sum_optional(*values: Optional[int]) -> Optional[int]:

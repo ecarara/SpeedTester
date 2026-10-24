@@ -12,6 +12,7 @@ from collector.collector import Collector
 from collector.connectivity import ConnectivitySnapshot
 from collector.iperf3_runner import Iperf3TargetUnavailable
 from collector.network_metrics import PingMetrics
+from collector.network_link import NetworkLink
 
 
 class TargetEvidenceTests(IntegrationFixture):
@@ -79,7 +80,7 @@ class TargetEvidenceTests(IntegrationFixture):
                 patch("collector.iperf3_runner.iperf_binary", return_value="fixture-iperf"), \
                 patch("collector.iperf3_runner.subprocess.run", side_effect=results) as execute, \
                 patch("collector.iperf3_runner.measure_ping", return_value=PingMetrics(5, 1, 4, 6, 0)), \
-                patch("collector.iperf3_runner._detect_interface", return_value="fixture"):
+                patch("collector.iperf3_runner.detect_link", return_value=NetworkLink("fixture", "ethernet", "fixture")):
             sample = collector._run_single(slot)
         self.assertFalse(sample.is_failure)
         self.assertEqual((sample.upload_mbps, sample.download_mbps, sample.tcp_retransmits), (500, 900, 5))

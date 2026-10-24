@@ -11,6 +11,7 @@ from collector.iperf3_runner import (
     Iperf3TargetUnavailable, Iperf3Timeout, IperfRunMetrics, _run_once_metrics, run_iperf3,
 )
 from collector.network_metrics import PingMetrics
+from collector.network_link import NetworkLink
 from collector.target_selection import Target, TargetSelectionError, rank_targets
 
 
@@ -47,7 +48,7 @@ class GeographicRecoveryTests(unittest.TestCase):
             "_run_once_metrics": dict(return_value=self.metrics),
             "measure_ping": dict(return_value=PingMetrics(5, 1, 4, 6, 0)),
             "resolve_network_identity": dict(side_effect=AssertionError("unexpected external lookup")),
-            "_detect_interface": dict(return_value="fixture"),
+            "detect_link": dict(return_value=NetworkLink("fixture", "ethernet", "fixture")),
             "time.monotonic": dict(side_effect=lambda: self.now),
         }
         self.mocks = {}
@@ -226,13 +227,13 @@ class GeographicRecoveryTests(unittest.TestCase):
             return PingMetrics()
         self.mocks["measure_ping"].side_effect = ping
         run_iperf3(timeout_seconds=60, **self.options)
-        self.mocks["_detect_interface"].assert_called_once_with(timeout_seconds=1)
+        self.assertEqual(self.mocks["detect_link"].call_args.kwargs["timeout_seconds"], 1)
 
     def test_expired_optional_probe_does_not_return_an_over_budget_result(self):
         def interface(**_kwargs):
             self.now = 61
-            return "fixture"
-        self.mocks["_detect_interface"].side_effect = interface
+            return NetworkLink("fixture", "ethernet", "fixture")
+        self.mocks["detect_link"].side_effect = interface
         with self.assertRaises(Iperf3Timeout) as captured:
             run_iperf3(timeout_seconds=60, **self.options)
         self.assertEqual(len(captured.exception.target_attempts), 1)

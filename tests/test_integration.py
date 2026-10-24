@@ -160,8 +160,13 @@ class IntegrationTests(IntegrationFixture):
         settings = SimpleNamespace(**{**self.settings.__dict__, 'speedtest_runner':'iperf3', 'bandwidth_contracted_mbps':1000})
         first = SimpleNamespace(download_mbps=100, upload_mbps=450, ping_ms=5, jitter_ms=1,
             server_id=None, server_name='example', server_location=None, country=None,
-            interface='eth0', isp=None, bandwidth_contracted_mbps=1000, duration_sec=20)
-        second = SimpleNamespace(**{**first.__dict__, 'download_mbps':900})
+            interface='wlp1', isp=None, bandwidth_contracted_mbps=1000, duration_sec=20,
+            connection_type='wifi', connection_source='linux-sysfs', connection_scope='runner_address',
+            connection_observed_at='2026-10-11T12:00:00Z',
+            connection_evidence={'interface':'wlp1','type':'wifi','scope':'runner_address'})
+        second = SimpleNamespace(**{**first.__dict__, 'download_mbps':900,
+            'interface':'enp1', 'connection_type':'ethernet',
+            'connection_evidence':{'interface':'enp1','type':'ethernet','scope':'runner_address'}})
         collector = Collector(settings, self.store)
         times=[]
         def dispatch():
@@ -174,6 +179,21 @@ class IntegrationTests(IntegrationFixture):
         attempts = self.client.get('/api/attempts?slot_id='+str(slot['id'])).json()
         self.assertEqual([row['outcome'] for row in attempts], ['discarded','selected'])
         self.assertEqual([row['metrics']['download_mbps'] for row in attempts], [100,900])
+        self.assertEqual([row['metrics']['connection_type'] for row in attempts], ['wifi','ethernet'])
+        self.assertEqual([row['metrics']['interface'] for row in attempts], ['wlp1','enp1'])
+        saved = self.client.get('/api/samples').json()[0]
+        self.assertEqual(saved['connection_type'], 'ethernet')
+        self.assertEqual(saved['connection_source'], 'linux-sysfs')
+        self.assertEqual(saved['connection_scope'], 'runner_address')
+        self.assertEqual(saved['connection_observed_at'], '2026-10-11T12:00:00Z')
+        self.assertEqual(json.loads(saved['evidence_json'])['connection'], second.connection_evidence)
+        exported = self.client.get('/api/export?format=json').json()[0]
+        self.assertEqual(exported['connection_type'], 'ethernet')
+        import csv
+        import io
+        csv_row = next(csv.DictReader(io.StringIO(self.client.get('/api/export?format=csv').text)))
+        self.assertEqual(csv_row['connection_type'], 'ethernet')
+        self.assertEqual(csv_row['connection_scope'], 'runner_address')
         self.assertEqual(self.store.count(), 1)
         self.assertEqual(self.client.get('/api/summary').json()['download_avg_mbps'], 900)
 
@@ -200,13 +220,15 @@ class IntegrationTests(IntegrationFixture):
         path=str(Path(self.tmp.name)/'legacy.db')
         with closing(sqlite3.connect(path)) as conn, conn:
             conn.executescript(DB_SCHEMA)
-            conn.execute("INSERT INTO samples(started_at,download_mbps) VALUES ('2026-01-01T12:00:00Z',900)")
+            conn.execute("INSERT INTO schema_meta(key,value) VALUES ('version','11')")
+            conn.execute("INSERT INTO samples(started_at,download_mbps,interface) VALUES ('2026-01-01T12:00:00Z',900,'eth0')")
         for _ in range(2):
             store=SampleStore(path)
             self.assertEqual(store.count(),1)
             self.assertIn('runner',store.all_samples()[0])
+            self.assertIsNone(store.all_samples()[0]['connection_type'])
             with closing(sqlite3.connect(path)) as conn, conn:
-                self.assertEqual(conn.execute("SELECT value FROM schema_meta WHERE key='version'").fetchone()[0],'11')
+                self.assertEqual(conn.execute("SELECT value FROM schema_meta WHERE key='version'").fetchone()[0],'12')
             store.close()
 
     def test_downtime_clips_to_period_and_merges_same_origin(self):

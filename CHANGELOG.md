@@ -11,6 +11,11 @@ em <https://github.com/ecarara/SpeedTester>.
 
 ### Corrigido
 
+- seleção automática iPerf3 recupera também recusa/servidor ocupado no download:
+  descarta o upload parcial e repete ambas as direções no próximo destino
+  geográfico, sem misturar métricas nem reiniciar o prazo total de 60 segundos;
+- recusa/servidor iPerf3 ocupado é classificado como falha do destino de medição
+  (`MEASUREMENT · server`), sem atribuir a falha à conexão da operadora;
 - launcher desktop inicia o `speedtester-api.service` e aguarda o healthcheck
   local antes de abrir o navegador, evitando a página inacessível em
   `127.0.0.1:8000` na primeira execução;

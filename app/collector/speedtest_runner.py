@@ -39,6 +39,7 @@ import aiohttp
 
 from collector.network_metrics import measure_ping
 from collector.network_identity import resolve_network_identity
+from collector.network_link import detect_link
 
 # fast.com constants (kept local so we can stop the test early if the operator
 # requests a shorter run or hit a wall-clock budget).
@@ -89,6 +90,11 @@ class SpeedTestResult:
     target_distance_km: Optional[float] = None
     target_catalog_revision: Optional[str] = None
     target_attempts: Optional[list[dict]] = None
+    connection_type: str = "unknown"
+    connection_source: Optional[str] = None
+    connection_scope: Optional[str] = None
+    connection_observed_at: Optional[str] = None
+    connection_evidence: Optional[dict] = None
 
 
 def run_speedtest(
@@ -135,11 +141,7 @@ def run_speedtest(
     finally:
         loop.close()
 
-    # Best-effort interface detection, matching the previous behaviour.
-    try:
-        interface = _detect_interface()
-    except Exception:  # pragma: no cover - best effort only
-        interface = None
+    link = detect_link()
 
     duration_sec = time.monotonic() - t0
     return SpeedTestResult(
@@ -155,7 +157,7 @@ def run_speedtest(
         server_name=result["server_name"],
         server_location=None,
         country=result["country"],
-        interface=interface,
+        **link.result_fields(),
         isp=result["isp"],
         bandwidth_contracted_mbps=bandwidth_contracted_mbps,
         duration_sec=duration_sec,
@@ -576,54 +578,6 @@ async def _one_rtt(host: str, timeout: float) -> float:
                     await writer.wait_closed()
             except OSError:
                 pass
-
-
-def _eligible_interface(line: str) -> Optional[str]:
-    """Keep the existing active-link and virtual/link-local exclusions."""
-    parts = line.split()
-    if len(parts) < 2:
-        return None
-    iface = parts[0]
-    if iface == "lo" or iface.startswith(("veth", "br-")):
-        return None
-    if "LOWER_UP" not in line or "169.254" in line:
-        return None
-    return iface
-
-
-def _preferred_interface(output: str) -> Optional[str]:
-    """First eligible wired link wins; otherwise keep the first wireless."""
-    wireless = None
-    for line in output.splitlines():
-        iface = _eligible_interface(line)
-        if iface is None:
-            continue
-        if iface.startswith(("eth", "enp", "ene", "ens", "enx", "ecm", "enq", "enO")):
-            return iface
-        if wireless is None and iface.startswith(("wl", "wlan", "wlp")):
-            wireless = iface
-    return wireless
-
-
-def _detect_interface(timeout_seconds: float = 5.0) -> Optional[str]:
-    """Best-effort detection of the primary wired (RJ45) interface name.
-
-    Prefers wired (eth*, enp*, ecm*, ...) over wireless (wl*, wlan, wlp) so
-    measurements reflect the primary path. When no wired interface is up,
-    falls back to the first wireless interface with a link.
-    """
-    try:
-        import subprocess
-
-        out = subprocess.run(
-            ["ip", "-br", "addr"],
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-        ).stdout
-        return _preferred_interface(out)
-    except Exception:  # pragma: no cover - best effort
-        return None
 
 
 async def _resolve_isp(timeout_seconds: float = 5.0) -> Optional[str]:

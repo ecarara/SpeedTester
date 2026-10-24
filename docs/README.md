@@ -18,6 +18,7 @@ interna ou pelo próprio sistema de medição.
 | [Demonstração e screenshots](demo.md) | Como abrir o painel com dados fictícios e reproduzir a captura pública |
 | [Requisitos](requirements.md) | O que o sistema deve fazer e quais regras definem cada quadrante e cada falha |
 | [Arquitetura](architecture.md) | Como os componentes atuais se relacionam e como evoluir o sistema |
+| [Conexão local](network-link.md) | Como identificar e interpretar Wi-Fi, Ethernet e outros meios por medição |
 | [Modelo de dados](data-model.md) | O que é uma amostra, uma janela esperada, um incidente e uma causa |
 | [API](api.md) | Endpoints existentes e contratos necessários para a evolução |
 | [Métricas e gráficos](analytics-and-charts.md) | Como calcular e apresentar velocidade, cobertura e indisponibilidade |

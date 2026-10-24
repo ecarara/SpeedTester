@@ -3,7 +3,7 @@
 ## Schema atual
 
 O SQLite atual contém `samples`, `measurement_slots`, `availability_events`,
-`service_heartbeats`, `alerts`, `measurement_attempts` e `schema_meta` (versão 11). A tabela de medições é descrita
+`service_heartbeats`, `alerts`, `measurement_attempts` e `schema_meta` (versão 12). A tabela de medições é descrita
 abaixo; as demais tabelas preservam a obrigação de medir, o contexto de
 indisponibilidade, a saúde operacional e os alertas.
 
@@ -28,7 +28,11 @@ O código atual cria uma única tabela `samples` com os campos abaixo:
 | `country_code` | text | código ISO-3166-1 alpha-2 da conexão |
 | `city` | text | cidade estimada pelo endereço IP público no momento da medição |
 | `public_ip` | text | endereço IP público observado, quando disponível |
-| `interface` | text | interface local detectada |
+| `interface` | text | interface local associada ao teste ou à rota observada; nula se ambígua |
+| `connection_type` | text | tipo local detectado: `wifi`, `ethernet`, `cellular`, `bluetooth`, `usb`, `virtual`, `tunnel`, `point_to_point`, `loopback`, `mixed` ou `unknown` |
+| `connection_source` | text | metadado nativo usado para classificar a interface, como `linux-sysfs` |
+| `connection_scope` | text | vínculo da observação: `runner_interface`, `runner_address`, `runner_addresses`, `destination_route`, `default_route` ou `unknown` |
+| `connection_observed_at` | text | instante UTC da observação da interface |
 | `isp` | text | operadora identificada best-effort |
 | `isp_organization` | text | organização anunciada pelo ASN |
 | `asn` | text | ASN anunciado pela conexão |
@@ -60,7 +64,16 @@ Cada execução do runner preserva `slot_id`, `started_at` real, `ended_at`,
 `outcome`, `reason` e `metrics_json`. Os outcomes são `candidate`, `selected`,
 `discarded`, `timeout` e `error`. O reteste mantém a primeira leitura descartada
 nesta tabela; somente o resultado representativo entra em `samples` e nas
-estatísticas. A API decodifica `metrics_json` como `metrics`.
+estatísticas. A API decodifica `metrics_json` como `metrics`. Cada tentativa guarda também
+`interface`, os quatro campos `connection_*` e `connection_evidence`. A evidência
+normalizada da amostra representativa fica em `evidence_json.connection`.
+Uma troca de conexão entre a primeira tentativa descartada e o reteste não
+reescreve o histórico; apenas a conexão do reteste entra na amostra final.
+
+A migração 11 → 12 é aditiva e idempotente. Amostras anteriores conservam os
+valores existentes, inclusive `interface`; os campos novos permanecem nulos.
+Não se deduz conexão cabeada de um nome antigo como `eth0` ou `en0`.
+Consulte [detecção da conexão local](network-link.md).
 
 A gravação representativa e a conclusão do slot `RUNNING` são atômicas.
 Chamadas concorrentes de `add_sample` para o mesmo slot retornam o mesmo ID.

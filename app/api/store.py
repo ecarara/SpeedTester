@@ -51,7 +51,7 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Iterable, List, Optional
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 WRITE_TRANSACTION = "BEGIN IMMEDIATE"
 
 DB_SCHEMA = """
@@ -209,6 +209,10 @@ class Sample:
     evidence_json: Optional[str] = None
     runner: Optional[str] = None
     bandwidth_contracted_upload_mbps: Optional[float] = None
+    connection_type: Optional[str] = None
+    connection_source: Optional[str] = None
+    connection_scope: Optional[str] = None
+    connection_observed_at: Optional[str] = None
 
     def to_row(self) -> tuple:
         """Return values in the exact order used by the INSERT statement."""
@@ -252,6 +256,10 @@ class Sample:
             self.evidence_json,
             self.runner,
             self.bandwidth_contracted_upload_mbps,
+            self.connection_type,
+            self.connection_source,
+            self.connection_scope,
+            self.connection_observed_at,
         )
 
     def to_dict(self) -> dict:
@@ -296,6 +304,10 @@ class Sample:
             "evidence_json": self.evidence_json,
             "runner": self.runner,
             "bandwidth_contracted_upload_mbps": self.bandwidth_contracted_upload_mbps,
+            "connection_type": self.connection_type,
+            "connection_source": self.connection_source,
+            "connection_scope": self.connection_scope,
+            "connection_observed_at": self.connection_observed_at,
         }
 
 
@@ -377,6 +389,10 @@ class SampleStore:
             ("isp_confidence", "TEXT"),
             ("isp_observed_at", "TEXT"),
             ("bandwidth_contracted_upload_mbps", "REAL"),
+            ("connection_type", "TEXT"),
+            ("connection_source", "TEXT"),
+            ("connection_scope", "TEXT"),
+            ("connection_observed_at", "TEXT"),
         ):
             if name not in existing:
                 conn.execute(f"ALTER TABLE samples ADD COLUMN {name} {sql_type}")
@@ -438,7 +454,8 @@ class SampleStore:
                     "  bandwidth_contracted_mbps, test_duration_sec, "
                     "  slot_id, local_date, quadrant, failure_origin, power_state, "
                     "  gateway_reachable, external_reachable, classification_confidence, "
-                    "  evidence_json, runner, bandwidth_contracted_upload_mbps) VALUES (" + ",".join("?" for _ in row) + ")",
+                    "  evidence_json, runner, bandwidth_contracted_upload_mbps, "
+                    "  connection_type, connection_source, connection_scope, connection_observed_at) VALUES (" + ",".join("?" for _ in row) + ")",
                     row,
                 )
                 added += 1

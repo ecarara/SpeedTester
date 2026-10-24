@@ -10,7 +10,8 @@ import time
 from typing import Optional
 
 from collector.network_metrics import measure_ping
-from collector.speedtest_runner import SpeedTestResult, _detect_interface
+from collector.speedtest_runner import SpeedTestResult
+from collector.network_link import detect_link
 
 
 def run_ookla(
@@ -60,6 +61,7 @@ def run_ookla(
     native_jitter = _number(ping.get("jitter"))
     ping_ms = native_ping if native_ping is not None else _metric(network, "ping_ms")
     jitter_ms = native_jitter if native_jitter is not None else _metric(network, "jitter_ms")
+    link = detect_link(interface_hint=interface.get("name"), local_ip=interface.get("internalIp"), remote_ip=server.get("ip"))
 
     return SpeedTestResult(
         download_mbps=_bits_to_mbps(download.get("bandwidth")),
@@ -82,7 +84,7 @@ def run_ookla(
         country=client.get("country") or server.get("country"),
         city=client.get("city") or server.get("city"),
         country_code=client.get("countryCode") or client.get("country_code") or server.get("countryCode"),
-        interface=interface.get("name") or _detect_interface(),
+        **link.result_fields(),
         bandwidth_contracted_mbps=bandwidth_contracted_mbps,
         isp=payload.get("isp"),
         duration_sec=time.monotonic() - started,

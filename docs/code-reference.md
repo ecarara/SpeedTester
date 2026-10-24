@@ -57,6 +57,18 @@ função fornece evidência, não prova jurídica de falha da operadora.
 `measure_ping()` mede RTT mediano, jitter médio das diferenças consecutivas,
 limites de latência e perda. ICMP bloqueado resulta em métricas nulas.
 
+### `app/collector/network_link.py`
+
+`detect_link()` retorna `NetworkLink`: interface, tipo local, fonte, escopo e
+instante UTC. Prioriza interface/endereço do runner, depois rota ao destino
+literal e, por último, rota padrão. Linux usa rotas JSON e sysfs; macOS usa
+route/ifconfig e portas de hardware; Windows usa NetTCPIP/NetAdapter via
+PowerShell com parâmetros em stdin. Falhas e ambiguidades não falham o teste.
+Todos os subprocessos compartilham um deadline; iPerf3 limita essa observação
+ao orçamento restante da medição. Não execute DNS ou probes de banda neste
+módulo e não persista saídas brutas, MAC, SSID ou endereços locais.
+Veja [tipos, escopos e limitações](network-link.md).
+
 ### `app/collector/network_identity.py`
 
 Consulta, de forma best-effort, o IP público e os metadados de rede retornados
@@ -93,8 +105,7 @@ Mbps e preserva metadata de servidor, cliente e ISP quando retornada.
 ### `app/collector/speedtest_runner.py`
 
 Implementa o runner assíncrono fast.com e o resultado comum `SpeedTestResult`.
-Também fornece detecção de interface e lookup best-effort da identidade da
-conexão.
+Também fornece lookup best-effort da identidade da conexão.
 
 ### `app/collector/runner_dispatch.py`
 

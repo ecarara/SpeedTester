@@ -34,11 +34,13 @@ TARGET_ATTEMPTS = "target_attempts"
 
 
 def _with_target_evidence(snapshot, source):
-    """Attach bounded destination diagnostics without changing probe evidence."""
+    """Attach destination and local-link context without changing probe evidence."""
     attempts = getattr(source, TARGET_ATTEMPTS, None)
-    if not attempts:
-        return snapshot
-    return replace(snapshot, evidence={**snapshot.evidence, TARGET_ATTEMPTS: attempts})
+    evidence = {TARGET_ATTEMPTS: attempts} if attempts else {}
+    link = getattr(source, "connection_evidence", None)
+    if link:
+        evidence["connection"] = link
+    return replace(snapshot, evidence={**snapshot.evidence, **evidence}) if evidence else snapshot
 
 
 class ConnectivityFailure(RuntimeError):
@@ -191,6 +193,10 @@ class Collector:
             city=getattr(result, "city", None),
             public_ip=getattr(result, "public_ip", None),
             interface=result.interface,
+            connection_type=getattr(result, "connection_type", "unknown"),
+            connection_source=getattr(result, "connection_source", None),
+            connection_scope=getattr(result, "connection_scope", None),
+            connection_observed_at=getattr(result, "connection_observed_at", None),
             isp=result.isp,
             isp_organization=getattr(result, "isp_organization", None),
             asn=getattr(result, "asn", None),
@@ -238,6 +244,8 @@ class Collector:
             "public_ip", "isp_organization", "asn", "isp_source", "isp_confidence",
             "isp_observed_at", "transfer_bytes", "target_selection",
             "target_distance_km", "target_catalog_revision", "server_location", TARGET_ATTEMPTS)}
+        metrics.update({name: getattr(result, name, None) for name in (
+            "connection_type", "connection_source", "connection_scope", "connection_observed_at", "connection_evidence")})
         metrics.update(bandwidth_contracted_mbps=self.settings.bandwidth_contracted_mbps,
                        bandwidth_contracted_upload_mbps=getattr(self.settings, "bandwidth_contracted_upload_mbps", None),
                        anomaly_retry_ratio=self.settings.anomaly_retry_ratio)

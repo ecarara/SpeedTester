@@ -17,6 +17,10 @@ configuração privada.
 Python 3.15 ainda não é suportado. Cada release exige build e smoke test dos
 artefatos nativos no sistema e arquitetura de destino.
 
+DEB/RPM incluem CPython 3.14 e não dependem do Python do host. Os builds
+oficiais usam Ubuntu 22.04 como baseline de glibc; glibc não é incorporada ao
+runtime. A instalação por código-fonte aceita CPython 3.11–3.14.
+
 ## Escolha do artefato
 
 | Sistema | Artefato recomendado | Entrada no menu | Serviço de medições |

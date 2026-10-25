@@ -68,10 +68,11 @@ O arquivo instalado em `~/.local/share/applications/speedtester.desktop` usa
 `Icon=speedtester` e os PNGs em `~/.local/share/icons/hicolor/<tamanho>/apps`.
 Não há dependência de GNOME ou KDE específicos.
 
-Os formatos `.deb`, `.rpm` e AppImage são montados sobre este mesmo payload.
-O Flatpak usa um launcher sandboxed separado. Os
-builders exigem uma virtualenv preparada em
-`SPEEDTESTER_VENV` e a ferramenta nativa de cada formato:
+Os pacotes `.deb` e `.rpm` incluem executáveis congelados com PyInstaller e
+runtime CPython 3.14, sem exigir Python instalado no destino. `PYTHON` ou
+`SPEEDTESTER_VENV` seleciona o ambiente de build. O AppImage mantém seu payload
+venv; Arch usa dependências da distribuição e Flatpak é um launcher separado.
+Os builders exigem a ferramenta nativa de cada formato:
 
 ```bash
 SPEEDTESTER_VENV=.venv ./packaging/linux/build-deb.sh

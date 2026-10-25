@@ -30,7 +30,11 @@ class NativeEntryTests(unittest.TestCase):
                     patch.dict(sys.modules, {"api.server": None, "collector.collector": None,
                                              "uvicorn": None}), \
                     patch("subprocess.run", side_effect=AssertionError("no commands")):
-                self.assertEqual(entry.main(["--runtime-info"]), 0)
+                result = entry.main(["--runtime-info"])
+                if name == "native_api_entry":
+                    self.assertIsNone(result)
+                else:
+                    self.assertEqual(result, 0)
                 value = json.loads(output.getvalue())
                 self.assertEqual(value["python"], ".".join(map(str, sys.version_info[:3])))
                 self.assertEqual(value["implementation"], "CPython")
@@ -42,7 +46,7 @@ class NativeEntryTests(unittest.TestCase):
         server = SimpleNamespace(app=app, settings=SimpleNamespace(api_port=8042))
         with patch.dict(sys.modules, {"uvicorn": uvicorn, "api.server": server}), \
                 patch.object(entry, "prepare_system_children") as prepare:
-            self.assertEqual(entry.main([]), 0)
+            self.assertIsNone(entry.main([]))
         prepare.assert_called_once()
         uvicorn.run.assert_called_once_with(app, host="127.0.0.1", port=8042,
                                             workers=1, loop="asyncio", http="h11")

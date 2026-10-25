@@ -66,6 +66,17 @@ def copy_notices(output):
     return sorted(components, key=lambda item: item["name"].lower())
 
 
+def verify_runtime_paths(output):
+    """Reject host interpreter links and virtual environments in the payload."""
+    # PyInstaller uses relative symlinks inside an onedir tree. A copied venv's
+    # absolute interpreter link or any other link outside the payload is invalid.
+    for path in output.rglob("*"):
+        if path.is_symlink() and not path.resolve(strict=True).is_relative_to(output):
+            raise ValueError("runtime symlink escapes the package: " + str(path))
+        if path.name == "pyvenv.cfg":
+            raise ValueError("a host virtual environment must not enter the runtime")
+
+
 def verify_runtime(output, version):
     output = Path(output).resolve(strict=True)
     document = json.loads((output / "runtime-components.json").read_text())
@@ -76,13 +87,7 @@ def verify_runtime(output, version):
             or document.get("libc", {}).get("name") != "glibc"
             or not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", document["libc"].get("version", ""))):
         raise ValueError("runtime version, architecture or glibc metadata does not match")
-    # PyInstaller uses relative symlinks inside an onedir tree. A copied venv's
-    # absolute interpreter link or any other link outside the payload is invalid.
-    for path in output.rglob("*"):
-        if path.is_symlink() and not path.resolve(strict=True).is_relative_to(output):
-            raise ValueError("runtime symlink escapes the package: " + str(path))
-        if path.name == "pyvenv.cfg":
-            raise ValueError("a host virtual environment must not enter the runtime")
+    verify_runtime_paths(output)
     environment = os.environ.copy()
     for key in ("PYTHONHOME", "PYTHONPATH", "APP_VERSION"):
         environment.pop(key, None)

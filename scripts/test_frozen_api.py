@@ -36,7 +36,8 @@ def check(executable):
     executable = Path(executable).resolve(strict=True)
     runtime = json.loads(subprocess.check_output(
         [str(executable), '--runtime-info'], text=True, timeout=30))
-    assert runtime['python'].startswith('3.14.') and runtime.get('frozen') is True, runtime
+    assert runtime['python'].startswith('3.14.'), runtime
+    assert runtime.get('frozen') is True, runtime
     with tempfile.TemporaryDirectory(prefix='speedtester-frozen-api-') as temporary:
         root = Path(temporary)
         with socket.socket() as reservation:

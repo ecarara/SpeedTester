@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import runpy
 import subprocess
+import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -22,6 +23,18 @@ from shared import frozen_runtime
 
 
 class NativeEntryTests(unittest.TestCase):
+    def test_diagnostic_entrypoints_exit_successfully_without_opening_database(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            database = Path(temporary) / "must-not-exist.db"
+            environment = dict(os.environ, PYTHONPATH=str(ROOT / "app"), DB_PATH=str(database))
+            for name in ("native_api_entry", "native_client_entry", "desktop_launcher"):
+                with self.subTest(entry=name):
+                    result = subprocess.run([sys.executable, str(ROOT / "app" / (name + ".py")),
+                        "--runtime-info"], capture_output=True, text=True, timeout=15, env=environment)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertFalse(json.loads(result.stdout)["frozen"])
+                    self.assertFalse(database.exists())
+
     def test_runtime_info_does_not_import_api_or_collector_or_run_commands(self):
         for name in ("native_api_entry", "native_client_entry", "desktop_launcher"):
             entry = importlib.import_module(name)

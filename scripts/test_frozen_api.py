@@ -8,9 +8,28 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.request
+
+WINDOWS = sys.platform == 'win32'
+
+
+def stop_process(process):
+    """Also stop a Windows onefile bootloader's API child before removing data."""
+    if WINDOWS:
+        result = subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],
+            capture_output=True, text=True, timeout=15, check=False)
+        if result.returncode and process.poll() is None:
+            raise RuntimeError('Could not stop the frozen API process tree: ' + result.stderr)
+    else:
+        process.terminate()
+    try:
+        process.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
 
 
 def check(executable):
@@ -54,12 +73,7 @@ def check(executable):
                 with urllib.request.urlopen(base + '/api/chart.png', timeout=30) as response:
                     assert response.read(8) == b'\x89PNG\r\n\x1a\n'
             finally:
-                process.terminate()
-                try:
-                    process.wait(timeout=15)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait(timeout=5)
+                stop_process(process)
     print('frozen-api-ok: Python 3.14, local access, dashboard assets, summary and PNG; no measurements')
 
 

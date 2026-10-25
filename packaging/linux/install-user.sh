@@ -30,7 +30,23 @@ case "${1:-}" in
     ;;
 esac
 
-command -v python3 >/dev/null || die "python3 não encontrado"
+# Validate before changing an existing installation. An explicit selection from
+# the source bootstrap must never silently fall back to the system interpreter.
+python_probe='import sys,venv; sys.exit(not (sys.implementation.name == "cpython" and (3,11) <= sys.version_info[:2] < (3,15)))'
+if [[ -n "${SPEEDTESTER_PYTHON:-}" ]]; then
+  PYTHON="$(command -v "$SPEEDTESTER_PYTHON")" || die "SPEEDTESTER_PYTHON não encontrado: $SPEEDTESTER_PYTHON"
+  "$PYTHON" -c "$python_probe" >/dev/null 2>&1 || die "SPEEDTESTER_PYTHON exige CPython >=3.11,<3.15 com venv"
+else
+  PYTHON=""
+  for candidate in python3.14 python3.13 python3.12 python3.11 python3; do
+    executable="$(command -v "$candidate")" || continue
+    if "$executable" -c "$python_probe" >/dev/null 2>&1; then
+      PYTHON="$executable"
+      break
+    fi
+  done
+  [[ -n "$PYTHON" ]] || die "instale CPython 3.14 (ou 3.11–3.13) com venv; Python 3.15 não é suportado"
+fi
 command -v iperf3 >/dev/null || die "iperf3 não encontrado; instale-o antes de continuar"
 [[ -d "$SOURCE_DIR/app" ]] || die "fonte inválida: $SOURCE_DIR"
 
@@ -38,9 +54,11 @@ mkdir -p "$INSTALL_ROOT" "$CONFIG_DIR" "$BIN_DIR" "$APPLICATION_DIR" "$SYSTEMD_D
 rm -rf "$INSTALL_ROOT/app"
 cp -R "$SOURCE_DIR/app" "$INSTALL_ROOT/app"
 if [[ -n "${APP_VERSION:-}" ]]; then
-  python3 "$SOURCE_DIR/scripts/stamp_version.py" "$INSTALL_ROOT/app" "$APP_VERSION"
+  "$PYTHON" "$SOURCE_DIR/scripts/stamp_version.py" "$INSTALL_ROOT/app" "$APP_VERSION"
 fi
-python3 -m venv "$INSTALL_ROOT/venv"
+# Recreate managed dependencies and interpreter links when migrating a venv
+# from an older Python minor. Configuration and history live outside the venv.
+"$PYTHON" -m venv --clear "$INSTALL_ROOT/venv"
 "$INSTALL_ROOT/venv/bin/python" -m pip install --disable-pip-version-check --no-input -r "$SOURCE_DIR/app/requirements.txt"
 install -m 0755 "$SOURCE_DIR/packaging/linux/speedtester-launcher" "$BIN_DIR/speedtester-launcher"
 

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
 
-FROM python:3.11.17-slim-trixie@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce AS iperf-builder
+FROM python:3.14.9-slim-trixie@sha256:35caba83af2fe6da9a5d922f9b0156f21d1246a48278c58a08bd253303ba42e8 AS iperf-builder
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends build-essential libssl-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
@@ -12,7 +12,7 @@ RUN tar -xzf /tmp/iperf.tar.gz -C /tmp \
     && ./configure --disable-shared --enable-static --without-sctp --with-openssl=/usr \
     && make -j2
 
-FROM python:3.11.17-slim-trixie@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce
+FROM python:3.14.9-slim-trixie@sha256:35caba83af2fe6da9a5d922f9b0156f21d1246a48278c58a08bd253303ba42e8
 
 ARG TARGETARCH
 ARG APP_VERSION=dev
@@ -36,12 +36,12 @@ COPY --from=iperf-builder /tmp/iperf-3.22/LICENSE /usr/share/doc/iperf3/LICENSE
 
 WORKDIR /app
 COPY app/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt \
+RUN pip install --no-cache-dir --only-binary=:all: -r requirements.txt \
     && python -m pip uninstall -y setuptools wheel pip
 
 # Application code (shared, collector, api).
 # Stale __pycache__ from the build host (wrong Python version) is cleared first
-# so Python 3.11 won't try to load cpython-31x bytecode.
+# so Python 3.14 won't try to load bytecode from another interpreter.
 RUN find /app -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 COPY app/ /app/
 COPY scripts/ /opt/speedtester-scripts/

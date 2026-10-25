@@ -6,18 +6,25 @@ set -euo pipefail
 SOURCE_DIR="${SPEEDTESTER_SOURCE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 VERSION="${APP_VERSION:-0.3.0}"
 VENV="${SPEEDTESTER_VENV:-$SOURCE_DIR/.venv}"
+PYTHON="${PYTHON:-$VENV/bin/python}"
+RUNTIME="${SPEEDTESTER_RUNTIME:-}"
 OUTPUT_DIR="${OUTPUT_DIR:-$SOURCE_DIR/dist}"
 command -v rpmbuild >/dev/null || { echo "rpmbuild é necessário para gerar o pacote" >&2; exit 2; }
-[[ -x "$VENV/bin/python" ]] || { echo "venv não encontrado: defina SPEEDTESTER_VENV" >&2; exit 2; }
+command -v "$PYTHON" >/dev/null || { echo "Python de build não encontrado: defina PYTHON ou SPEEDTESTER_VENV" >&2; exit 2; }
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 TOP="$TMP_DIR/rpmbuild"
 mkdir -p "$TOP/BUILD" "$TOP/RPMS" "$TOP/SOURCES" "$TOP/SPECS" "$TOP/SRPMS"
 PAYLOAD="$TMP_DIR/payload"
-mkdir -p "$PAYLOAD/app" "$PAYLOAD/venv"
+mkdir -p "$PAYLOAD/app"
 cp -a "$SOURCE_DIR/app/." "$PAYLOAD/app/"
-"$VENV/bin/python" "$SOURCE_DIR/scripts/stamp_version.py" "$PAYLOAD/app" "$VERSION"
-cp -a "$VENV/." "$PAYLOAD/venv/"
+"$PYTHON" "$SOURCE_DIR/scripts/stamp_version.py" "$PAYLOAD/app" "$VERSION"
+if [[ -n "$RUNTIME" ]]; then
+  "$PYTHON" "$SOURCE_DIR/scripts/build_linux_runtime.py" --output "$RUNTIME" --version "$VERSION" --verify-only
+  cp -a "$RUNTIME" "$PAYLOAD/runtime"
+else
+  "$PYTHON" "$SOURCE_DIR/scripts/build_linux_runtime.py" --output "$PAYLOAD/runtime" --version "$VERSION"
+fi
 install -m 0755 "$SOURCE_DIR/packaging/linux/system/speedtester-launcher" "$PAYLOAD/speedtester-launcher"
 install -m 0755 "$SOURCE_DIR/packaging/linux/configure-user.sh" "$PAYLOAD/configure-user.sh"
 install -m 0644 "$SOURCE_DIR/packaging/linux/speedtester.env.example" "$PAYLOAD/speedtester.env.example"

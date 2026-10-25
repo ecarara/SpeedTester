@@ -6,10 +6,17 @@ Release:        1%{?dist}
 Summary:        SpeedTester broadband measurement client
 License:        GPL-3.0-or-later
 URL:            https://github.com/ecarara/SpeedTester
-Requires:       python3 >= 3.11
 Requires:       iperf3
+Requires:       xdg-utils
 BuildArch:      %{_arch}
 Source0:        speedtester-%{version}.tar.gz
+
+# Prebuilt PyInstaller executables contain an appended Python archive. Stripping
+# or generating debuginfo can discard it; source files are retained for review,
+# not byte-compiled using a packaging host's unrelated Python installation.
+%global debug_package %{nil}
+%global __strip /bin/true
+%global __brp_python_bytecompile %{nil}
 
 %description
 SpeedTester schedules broadband measurements, persists results and provides a
@@ -26,7 +33,7 @@ mkdir -p %{buildroot}/usr/share/applications
 mkdir -p %{buildroot}/usr/lib/systemd/user
 mkdir -p %{buildroot}/usr/share/icons/hicolor/512x512/apps
 cp -a app %{buildroot}/usr/lib/speedtester/app
-cp -a venv %{buildroot}/usr/lib/speedtester/venv
+cp -a runtime %{buildroot}/usr/lib/speedtester/runtime
 install -m 0755 speedtester-launcher %{buildroot}/usr/bin/speedtester-launcher
 install -m 0755 configure-user.sh %{buildroot}/usr/lib/speedtester/configure-user.sh
 install -m 0644 speedtester.env.example %{buildroot}/usr/share/speedtester/speedtester.env.example

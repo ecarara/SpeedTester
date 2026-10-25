@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
 -r app/requirements.txt
-coverage==7.13.5
+coverage==7.17.0
 httpx==0.28.1

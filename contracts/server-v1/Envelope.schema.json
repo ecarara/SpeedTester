@@ -2,6 +2,7 @@
   "additionalProperties": false,
   "properties": {
     "payload": {
+      "additionalProperties": true,
       "title": "Payload",
       "type": "object"
     },

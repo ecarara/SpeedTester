@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
 
-FROM python:3.11.17-slim-trixie@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce
+FROM python:3.14.9-slim-trixie@sha256:35caba83af2fe6da9a5d922f9b0156f21d1246a48278c58a08bd253303ba42e8
 
 ARG APP_VERSION=dev
 ENV APP_VERSION=$APP_VERSION
@@ -13,7 +13,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY app/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt \
+RUN pip install --no-cache-dir --only-binary=:all: -r requirements.txt \
     && python -m pip uninstall -y setuptools wheel pip
 
 # Application code + the static dashboard HTML.

@@ -1,5 +1,8 @@
 # Épico E-01 — Empacotamento desktop multiplataforma
 
+Consulte a [matriz de suporte e build](desktop-installation.md): runtime alvo
+CPython 3.14 e compatibilidade por código-fonte com 3.11–3.14 (`>=3.11,<3.15`).
+
 | Campo | Definição |
 | --- | --- |
 | Status | Em execução |

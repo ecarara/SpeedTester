@@ -4,5 +4,4 @@
 set -euo pipefail
 
 INSTALL_ROOT="${SPEEDTESTER_INSTALL_ROOT:-/usr/lib/speedtester}"
-export PYTHONPATH="$INSTALL_ROOT/app${PYTHONPATH:+:$PYTHONPATH}"
-exec "$INSTALL_ROOT/venv/bin/python" -m desktop_launcher "$@"
+exec "$INSTALL_ROOT/runtime/SpeedTesterLauncher/SpeedTesterLauncher" "$@"

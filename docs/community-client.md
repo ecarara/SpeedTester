@@ -8,7 +8,7 @@ O nome de compatibilidade `install-community.sh` encaminha ao mesmo instalador.
 
 ## Integração do SDK em ambientes de desenvolvimento
 
-Suporte inicial: Linux amd64/arm64, Python 3.11, 3.12 ou 3.13 com módulo `venv`, iPerf3 e uma sessão systemd do usuário. Instale os pré-requisitos pelo gerenciador de pacotes da distribuição. Execute o instalador a partir de uma revisão verificada do repositório, como usuário normal:
+Suporte: Linux amd64/arm64, CPython 3.11–3.14 (`>=3.11,<3.15`) com módulo `venv`, iPerf3 e uma sessão systemd do usuário. CPython 3.14 é o runtime alvo; 3.15 não é suportado. Instale os pré-requisitos pelo gerenciador de pacotes da distribuição. Execute o instalador a partir de uma revisão verificada do repositório, como usuário normal:
 
 ```bash
 speedtester-client setup --server https://speedtester.cararalab.com.br
@@ -61,4 +61,9 @@ Fila, chaves privadas, perfil, tokens e estado de renovação ficam cifrados com
 
 Os unitários públicos exercitam pareamento, assinatura, DPoP, rotação, persistência, concorrência de processos, serviço e runner usando dados sintéticos. A suíte privada testa o client real contra o Server e PostgreSQL descartável, incluindo o assistente, reinício, revogação e resposta perdida. Nenhum teste usa medições externas ou credenciais de participantes.
 
-O instalador seleciona automaticamente uma versão Python suportada disponível. Se o Python padrão da distribuição for mais novo, instale também Python 3.13; não é necessário mudar o Python do sistema.
+O instalador de código-fonte seleciona automaticamente CPython 3.14, com
+fallback para 3.13, 3.12 ou 3.11. Se `python3` apontar para 3.15, instale também
+3.14; não é necessário mudar o Python do sistema. A seleção validada é passada
+ao instalador Linux por `SPEEDTESTER_PYTHON`, que também pode indicar um caminho
+explícito para um interpretador suportado. Uma seleção explícita inválida
+interrompe a instalação em vez de usar outro Python silenciosamente.

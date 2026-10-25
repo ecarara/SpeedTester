@@ -7,11 +7,11 @@ comum de `app/desktop_launcher.py`.
 
 ## Build local
 
-O build deve ser executado em macOS na arquitetura desejada, com Python,
+O build deve ser executado em macOS na arquitetura desejada, com CPython 3.14,
 PyInstaller e as ferramentas nativas `hdiutil` e `plutil` disponíveis:
 
 ```bash
-APP_VERSION=0.3.0 OUTPUT_DIR=dist/macos ./packaging/macos/build-app.sh
+PYTHON=python3.14 APP_VERSION=0.3.0 OUTPUT_DIR=dist/macos ./packaging/macos/build-app.sh
 ```
 
 Os artefatos são:

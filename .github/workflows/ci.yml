@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.11', '3.12', '3.13']
+        python-version: ['3.11', '3.12', '3.13', '3.14']
 
     steps:
       - name: Checkout
@@ -133,7 +133,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.13'
+          python-version: '3.14'
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - run: python -m pip install -r requirements-dev.txt
@@ -148,7 +148,44 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.13'
+          python-version: '3.14'
       - run: python -m pip install pip-audit==2.10.1
       - run: python -m pip_audit -r app/requirements.txt
       - run: python -m pip_audit -r app/requirements-community.txt
+
+  linux-packages:
+    name: Python 3.14 DEB and RPM runtime
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install package toolchain and runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes rpm cpio iperf3
+          python -m pip install --only-binary=:all: -r requirements-dev.txt pyinstaller==6.22.3
+      - name: Freeze the shared Python 3.14 runtime
+        run: python scripts/build_linux_runtime.py --output dist/linux-runtime --version 0.0.0
+      - name: Build both package formats from the verified runtime
+        env:
+          APP_VERSION: '0.0.0'
+          PYTHON: python
+          SPEEDTESTER_RUNTIME: ${{ github.workspace }}/dist/linux-runtime
+          OUTPUT_DIR: ${{ github.workspace }}/dist/linux-packages
+        run: |
+          ./packaging/linux/build-deb.sh
+          ./packaging/linux/build-rpm.sh
+      - name: Extract packages and execute their actual frozen API
+        run: |
+          mkdir -p /tmp/speedtester-deb /tmp/speedtester-rpm
+          dpkg-deb --extract dist/linux-packages/*.deb /tmp/speedtester-deb
+          rpm2cpio dist/linux-packages/*.rpm | (cd /tmp/speedtester-rpm && cpio -idm)
+          python scripts/test_frozen_api.py --executable /tmp/speedtester-deb/usr/lib/speedtester/runtime/SpeedTesterAPI/SpeedTesterAPI
+          python scripts/test_frozen_api.py --executable /tmp/speedtester-rpm/usr/lib/speedtester/runtime/SpeedTesterAPI/SpeedTesterAPI
+          test ! -e /tmp/speedtester-deb/usr/lib/speedtester/venv
+          test ! -e /tmp/speedtester-rpm/usr/lib/speedtester/venv

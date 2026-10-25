@@ -3,7 +3,7 @@
 
 .PHONY: test compile docs dashboard license-check publication-check source-tarball macos-package check compose-config
 
-PYTHON ?= python3
+PYTHON ?= python3.14
 
 test:
 	PYTHONPATH=app $(PYTHON) -m unittest discover -s tests -v

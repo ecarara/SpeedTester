@@ -14,8 +14,8 @@ ativado nas configurações da organização ou do repositório.
 - [x] Anonimizar exemplos e relatório de validação; gerar a captura a partir
       de uma base inteiramente sintética, conforme [demo.md](demo.md).
 - [x] Executar `make check` em um ambiente com as dependências declaradas.
-- [x] Validar Compose e build das imagens no CI; verificar Python 3.11,
-      3.12 e 3.13 (Docker indisponível no ambiente local de preparação).
+- [ ] Revalidar Compose e build das imagens após a migração para CPython 3.14;
+      conferir a matriz 3.11–3.14 (`>=3.11,<3.15`) e os builds nativos em 3.14.
 - [x] Revisar [third-party.md](third-party.md), `REUSE.toml` e atualizar
       versões/licenças antes de cada release.
 - [ ] Criar a primeira tag seguindo SemVer somente após uma validação limpa.

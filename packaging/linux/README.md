@@ -24,8 +24,17 @@ O instalador:
 - preserva um arquivo de configuração existente em
   `~/.config/speedtester/speedtester.env`.
 
-Requisitos: Python 3, `python3-venv`, `iperf3`, `systemd --user` e acesso de
-rede para instalar as dependências Python. O instalador confirma o fuso e o
+Requisitos: CPython 3.11–3.14 (`>=3.11,<3.15`) com `venv` (instale o pacote
+`python3-venv` ou equivalente da versão escolhida), `iperf3`, `systemd --user`
+e acesso de rede para instalar as dependências Python. O instalador prefere
+CPython 3.14, seguido de 3.13, 3.12 e 3.11, e valida `python3` como última opção.
+Python 3.15 não é aceito. Para escolher explicitamente, use
+`SPEEDTESTER_PYTHON=/caminho/python3.14 ./packaging/linux/install-user.sh`.
+O bootstrap `install-speedtester-client.py` passa o caminho validado nessa
+mesma variável; falhas de validação interrompem a operação antes de alterar a
+instalação existente. Atualizações recriam o venv gerenciado, inclusive os
+links do interpretador, preservando configuração e histórico fora dele.
+O instalador confirma o fuso e o
 modo de seleção. `IPERF3_SERVER` vazio seleciona o destino por localização
 geográfica; preencher host/porta fixa a escolha do usuário. Atualizações
 preservam essa escolha. Consulte [seleção do servidor](../../docs/server-selection.md).
@@ -59,10 +68,11 @@ O arquivo instalado em `~/.local/share/applications/speedtester.desktop` usa
 `Icon=speedtester` e os PNGs em `~/.local/share/icons/hicolor/<tamanho>/apps`.
 Não há dependência de GNOME ou KDE específicos.
 
-Os formatos `.deb`, `.rpm` e AppImage são montados sobre este mesmo payload
-com builders reproduzíveis. O Flatpak usa um launcher sandboxed separado. Os
-builders exigem uma virtualenv preparada em
-`SPEEDTESTER_VENV` e a ferramenta nativa de cada formato:
+Os pacotes `.deb` e `.rpm` incluem executáveis congelados com PyInstaller e
+runtime CPython 3.14, sem exigir Python instalado no destino. `PYTHON` ou
+`SPEEDTESTER_VENV` seleciona o ambiente de build. O AppImage mantém seu payload
+venv; Arch usa dependências da distribuição e Flatpak é um launcher separado.
+Os builders exigem a ferramenta nativa de cada formato:
 
 ```bash
 SPEEDTESTER_VENV=.venv ./packaging/linux/build-deb.sh
@@ -82,9 +92,15 @@ ser integrado ao menu com:
 ./packaging/linux/appimage/install-appimage.sh --uninstall
 ```
 
-Os builders não baixam dependências silenciosamente nem inventam um runtime:
-o ambiente Python deve ser criado pelo pipeline de build e então é incorporado
-ao artefato correspondente.
+O alvo dos builds nativos é CPython 3.14. Consulte a
+[matriz de suporte e build](../../docs/desktop-installation.md). O pacote
+Arch continua usando o Python e as bibliotecas da distribuição, sem substituir
+dependências por pins de pip; seus limites `>=3.11,<3.15` incluem Python 3.14.
+Os serviços Arch continuam usando `/usr/bin/python3`.
+
+O AppImage atual copia a venv preparada e depende do Python base e das
+bibliotecas do sistema de build. Valide seus links e bibliotecas no destino;
+[venvs não são portáveis em geral](https://docs.python.org/3/library/venv.html).
 
 O launcher verifica o dashboard local antes de abrir o navegador. Se
 `speedtester-api.service` ainda não estiver ativo, ele o inicia e aguarda

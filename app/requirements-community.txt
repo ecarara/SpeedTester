@@ -1,8 +1,9 @@
 # Public community runtime pins, independently installable from the standalone app.
-pydantic==2.10.4
-pydantic-core==2.27.2
+pydantic==2.14.1
+pydantic-core==2.50.1
 annotated-types==0.8.0
 typing-extensions==4.16.0
+typing-inspection==0.4.4
 cryptography==50.0.2
 cffi==2.1.1
 pycparser==3.11

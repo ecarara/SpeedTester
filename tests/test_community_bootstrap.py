@@ -105,11 +105,12 @@ class BootstrapTests(unittest.TestCase):
                 installer.install('https://server.example')
             child.assert_not_called()
         project = self.root / 'package'
-        with patch.object(installer, 'check_requirements'), patch.object(installer, 'latest_release', return_value=release), patch.object(installer, 'download_archive'), patch.object(installer, 'extract_archive', return_value=project), patch.object(installer.subprocess, 'call', return_value=0) as child:
+        with patch.object(installer, 'check_requirements', return_value='/opt/python/bin/python3.14'), patch.object(installer, 'latest_release', return_value=release), patch.object(installer, 'download_archive'), patch.object(installer, 'extract_archive', return_value=project), patch.object(installer.subprocess, 'call', return_value=0) as child:
             self.assertEqual(installer.install('measurement.example', 5300), 0)
             self.assertEqual(child.call_args.args[0], ['bash', str(project / 'packaging/linux/install-user.sh')])
             self.assertEqual(child.call_args.kwargs['env']['SPEEDTESTER_IPERF3_SERVER'], 'measurement.example')
             self.assertEqual(child.call_args.kwargs['env']['SPEEDTESTER_IPERF3_PORT'], '5300')
+            self.assertEqual(child.call_args.kwargs['env']['SPEEDTESTER_PYTHON'], '/opt/python/bin/python3.14')
 
     def test_platform_and_server_origin_fail_closed_and_help_has_no_side_effects(self):
         with patch.object(installer.platform, 'system', return_value='Darwin'):

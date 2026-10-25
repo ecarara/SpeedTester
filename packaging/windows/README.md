@@ -6,7 +6,7 @@ cliente são executáveis independentes, produzidos com PyInstaller.
 
 ## Build
 
-Em um runner Windows com Python, PyInstaller e Windows SDK:
+Em um runner Windows com CPython 3.14, PyInstaller e Windows SDK:
 
 ```powershell
 .\packaging\windows\build-launchers.ps1

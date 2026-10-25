@@ -31,6 +31,27 @@ class LinuxPackagingTests(TestCase):
         self.assertIn("Environment=DB_PATH=%h/.local/share/speedtester/data/speedtester.db", api)
         self.assertIn("Environment=SPEEDTESTER_LOCAL_MODE=true", api)
 
+    def test_system_packages_use_frozen_runtime_and_keep_user_install_separate(self):
+        for service, name in (("api", "SpeedTesterAPI"), ("client", "SpeedTesterClient")):
+            unit = (LINUX / "system" / f"speedtester-{service}.service").read_text()
+            self.assertIn(f"ExecStart=/usr/lib/speedtester/runtime/{name}/{name}", unit)
+            self.assertNotIn("venv", unit)
+            self.assertNotIn("PYTHONPATH", unit)
+            self.assertIn("DB_PATH=%h/.local/share/speedtester/data/speedtester.db", unit)
+        launcher = (LINUX / "system/speedtester-launcher").read_text()
+        self.assertIn("runtime/SpeedTesterLauncher/SpeedTesterLauncher", launcher)
+        for name in ("build-deb.sh", "build-rpm.sh"):
+            builder = (LINUX / name).read_text()
+            self.assertIn("SPEEDTESTER_RUNTIME", builder)
+            self.assertIn("build_linux_runtime.py", builder)
+            self.assertNotIn('cp -a "$VENV', builder)
+        control = (LINUX / "debian/control.in").read_text()
+        self.assertIn("libc6 (>= @GLIBC_VERSION@)", control)
+        self.assertNotIn("python3", control)
+        spec = (LINUX / "rpm/speedtester.spec").read_text()
+        self.assertIn("cp -a runtime", spec)
+        self.assertNotIn("Requires:       /usr/bin/python", spec)
+
     def test_installation_has_all_freedesktop_icon_sizes(self):
         for size in (16, 32, 48, 64, 128, 256, 512):
             icon = ROOT / "assets" / "icons" / "hicolor" / str(size) / "apps" / "speedtester.png"
@@ -92,6 +113,8 @@ class LinuxPackagingTests(TestCase):
         self.assertIn('SOURCE_SHA256', pkgbuild)
         self.assertIn("package()", pkgbuild)
         self.assertIn("'uvicorn'", pkgbuild)
+        self.assertIn("'python>=3.11'", pkgbuild)
+        self.assertIn("'python<3.15'", pkgbuild)
         self.assertNotIn("'python-uvicorn'", pkgbuild)
         self.assertIn("post_remove()", install)
         self.assertIn("_speedtester_migrate_legacy_user_units", install)

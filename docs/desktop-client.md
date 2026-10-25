@@ -29,7 +29,10 @@ Cada tentativa depende de token, consentimento e documentos vigentes, destino ce
 
 ## Desenvolvimento e testes sem medições
 
-Use Python 3.11–3.13 e as dependências públicas. Para a interface, Tcl/Tk precisa estar disponível no ambiente de desenvolvimento; os pacotes gerados incluem esse runtime.
+Use CPython 3.14 como alvo, mantendo compatibilidade com 3.11–3.13
+(`>=3.11,<3.15`), e as dependências públicas. Para a interface, Tcl/Tk precisa
+estar disponível no ambiente de desenvolvimento; os pacotes gerados incluem
+esse runtime. Consulte a [matriz de suporte e build](desktop-installation.md).
 
 ```bash
 python -m pip install -r requirements-desktop.txt '.[desktop]'

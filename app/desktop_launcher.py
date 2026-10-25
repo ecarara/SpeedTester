@@ -23,6 +23,7 @@ import urllib.request
 import webbrowser
 
 from shared.user_config import config_path
+from shared.frozen_runtime import prepare_system_children, print_runtime_info
 
 
 DEFAULT_DASHBOARD_URL = "http://127.0.0.1:8000/"
@@ -299,6 +300,7 @@ def open_dashboard(config: LauncherConfig) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Launcher desktop do SpeedTester")
+    parser.add_argument("--runtime-info", action="store_true")
     parser.add_argument(
         "action",
         nargs="?",
@@ -313,6 +315,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    if args.runtime_info:
+        print_runtime_info()
+        return 0
+    prepare_system_children()
     try:
         config = LauncherConfig.from_environment()
         if args.url:

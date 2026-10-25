@@ -7,7 +7,7 @@ pkgdesc='Broadband measurement client and local dashboard'
 arch=('x86_64' 'aarch64')
 url='https://github.com/ecarara/SpeedTester'
 license=('GPL-3.0-or-later')
-depends=('python>=3.11' 'iperf3' 'python-aiohttp' 'python-fastapi' 'python-matplotlib' 'python-pandas' 'python-pydantic' 'uvicorn')
+depends=('python>=3.11' 'python<3.15' 'iperf3' 'python-aiohttp' 'python-fastapi' 'python-matplotlib' 'python-pandas' 'python-pydantic' 'uvicorn')
 install=speedtester.install
 source=("https://github.com/ecarara/SpeedTester/archive/refs/tags/v${pkgver}.tar.gz")
 sha256sums=("${SOURCE_SHA256:-SKIP}")

@@ -1,5 +1,8 @@
 # Épico E-01 — Empacotamento desktop multiplataforma
 
+Consulte a [matriz de suporte e build](desktop-installation.md): runtime alvo
+CPython 3.14 e compatibilidade por código-fonte com 3.11–3.14 (`>=3.11,<3.15`).
+
 | Campo | Definição |
 | --- | --- |
 | Status | Em execução |
@@ -147,8 +150,10 @@ alterar a configuração privada do usuário. A atualização não pode duplicar
 entradas no menu nem substituir silenciosamente o pareamento.
 
 Os builders de `.deb`, `.rpm`, AppImage e Arch/pacman ficam em `packaging/linux/`. Eles
-exigem uma virtualenv preparada pelo pipeline (`SPEEDTESTER_VENV`) e falham
-explicitamente quando a ferramenta do formato não está disponível. O AppImage
+incluem CPython 3.14 congelado no caso de DEB/RPM; `PYTHON` ou
+`SPEEDTESTER_VENV` seleciona o ambiente de build. AppImage usa uma venv e Arch
+usa dependências da distribuição. Os builders falham explicitamente quando a
+ferramenta do formato não está disponível. O AppImage
 tem instalador e desinstalador próprios; o `.deb` e o `.rpm` usam o ciclo de
 remoção do gerenciador de pacotes e preservam os dados do usuário.
 

@@ -33,7 +33,7 @@ trap cleanup EXIT
 "$PYTHON" -m PyInstaller --noconfirm --clean --onefile --console \
   --name SpeedTesterClient --paths app app/macos_client_entry.py
 "$PYTHON" -m PyInstaller --noconfirm --clean --onefile --console \
-  --name SpeedTesterAPI --paths app app/macos_api_entry.py
+  --name SpeedTesterAPI --paths app --add-data "app/dashboard:dashboard" app/native_api_entry.py
 
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/speedtester-macos.XXXXXX")"
 APP="$STAGE/SpeedTester.app"

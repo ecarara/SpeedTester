@@ -4,6 +4,23 @@ Este guia cobre os artefatos publicados no GitHub Releases. O SpeedTester é
 distribuído sob `GPL-3.0-or-later`; os pacotes não incluem banco, token ou
 configuração privada.
 
+## Suporte e build
+
+| Caminho | Python |
+| --- | --- |
+| Código-fonte / instalador Linux | CPython `>=3.11,<3.15`; preferência por 3.14 |
+| Matriz de testes CI | 3.11, 3.12, 3.13 e 3.14 |
+| Builds nativos Windows, macOS, DEB/RPM | CPython 3.14 |
+| Arch | Python e bibliotecas da distribuição, `>=3.11,<3.15` |
+| Flatpak | Launcher do dashboard; collector instalado no host |
+
+Python 3.15 ainda não é suportado. Cada release exige build e smoke test dos
+artefatos nativos no sistema e arquitetura de destino.
+
+DEB/RPM incluem CPython 3.14 e não dependem do Python do host. Os builds
+oficiais usam Ubuntu 22.04 como baseline de glibc; glibc não é incorporada ao
+runtime. A instalação por código-fonte aceita CPython 3.11–3.14.
+
 ## Escolha do artefato
 
 | Sistema | Artefato recomendado | Entrada no menu | Serviço de medições |
@@ -54,6 +71,13 @@ usuário sem pacote nativo:
 ./packaging/linux/install-user.sh
 ./packaging/linux/install-user.sh uninstall
 ```
+
+O instalador seleciona 3.14 preferencialmente, com fallback para 3.13–3.11,
+mesmo quando `python3` aponta para 3.15. Para fixar o interpretador, defina
+`SPEEDTESTER_PYTHON=/caminho/python3.14`. O bootstrap e o script Linux usam o
+mesmo caminho validado. Arch usa as dependências da distribuição dentro dos
+limites `>=3.11,<3.15`. Consulte os [builders Linux](../packaging/linux/README.md)
+para preparar os artefatos.
 
 O arquivo `.desktop` e os ícones hicolor fazem o aplicativo aparecer em GNOME,
 KDE, Omarchy, Cinnamon, XFCE e ambientes compatíveis com FreeDesktop. A
@@ -107,7 +131,7 @@ O formato de código-fonte continua disponível:
 ```bash
 tar -xzf SpeedTester-<versao>.tar.gz
 cd SpeedTester-<versao>
-python3 -m venv .venv
+python3.14 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r app/requirements.txt
 ```

@@ -40,6 +40,26 @@ def server_origin(value):
     return value
 
 
+def select_python():
+    override = os.environ.get('SPEEDTESTER_PYTHON')
+    candidates = (override,) if override else ('python3.14', 'python3.13', 'python3.12', 'python3.11', 'python3')
+    probe = ('import sys,venv; sys.exit(not (sys.implementation.name == "cpython" '
+             'and (3,11) <= sys.version_info[:2] < (3,15)))')
+    for candidate in candidates:
+        executable = shutil.which(candidate)
+        if not executable:
+            continue
+        try:
+            result = subprocess.run([executable, '-c', probe], stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL, timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if result.returncode == 0:
+            return os.path.abspath(executable)
+    raise InstallationError('Instale CPython 3.14 (ou 3.11–3.13) com venv; Python 3.15 não é suportado.'
+                            + (' Verifique SPEEDTESTER_PYTHON.' if override else ''))
+
+
 def check_requirements():
     if platform.system() != 'Linux' or platform.machine() not in ('x86_64', 'aarch64', 'arm64'):
         raise InstallationError('Execute este instalador no servidor Linux amd64 ou arm64 que fará as medições.')
@@ -47,20 +67,13 @@ def check_requirements():
         raise InstallationError('Execute como usuário normal, sem sudo.')
     if not sys.stdin.isatty():
         raise InstallationError('Execute em um terminal interativo; baixe o arquivo antes de executá-lo.')
-    python = None
-    for candidate in ('python3', 'python3.13', 'python3.12', 'python3.11'):
-        executable = shutil.which(candidate)
-        if executable and subprocess.run([executable, '-c', 'import sys,venv;assert sys.version_info[:2]>=(3,11)'],
-                                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
-            python = executable
-            break
-    if not python:
-        raise InstallationError('Instale Python 3.11 ou posterior com venv antes de continuar.')
+    python = select_python()
     if not shutil.which('iperf3') or not shutil.which('bash') or not shutil.which('systemctl'):
         raise InstallationError('Instale iperf3, bash e systemd pelo gerenciador de pacotes da distribuição.')
     if subprocess.run(['systemctl', '--user', 'show-environment'], stdout=subprocess.DEVNULL,
                       stderr=subprocess.DEVNULL).returncode:
         raise InstallationError('É necessária uma sessão systemd do usuário no servidor Linux.')
+    return python
 
 
 def _read_limited(response, limit):
@@ -165,7 +178,7 @@ def extract_archive(path, destination, version):
 
 
 def install(server=None, port=5201):
-    check_requirements()
+    python = check_requirements()
     previous_umask = os.umask(0o077)
     try:
         release = latest_release()
@@ -178,6 +191,7 @@ def install(server=None, port=5201):
             print('Pacote verificado. Confirme fuso, servidor automático e velocidades contratadas de download/upload…', flush=True)
             environment = os.environ.copy()
             environment['APP_VERSION'] = version
+            environment['SPEEDTESTER_PYTHON'] = python
             if server:
                 environment.update(SPEEDTESTER_IPERF3_SERVER=server, SPEEDTESTER_IPERF3_PORT=str(port))
             return subprocess.call(['bash', str(project / 'packaging/linux/install-user.sh')], cwd=project, env=environment)

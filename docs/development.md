@@ -2,7 +2,8 @@
 
 ## Pré-requisitos
 
-- Python 3.11+;
+- CPython 3.14 como runtime alvo; compatibilidade com 3.11–3.13
+  (`>=3.11,<3.15`), sem suporte a 3.15;
 - `pip` e ambiente virtual;
 - Node.js para validar o JavaScript embutido no dashboard;
 - Docker Compose para testar imagens e o stack;
@@ -26,7 +27,7 @@ Consulte [code-reference.md](code-reference.md) para o contrato de cada módulo.
 ## Ambiente local
 
 ```bash
-python3 -m venv .venv
+python3.14 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r requirements-dev.txt
 ```
@@ -54,8 +55,10 @@ Os testes de integração exercitam filtros com mais de 1.000 linhas, autorizaç
 migração, gravações concorrentes, recuperação de slots e restauração. O teste
 Playwright inicia uma API isolada com dados sintéticos e verifica períodos,
 runner, exportação, teclado, timezone e largura móvel.
-O CI executa Python 3.11/3.12/3.13, aceitação da interface, smoke test Compose
-e builds AMD64/ARM64. A análise Sonar em `main` recebe `coverage.xml` (Python) e
+O CI está configurado para Python 3.11/3.12/3.13/3.14, aceitação da interface,
+smoke test Compose e builds AMD64/ARM64. Os workflows de build nativo usam
+CPython 3.14; consulte a [matriz de suporte e build](desktop-installation.md).
+A análise Sonar em `main` recebe `coverage.xml` (Python) e
 `coverage-js/lcov.info` (JavaScript realmente executado no Chromium).
 
 Testes dependentes de internet real devem permanecer fora do CI determinístico.

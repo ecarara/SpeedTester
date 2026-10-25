@@ -14,7 +14,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Falha ao definir a versão do pacote.' }
     & $Python -m PyInstaller --noconfirm --clean --onefile --name SpeedTesterLauncher app/desktop_launcher.py
     & $Python -m PyInstaller --noconfirm --clean --onefile --name SpeedTesterClient --paths app app/windows_client_entry.py
-    & $Python -m PyInstaller --noconfirm --clean --onefile --name SpeedTesterAPI --paths app app/windows_api_entry.py
+    & $Python -m PyInstaller --noconfirm --clean --onefile --name SpeedTesterAPI --paths app --add-data "app/dashboard:dashboard" app/native_api_entry.py
     New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
     Copy-Item dist/SpeedTesterLauncher.exe, dist/SpeedTesterClient.exe, dist/SpeedTesterAPI.exe $OutputDirectory -Force
     & $Python scripts/bundle_release_tools.py $OutputDirectory --version $buildVersion

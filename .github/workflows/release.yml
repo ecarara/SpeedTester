@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.13'
+          python-version: '3.14'
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - run: python -m pip install -r requirements-dev.txt
@@ -84,9 +84,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.13'
+          python-version: '3.14'
       - name: Install packaging dependencies
-        run: python -m pip install -r app/requirements.txt pyinstaller==6.16.0
+        run: python -m pip install -r app/requirements.txt pyinstaller==6.22.3
       - name: Native macOS crypto runtime
         run: brew install openssl@3
       - name: Build unsigned macOS package
@@ -109,9 +109,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.13'
+          python-version: '3.14'
       - name: Install packaging dependencies
-        run: python -m pip install -r app/requirements.txt pyinstaller==6.16.0
+        run: python -m pip install -r app/requirements.txt pyinstaller==6.22.3
       - name: Native Windows measurement toolchain
         id: msys2
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e
@@ -154,19 +154,19 @@ jobs:
       fail-fast: false
       matrix:
         format: [deb, rpm]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.13'
+          python-version: '3.14'
       - name: Install RPM toolchain
         if: matrix.format == 'rpm'
         run: sudo apt-get update && sudo apt-get install --yes rpm
       - name: Prepare isolated runtime
         run: |
           python -m venv .release-venv
-          .release-venv/bin/python -m pip install -r app/requirements.txt
+          .release-venv/bin/python -m pip install --only-binary=:all: -r app/requirements.txt pyinstaller==6.22.3
       - name: Build Debian package
         if: matrix.format == 'deb'
         env:
@@ -253,7 +253,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.13'
+          python-version: '3.14'
       - name: Install installer prerequisites
         run: sudo apt-get update && sudo apt-get install --yes iperf3
       - name: Run isolated install, upgrade and removal test

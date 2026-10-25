@@ -37,8 +37,10 @@ dos pacotes nativos. Confirme o fuso e a localização. Deixe o servidor vazio
 para seleção automática por distância geográfica ou informe seu próprio
 servidor opcional. As medições e o painel local não exigem conta.
 
-Requisitos: Linux amd64/arm64, usuário normal com sessão systemd, Python
-3.11 ou posterior com venv e iPerf3. O download sozinho não inicia medições.
+Requisitos: Linux amd64/arm64, usuário normal com sessão systemd, CPython
+3.11–3.14 (`>=3.11,<3.15`) com venv e iPerf3. O runtime alvo é CPython 3.14;
+o instalador prefere essa versão e usa 3.11–3.13 quando necessário. Python
+3.15 ainda não é suportado. O download sozinho não inicia medições.
 Para fixar um destino, use `python3 install-speedtester-client.py --server seu-host --port 5201`.
 Consulte [seleção geográfica e escolha manual](docs/server-selection.md).
 O código do instalador está em [install-speedtester-client.py](install-speedtester-client.py).
@@ -127,7 +129,7 @@ repositório com `PYTHONPATH=app`; `aiohttp` está declarado em
 ```bash
 git clone https://github.com/ecarara/SpeedTester.git
 cd SpeedTester
-python3 -m venv .venv
+python3.14 -m venv .venv
 . .venv/bin/activate
 python -m pip install -r app/requirements.txt
 

@@ -4,7 +4,7 @@ Section: net
 Priority: optional
 Architecture: @ARCH@
 Maintainer: Edson Angelo Carara <ecarara@users.noreply.github.com>
-Depends: python3 (>= 3.11), iperf3
+Depends: libc6 (>= @GLIBC_VERSION@), iperf3, xdg-utils
 Description: SpeedTester broadband measurement client
  SpeedTester schedules broadband measurements, persists results and provides
  a local dashboard. The package installs a user-level launcher and services.

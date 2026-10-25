@@ -7,13 +7,12 @@ After=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/usr/lib/speedtester/app
+WorkingDirectory=/usr/lib/speedtester
 EnvironmentFile=-%h/.config/speedtester/speedtester.env
 Environment=DB_PATH=%h/.local/share/speedtester/data/speedtester.db
 Environment=SPEEDTESTER_LOCAL_MODE=true
 Environment=API_PORT=8000
-Environment=PYTHONPATH=/usr/lib/speedtester/app
-ExecStart=/usr/lib/speedtester/venv/bin/python -m uvicorn api.server:app --host 127.0.0.1 --port ${API_PORT}
+ExecStart=/usr/lib/speedtester/runtime/SpeedTesterAPI/SpeedTesterAPI
 Restart=on-failure
 RestartSec=5s
 UMask=0077

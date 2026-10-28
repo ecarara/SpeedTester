@@ -346,7 +346,7 @@ sudo python3 /opt/speedtester/scripts/staging_https.py verify --root /opt/speedt
 ```
 
 Para uma instalação com `install.sh`, execute a verificação automaticamente
-ao final com `SPEEDTESTER_STAGING_HTTPS_CHECK=true ./install.sh`. O instalador
+ao final com `sudo env SPEEDTESTER_STAGING_HTTPS_CHECK=true ./install.sh`. O instalador
 usa o checkout e `.env` do `PROJECT_DIR`; não use esse comando para substituir
 volumes existentes sem antes seguir o procedimento de restauração.
 

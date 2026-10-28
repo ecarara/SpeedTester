@@ -140,6 +140,22 @@ class DeployTests(IntegrationFixture):
         self.assertIn(str(root/'deploy-previous.json'),execute.call_args.args)
         self.assertEqual(json.loads((root/'deployment.json').read_text())['revision'],'b'*40)
 
+    def test_https_failure_after_start_restores_previous_release(self):
+        root, release, images = self.candidate()
+        with patch.object(deployment, 'release_source', return_value=release), \
+             patch.object(deployment, 'image_digests', return_value=images), \
+             patch.object(deployment, 'fresh_image_gate', return_value='report'), \
+             patch.object(deployment, 'run') as execute, patch.object(deployment, 'validate_policy'), \
+             patch.object(deployment, 'backup_database', return_value='snapshot.db'), \
+             patch.object(deployment, 'restore_database') as restore, \
+             patch.object(deployment, 'validate_service'), \
+             patch.object(deployment, 'validate_staging_https', side_effect=[None, RuntimeError('HTTPS unavailable')]):
+            with self.assertRaisesRegex(RuntimeError, 'HTTPS unavailable'):
+                deployment.deploy(root, 'a' * 40, 'example', 'db', 'backups')
+        restore.assert_called_once()
+        self.assertIn(str(root/'deploy-previous.json'), execute.call_args.args)
+        self.assertEqual(json.loads((root/'deployment.json').read_text())['revision'], 'b' * 40)
+
     def test_image_revision_mismatch_is_rejected_before_service_stop(self):
         image={'Config':{'Labels':{'org.opencontainers.image.revision':'wrong'}},'RepoDigests':[]}
         with patch.object(deployment,'run',side_effect=['',json.dumps([image])]):

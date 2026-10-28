@@ -155,6 +155,13 @@ def staging_baseline(release, sha):
     return str(output)
 
 
+def validate_staging_https(root):
+    """Enforce the versioned staging proxy contract when explicitly configured."""
+    if os.environ.get('SPEEDTESTER_STAGING_HTTPS_CHECK', '').lower() == 'true':
+        script = Path(__file__).resolve().parent / 'staging_https.py'
+        run('python3', str(script), 'verify', '--root', str(root))
+
+
 def backup_database(root, image, volume, sha):
     directory = root/'deployment-backups'
     directory.mkdir(mode=0o700, exist_ok=True)
@@ -207,6 +214,7 @@ def deploy(root, sha, project, db_volume, backup_volume):
     if not re.fullmatch(r'[0-9a-f]{40}', sha):
         raise ValueError('Expected full Git commit SHA')
     state_file = root/'deployment.json'
+    validate_staging_https(root)
     previous = json.loads(state_file.read_text()) if state_file.exists() else None
     if previous and previous['revision'] == sha:
         return 'unchanged'
@@ -228,6 +236,7 @@ def deploy(root, sha, project, db_volume, backup_volume):
         snapshot = backup_database(root, previous['images']['api'], db_volume, sha)
         run(*new, 'up', '-d', '--no-build', '--wait', '--wait-timeout', '180')
         validate_service(new)
+        validate_staging_https(root)
         baseline_report = staging_baseline(release, sha)
         state = {'revision': sha, 'release_dir': str(release), 'images': images, 'backup': snapshot,
                  'deployed_at': datetime.now(timezone.utc).isoformat(),

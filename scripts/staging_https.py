@@ -111,6 +111,18 @@ def port_type(output, port):
     return None
 
 
+def restore_configuration(originals, applied_port):
+    for path, original in originals.items():
+        if original is None:
+            path.unlink(missing_ok=True)
+        elif not path.exists() or path.read_text() != original:
+            atomic_write(path, original)
+    if applied_port:
+        run('semanage', 'port', '-d', '-p', 'tcp', '8000')
+    run('nginx', '-t')
+    run('systemctl', 'reload', 'nginx')
+
+
 def prepare(root=ROOT, nginx_config=NGINX_CONFIG, deploy_config=DEPLOY_CONFIG):
     """Reconcile host files and SELinux; never create credentials or certificates."""
     profile = load_profile()
@@ -150,15 +162,7 @@ def prepare(root=ROOT, nginx_config=NGINX_CONFIG, deploy_config=DEPLOY_CONFIG):
             run('nginx', '-t')
             run('systemctl', 'reload', 'nginx')
     except Exception:
-        for path, original in originals.items():
-            if original is None:
-                path.unlink(missing_ok=True)
-            elif not path.exists() or path.read_text() != original:
-                atomic_write(path, original)
-        if applied_port:
-            run('semanage', 'port', '-d', '-p', 'tcp', '8000')
-        run('nginx', '-t')
-        run('systemctl', 'reload', 'nginx')
+        restore_configuration(originals, applied_port)
         raise
 
 

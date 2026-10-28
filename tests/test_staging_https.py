@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import shutil
 import ssl
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -101,6 +102,28 @@ class StagingHttpsTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, 'conflicting'):
                 staging.prepare(self.root, self.nginx, self.deploy_config)
         self.assertFalse(self.nginx.exists())
+
+    def test_missing_certificate_or_occupied_port_stops_preparation(self):
+        self.cert.unlink()
+        with self.assertRaisesRegex(RuntimeError, 'certificate'):
+            staging.prepare(self.root, self.nginx, self.deploy_config)
+        self.cert.write_text('fixture')
+        def occupied(*args):
+            if args == ('ss', '-ltn'):
+                return 'LISTEN 192.0.2.10:8000'
+            return self.fake_run(*args)
+        with patch.object(staging, 'run', side_effect=occupied):
+            with self.assertRaisesRegex(RuntimeError, 'Stop the old API'):
+                staging.prepare(self.root, self.nginx, self.deploy_config)
+        self.assertFalse(self.nginx.exists())
+
+    def test_command_line_retries_transient_proxy_failure(self):
+        with patch.object(sys, 'argv', ['staging_https.py', 'verify', '--root', str(self.root)]), \
+             patch.object(staging, 'verify', side_effect=[RuntimeError('reloading'), None]) as verify, \
+             patch.object(staging.time, 'sleep') as sleep:
+            staging.main()
+        self.assertEqual(verify.call_count, 2)
+        sleep.assert_called_once_with(1)
 
     def test_host_profile_rejects_unsafe_nginx_input(self):
         path = self.root / 'profile.json'

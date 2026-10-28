@@ -144,6 +144,12 @@ class StagingHttpsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 load_profile(path)
 
+    def test_domains_reject_invalid_labels_and_extreme_lengths(self):
+        for domain in ('localhost', '-test.example', 'test-.example', 'test..example',
+                       'a' * 64 + '.example', 'á.example', 'a.' * 127 + 'com'):
+            self.assertFalse(staging.valid_domain(domain), domain)
+        self.assertTrue(staging.valid_domain('staging-1.example.com'))
+
     def test_versioned_template_renders_proxy_and_preserves_nginx_variables(self):
         template = ROOT / 'ops/staging/nginx-https.conf.example'
         with patch.object(staging, 'TEMPLATE', template):

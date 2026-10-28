@@ -14,7 +14,7 @@ import os
 from pathlib import Path
 import re
 import shutil
-from string import Template
+from string import Template, ascii_letters, digits
 import subprocess
 import tempfile
 import time
@@ -29,6 +29,18 @@ TEMPLATE = Path(__file__).resolve().parent.parent / 'ops/staging/nginx-https.con
 ENV_VALUES = {'API_PORT': '18000', 'API_BIND_ADDRESS': '127.0.0.1', 'API_COOKIE_SECURE': 'true'}
 
 
+def valid_domain(domain):
+    if not isinstance(domain, str) or not 1 <= len(domain) <= 253:
+        return False
+    labels = domain.split('.')
+    allowed = ascii_letters + digits + '-'
+    return len(labels) > 1 and all(
+        1 <= len(label) <= 63 and label[0] != '-' and label[-1] != '-'
+        and all(char in allowed for char in label)
+        for label in labels
+    )
+
+
 def load_profile(path=PROFILE):
     """Read host-specific parameters from a trusted local configuration file."""
     mode = path.stat().st_mode
@@ -38,7 +50,7 @@ def load_profile(path=PROFILE):
     if set(profile) != {'domain', 'listen_address', 'certificate', 'private_key'}:
         raise ValueError('Unexpected staging HTTPS profile fields')
     domain = profile['domain']
-    if not isinstance(domain, str) or not re.fullmatch(r'(?=.{1,253}$)[a-zA-Z0-9]+(?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9]+(?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)+', domain):
+    if not valid_domain(domain):
         raise ValueError('Invalid HTTPS domain')
     address = ipaddress.ip_address(profile['listen_address'])
     if address.version != 4 or address.is_unspecified or address.is_multicast:
@@ -124,6 +136,18 @@ def restore_configuration(originals, applied_port):
     run('systemctl', 'reload', 'nginx')
 
 
+def apply_configuration(originals, env_path, nginx_config, deploy_config, values):
+    new_env, new_nginx, new_deploy = values
+    if new_env != originals[env_path]:
+        atomic_write(env_path, new_env)
+    if new_deploy != originals[deploy_config]:
+        atomic_write(deploy_config, new_deploy)
+    if new_nginx != originals[nginx_config]:
+        atomic_write(nginx_config, new_nginx)
+        run('nginx', '-t')
+        run('systemctl', 'reload', 'nginx')
+
+
 def prepare(root=ROOT, nginx_config=NGINX_CONFIG, deploy_config=DEPLOY_CONFIG):
     """Reconcile host files and SELinux; never create credentials or certificates."""
     profile = load_profile()
@@ -154,14 +178,8 @@ def prepare(root=ROOT, nginx_config=NGINX_CONFIG, deploy_config=DEPLOY_CONFIG):
         if changed_port:
             run('semanage', 'port', '-m' if current else '-a', '-t', 'http_port_t', '-p', 'tcp', '8000')
             applied_port = True
-        if new_env != originals[env_path]:
-            atomic_write(env_path, new_env)
-        if new_deploy != originals[deploy_config]:
-            atomic_write(deploy_config, new_deploy)
-        if new_nginx != originals[nginx_config]:
-            atomic_write(nginx_config, new_nginx)
-            run('nginx', '-t')
-            run('systemctl', 'reload', 'nginx')
+        apply_configuration(originals, env_path, nginx_config, deploy_config,
+                            (new_env, new_nginx, new_deploy))
     except Exception:
         restore_configuration(originals, applied_port)
         raise

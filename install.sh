@@ -13,4 +13,7 @@ compose=(docker compose --env-file "$PROJECT_DIR/.env" -f "$PROJECT_DIR/docker/c
 "${compose[@]}" build
 "${compose[@]}" run --rm --no-deps collector python /opt/speedtester-scripts/doctor.py --container
 "${compose[@]}" up -d --wait --wait-timeout 180
+if [[ "${SPEEDTESTER_STAGING_HTTPS_CHECK:-false}" == "true" ]]; then
+  python3 scripts/staging_https.py verify --root "$PROJECT_DIR"
+fi
 echo '[install] services started; use docker compose logs and /health to monitor collection'

@@ -298,6 +298,64 @@ Somente modo local/demonstração pode desabilitar login explicitamente.
 
 ## Deploy automático no staging
 
+### Proxy HTTPS do staging
+
+O perfil versionado em [ops/staging/nginx-https.conf.example](../ops/staging/nginx-https.conf.example)
+redireciona o endereço HTTP do staging para seu domínio HTTPS, preservando o
+caminho e a query.
+O nginx encaminha a API exclusivamente para `127.0.0.1:18000`; cookies de
+sessão continuam exigindo HTTPS. O domínio, IP e caminhos do certificado são
+configurados no servidor e não são publicados no repositório.
+
+Em uma reinstalação, restaure previamente o volume do banco, o `.env` e
+`/etc/speedtester-deploy.conf` a partir de backups protegidos. Restaure também
+`/etc/speedtester-staging-https.json`, o certificado e a chave privada
+correspondente; eles não são armazenados no repositório.
+Instale nginx, Docker Compose e as ferramentas SELinux, mantenha o SELinux em
+modo enforcing, inicie nginx e confirme a resolução DNS para o endereço do staging.
+
+Se o perfil não estiver no backup, crie `/etc/speedtester-staging-https.json`
+como root, com permissão 0600, usando seus dados reais:
+
+```json
+{"domain":"staging.example.com","listen_address":"192.0.2.10",
+ "certificate":"/etc/pki/tls/certs/example.crt",
+ "private_key":"/etc/pki/tls/private/example.key"}
+```
+
+A partir de um checkout validado da revisão instalada, instale o deploy e o
+perfil em `/opt/speedtester`, depois prepare a configuração **antes** de subir
+a API. Se uma API antiga ainda ocupa a porta HTTP do staging, pare somente essa
+API pelo Compose antes da preparação, sem remover containers de dados ou volumes.
+
+```bash
+sudo install -D -m 0755 scripts/deploy.py /opt/speedtester/scripts/deploy.py
+sudo install -D -m 0755 scripts/staging_https.py /opt/speedtester/scripts/staging_https.py
+sudo install -D -m 0644 ops/staging/nginx-https.conf.example /opt/speedtester/ops/staging/nginx-https.conf.example
+sudo python3 /opt/speedtester/scripts/staging_https.py prepare --root /opt/speedtester
+```
+
+A preparação ajusta apenas as chaves gerenciadas do `.env` e do deploy, aplica
+o rótulo SELinux necessário para nginx na porta 8000 e valida a configuração
+do nginx antes do reload. Em falha restaura os arquivos e a regra anterior.
+Ela não gera nem sobrescreve credenciais e certificados. Após iniciar a stack,
+confirme o fluxo real:
+
+```bash
+sudo python3 /opt/speedtester/scripts/staging_https.py verify --root /opt/speedtester
+```
+
+Para uma instalação com `install.sh`, execute a verificação automaticamente
+ao final com `SPEEDTESTER_STAGING_HTTPS_CHECK=true ./install.sh`. O instalador
+usa o checkout e `.env` do `PROJECT_DIR`; não use esse comando para substituir
+volumes existentes sem antes seguir o procedimento de restauração.
+
+O `prepare` habilita `SPEEDTESTER_STAGING_HTTPS_CHECK=true` na configuração do
+deploy. Esse gate confere o perfil versionado, o bind, o cookie seguro, o
+redirecionamento e a saúde HTTPS antes de cada deploy e depois de subir a versão;
+uma falha após a troca aciona o rollback existente. Quando o serviço systemd já
+estiver instalado, mantenha o script e o perfil no mesmo checkout/versão.
+
 `scripts/deploy.py` consulta a revisão atual de `main` e exige sucesso dos
 workflows CI, Container images, SonarQube e Security nessa revisão. O staging busca a
 versão; não há chave SSH do staging nos secrets do repositório público.

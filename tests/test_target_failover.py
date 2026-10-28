@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from collector.iperf3_runner import (
-    Iperf3TargetUnavailable, Iperf3Timeout, IperfRunMetrics, _run_once_metrics, run_iperf3,
+    Iperf3ResourceError, Iperf3TargetUnavailable, Iperf3Timeout, IperfRunMetrics, _run_once_metrics, run_iperf3,
 )
 from collector.network_metrics import PingMetrics
 from collector.network_link import NetworkLink
@@ -121,6 +121,18 @@ class GeographicRecoveryTests(unittest.TestCase):
         result = run_iperf3(**self.options)
         self.assertEqual(result.server_name, "iperf3:target-2.example:5201")
         self.assertEqual([a["outcome"] for a in result.target_attempts], ["download_error", "selected"])
+
+    def test_control_disconnect_fails_over_and_resource_failure_does_not(self):
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = [Iperf3TargetUnavailable("control channel disconnected"),
+                               self.metrics, self.metrics]
+        self.assertEqual(run_iperf3(**self.options).server_name, "iperf3:target-2.example:5201")
+        self.assertEqual(execute.call_count, 3)
+        execute.reset_mock()
+        execute.side_effect = Iperf3ResourceError("failed to read /dev/urandom")
+        with self.assertRaises(Iperf3ResourceError):
+            run_iperf3(**self.options)
+        self.assertEqual(execute.call_count, 1)
 
     def test_manual_download_refusal_preserves_the_manual_choice(self):
         self.mocks["rank_targets"].return_value = (replace(self.targets[0], mode="manual"),)
@@ -256,3 +268,18 @@ class IperfDiagnosticTests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as captured:
                 _run_once_metrics("fixture", "target.example", 5201, 10, 5, False)
         self.assertNotIsInstance(captured.exception, Iperf3TargetUnavailable)
+
+    def test_disconnected_control_channel_can_fail_over_but_resource_failure_cannot(self):
+        from collector.collector import Collector
+        cases = [
+            ('unable to receive control message: Transport endpoint is not connected', Iperf3TargetUnavailable),
+            ('iperf3: error - failed to read /dev/urandom: Bad address', Iperf3ResourceError),
+        ]
+        for message, error_type in cases:
+            completed = subprocess.CompletedProcess([], 1, '', message)
+            with self.subTest(message=message), patch('collector.iperf3_runner.subprocess.run', return_value=completed):
+                with self.assertRaises(error_type) as captured:
+                    _run_once_metrics('fixture', 'target.example', 5201, 10, 5, False)
+                if error_type is Iperf3ResourceError:
+                    self.assertEqual(Collector._classify_failure(None, captured.exception), 'iperf_resource')
+                    self.assertNotIsInstance(captured.exception, Iperf3TargetUnavailable)

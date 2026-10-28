@@ -35,6 +35,10 @@ class Iperf3TargetUnavailable(RuntimeError):
     """Connection refused or server busy in either measurement direction."""
 
 
+class Iperf3ResourceError(RuntimeError):
+    """iPerf3 reported failure initializing a required resource."""
+
+
 MAX_AUTOMATIC_TARGETS = 3
 
 
@@ -281,7 +285,12 @@ def _run_once_metrics(
     if completed.returncode != 0:
         detail = _failure_detail(completed)
         message = f"iperf3 {server}:{port} falhou ({completed.returncode}): {detail}"
-        if any(marker in detail.lower() for marker in ("connection refused", "server is busy")):
+        normalized = detail.lower()
+        if "failed to read /dev/urandom" in normalized:
+            raise Iperf3ResourceError(message)
+        if (any(marker in normalized for marker in ("connection refused", "server is busy"))
+                or ("unable to receive control message" in normalized
+                    and "transport endpoint is not connected" in normalized)):
             raise Iperf3TargetUnavailable(message)
         raise RuntimeError(message)
 

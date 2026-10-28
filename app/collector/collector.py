@@ -23,8 +23,8 @@ from api.store import MeasurementSlot, Sample, SampleStore
 from collector.alert_delivery import deliver_due
 from collector.anomaly import anomalous_directions
 from collector.connectivity import ConnectivitySnapshot, probe_connectivity
-from collector.iperf3_runner import Iperf3TargetUnavailable, Iperf3Timeout
-from collector.quadrants import local_date_now, plan_day_slots
+from collector.iperf3_runner import Iperf3ResourceError, Iperf3TargetUnavailable, Iperf3Timeout
+from collector.quadrants import DEFAULT_SCHEDULE_SEED, local_date_now, plan_day_slots
 from collector.runner_dispatch import Iperf3Target, run_named_runner
 from shared.settings import Settings, load_settings
 from shared.observation import start_observation
@@ -80,6 +80,8 @@ class Collector:
         self._current_slot = None
         self._last_attempt_id = None
         self._attempt_started_at = None
+        self._reconciled_days = set()
+        self._schedule_seed = None
 
     def _handle_signal(self, signum, _frame):
         print(f"\n[collector] received signal {signum}, stopping gracefully")
@@ -498,6 +500,8 @@ class Collector:
 
     def _classify_failure(self, exc: Exception) -> str:
         """Map a speedtest exception to a short, stable failure cause label."""
+        if isinstance(exc, Iperf3ResourceError):
+            return "iperf_resource"
         if isinstance(exc, Iperf3TargetUnavailable):
             return "server"
         text = f"{exc!r}".lower()
@@ -514,11 +518,15 @@ class Collector:
         return "unknown"
 
     def _ensure_schedule(self, local_day: date) -> None:
+        if self._schedule_seed is None:
+            self._schedule_seed = self.store.local_schedule_seed()
+        seed = self._schedule_seed
         planned = plan_day_slots(
             local_day=local_day,
             tz_name=self.settings.timezone,
             count_per_quadrant=self.settings.measurements_per_quadrant,
             test_duration_seconds=self.settings.sample_duration_seconds,
+            schedule_seed=seed,
         )
         self.store.add_slots(
             MeasurementSlot(
@@ -530,6 +538,22 @@ class Collector:
             )
             for slot in planned
         )
+        day = local_day.isoformat()
+        if day not in self._reconciled_days:
+            cutoff = (datetime.now(timezone.utc) + timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            if self.store.has_legacy_future_slots(day, cutoff, DEFAULT_SCHEDULE_SEED):
+                alternatives = [planned]
+                for attempt in range(1, 64):
+                    alternatives.append(plan_day_slots(
+                        local_day=local_day, tz_name=self.settings.timezone,
+                        count_per_quadrant=self.settings.measurements_per_quadrant,
+                        test_duration_seconds=self.settings.sample_duration_seconds,
+                        schedule_seed=f"{seed}:migration:{attempt}",
+                    ))
+                moved = self.store.migrate_legacy_future_slots(day, alternatives, cutoff, DEFAULT_SCHEDULE_SEED)
+                if moved:
+                    print(f"[collector] rescheduled {moved} future legacy slot(s) independently", flush=True)
+            self._reconciled_days.add(day)
 
     def run_forever(self) -> None:
         """Maintain the daily plan and process due slots until stopped."""

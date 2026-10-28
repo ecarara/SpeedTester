@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import json
+import os
+import platform
 import subprocess
 import time
 from dataclasses import dataclass
@@ -35,6 +37,10 @@ class Iperf3TargetUnavailable(RuntimeError):
     """Connection refused or server busy in either measurement direction."""
 
 
+class Iperf3ResourceError(RuntimeError):
+    """iPerf3 reported failure initializing a required resource."""
+
+
 MAX_AUTOMATIC_TARGETS = 3
 
 
@@ -57,26 +63,58 @@ def _measure_on_available_target(targets, execute, deadline):
     if not targets:
         raise TargetSelectionError("Nenhum destino de medição disponível no catálogo.")
     attempts = []
+    recovery = {"temporary_directory": None}
     for target in targets[:MAX_AUTOMATIC_TARGETS]:
+        try:
+            upload, download = _measure_target(target, execute, deadline, attempts, recovery)
+            return target, upload, download, attempts
+        except Iperf3TargetUnavailable as exc:
+            if target.mode == "manual":
+                raise
+            phase = "download" if attempts[-1]["outcome"] == "download_error" else "upload"
+            print(f"[iperf3] unavailable target {target.host}:{target.port}; "
+                  f"phase={phase}; discarding partial measurement", flush=True)
+            last_error = exc
+    raise last_error
+
+
+def _measure_target(target, execute, deadline, attempts, recovery):
+    while True:
         remaining = _target_timeout(deadline, attempts)
         outcome = "error"
         try:
-            upload = execute(target, False, remaining)
+            upload = execute(target, False, remaining, recovery["temporary_directory"])
             outcome = "download_error"
-            download = execute(target, True, _target_timeout(deadline, attempts))
+            download = execute(target, True, _target_timeout(deadline, attempts), recovery["temporary_directory"])
+        except Iperf3ResourceError as exc:
+            attempts.append(_target_evidence(target, outcome, str(exc)[:400]))
+            exc.target_attempts = attempts
+            alternate = _alternate_tmpdir() if recovery["temporary_directory"] is None else None
+            if alternate is None or "bad address" not in str(exc).lower():
+                raise
+            recovery["temporary_directory"] = alternate
+            print("[iperf3] retrying both directions using an alternate temporary directory", flush=True)
         except RuntimeError as exc:
             attempts.append(_target_evidence(target, outcome, str(exc)[:400]))
             exc.target_attempts = attempts
-            if not isinstance(exc, Iperf3TargetUnavailable) or target.mode == "manual":
-                raise
-            print(f"[iperf3] unavailable target {target.host}:{target.port} "
-                  f"phase={'download' if outcome == 'download_error' else 'upload'}; "
-                  "discarding partial measurement", flush=True)
-            last_error = exc
+            raise
         else:
-            attempts.append(_target_evidence(target, "selected"))
-            return target, upload, download, attempts
-    raise last_error
+            evidence = _target_evidence(target, "selected")
+            if recovery["temporary_directory"] is not None:
+                evidence["temporary_directory_recovery"] = True
+            attempts.append(evidence)
+            return upload, download
+
+
+def _alternate_tmpdir():
+    """A single bounded Linux recovery; do not reuse the current location."""
+    if platform.system() != "Linux":
+        return None
+    candidate = "/dev/shm"
+    current = os.environ.get("TMPDIR") or os.environ.get("TEMP") or os.environ.get("TMP") or "/tmp"
+    if os.path.realpath(current) == os.path.realpath(candidate):
+        return None
+    return candidate if os.path.isdir(candidate) and os.access(candidate, os.W_OK | os.X_OK) else None
 
 
 def _target_timeout(deadline, attempts):
@@ -160,9 +198,12 @@ def run_iperf3(
     identity = _initial_identity(server, location, isp_lookup_enabled, isp_lookup_timeout_seconds, deadline)
     targets = rank_targets(server, port, location=location or identity)
 
-    def execute(target, reverse, remaining):
+    def execute(target, reverse, remaining, temporary_directory):
+        options = {"timeout_seconds": remaining}
+        if temporary_directory is not None:
+            options["temporary_directory"] = temporary_directory
         return _run_once_metrics(binary, target.host, target.port, duration_seconds,
-                                 parallel_streams, reverse=reverse, timeout_seconds=remaining)
+                                 parallel_streams, reverse=reverse, **options)
 
     target, upload_metrics, download_metrics, target_attempts = _measure_on_available_target(targets, execute, deadline)
     server, port = target.host, target.port
@@ -240,6 +281,7 @@ def _run_once_metrics(
     parallel_streams: int,
     reverse: bool,
     timeout_seconds: Optional[float] = None,
+    temporary_directory: Optional[str] = None,
 ) -> IperfRunMetrics:
     command = [
         binary,
@@ -269,6 +311,7 @@ def _run_once_metrics(
             ),
             start_new_session=True,
             check=False,
+            env=({**os.environ, "TMPDIR": temporary_directory} if temporary_directory is not None else None),
         )
     except FileNotFoundError as exc:
         raise RuntimeError(f"iperf3 não encontrado: {binary}") from exc
@@ -281,7 +324,12 @@ def _run_once_metrics(
     if completed.returncode != 0:
         detail = _failure_detail(completed)
         message = f"iperf3 {server}:{port} falhou ({completed.returncode}): {detail}"
-        if any(marker in detail.lower() for marker in ("connection refused", "server is busy")):
+        normalized = detail.lower()
+        if "failed to read /dev/urandom" in normalized:
+            raise Iperf3ResourceError(message)
+        if (any(marker in normalized for marker in ("connection refused", "server is busy"))
+                or ("unable to receive control message" in normalized
+                    and "transport endpoint is not connected" in normalized)):
             raise Iperf3TargetUnavailable(message)
         raise RuntimeError(message)
 

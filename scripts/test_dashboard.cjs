@@ -70,6 +70,7 @@ const reports = require('istanbul-reports');
         {...base,connection_type:'wifi',interface:'<img src=x onerror="throw new Error(1)">',connection_scope:'runner_address'},
         {...base,connection_type:'ethernet',interface:'enp1s0',connection_scope:'default_route'},
         {...base,connection_type:null,interface:null,connection_scope:null},
+        {...base,is_failure:true,connection_type:null,interface:null,connection_scope:null},
         {...base,connection_type:'mixed',interface:null,connection_scope:'runner_addresses'},
       ];
       renderMeasurements();
@@ -78,6 +79,7 @@ const reports = require('istanbul-reports');
     assert.match(await page.locator('#measurementRows').textContent(),/Cabeada \(Ethernet\)/);
     assert.match(await page.locator('#measurementRows').textContent(),/Rota padrão · estimativa/);
     assert.match(await page.locator('#measurementRows').textContent(),/Desconhecida/);
+    assert.match(await page.locator('#measurementRows').textContent(),/Teste não concluído/);
     assert.match(await page.locator('#measurementRows').textContent(),/Mista/);
     assert.equal(await page.locator('#measurementRows img').count(),0,'Adapter names must be escaped');
     assert.equal(await page.locator('.measurement-table th').count(),9);

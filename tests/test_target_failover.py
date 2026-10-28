@@ -8,7 +8,8 @@ import unittest
 from unittest.mock import patch
 
 from collector.iperf3_runner import (
-    Iperf3TargetUnavailable, Iperf3Timeout, IperfRunMetrics, _run_once_metrics, run_iperf3,
+    Iperf3ResourceError, Iperf3TargetUnavailable, Iperf3Timeout, IperfRunMetrics, _alternate_tmpdir,
+    _run_once_metrics, run_iperf3,
 )
 from collector.network_metrics import PingMetrics
 from collector.network_link import NetworkLink
@@ -121,6 +122,53 @@ class GeographicRecoveryTests(unittest.TestCase):
         result = run_iperf3(**self.options)
         self.assertEqual(result.server_name, "iperf3:target-2.example:5201")
         self.assertEqual([a["outcome"] for a in result.target_attempts], ["download_error", "selected"])
+
+    def test_control_disconnect_fails_over_and_resource_failure_does_not(self):
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = [Iperf3TargetUnavailable("control channel disconnected"),
+                               self.metrics, self.metrics]
+        self.assertEqual(run_iperf3(**self.options).server_name, "iperf3:target-2.example:5201")
+        self.assertEqual(execute.call_count, 3)
+        execute.reset_mock()
+        execute.side_effect = Iperf3ResourceError("failed to read /dev/urandom")
+        with self.assertRaises(Iperf3ResourceError):
+            run_iperf3(**self.options)
+        self.assertEqual(execute.call_count, 1)
+
+    def test_temporary_directory_recovery_restarts_pair_on_same_target(self):
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = [IperfRunMetrics(123, 99, 100),
+                               Iperf3ResourceError("failed to read /dev/urandom: Bad address"),
+                               IperfRunMetrics(500, 2, 200), IperfRunMetrics(900, 3, 300)]
+        with patch("collector.iperf3_runner._alternate_tmpdir", return_value="/dev/shm"):
+            result = run_iperf3(**self.options)
+        self.assertEqual([call.args[1] for call in execute.call_args_list],
+                         ["target-1.example"] * 4)
+        self.assertEqual([call.kwargs["reverse"] for call in execute.call_args_list],
+                         [False, True, False, True])
+        self.assertNotIn("temporary_directory", execute.call_args_list[0].kwargs)
+        self.assertEqual(execute.call_args_list[2].kwargs["temporary_directory"], "/dev/shm")
+        self.assertEqual((result.upload_mbps, result.download_mbps, result.transfer_bytes), (500, 900, 500))
+        self.assertEqual([a["outcome"] for a in result.target_attempts], ["download_error", "selected"])
+        self.assertTrue(result.target_attempts[-1]["temporary_directory_recovery"])
+
+    def test_recovery_is_attempted_once_and_stays_within_original_timeout(self):
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = Iperf3ResourceError("failed to read /dev/urandom: Bad address")
+        with patch("collector.iperf3_runner._alternate_tmpdir", return_value="/dev/shm"):
+            with self.assertRaises(Iperf3ResourceError) as captured:
+                run_iperf3(**self.options)
+        self.assertEqual(execute.call_count, 2)
+        self.assertEqual(len(captured.exception.target_attempts), 2)
+        execute.reset_mock()
+        def fail_after_deadline(*_args, **_kwargs):
+            self.now = 60
+            raise Iperf3ResourceError("failed to read /dev/urandom: Bad address")
+        execute.side_effect = fail_after_deadline
+        with patch("collector.iperf3_runner._alternate_tmpdir", return_value="/dev/shm"):
+            with self.assertRaises(Iperf3Timeout):
+                run_iperf3(timeout_seconds=60, **self.options)
+        self.assertEqual(execute.call_count, 1)
 
     def test_manual_download_refusal_preserves_the_manual_choice(self):
         self.mocks["rank_targets"].return_value = (replace(self.targets[0], mode="manual"),)
@@ -240,6 +288,19 @@ class GeographicRecoveryTests(unittest.TestCase):
 
 
 class IperfDiagnosticTests(unittest.TestCase):
+    def test_alternate_directory_must_be_distinct_available_and_linux(self):
+        with patch('collector.iperf3_runner.platform.system', return_value='Linux'), \
+             patch('collector.iperf3_runner.os.path.isdir', return_value=True), \
+             patch('collector.iperf3_runner.os.access', return_value=True), \
+             patch.dict('os.environ', {'TMPDIR': '/tmp'}, clear=True):
+            self.assertEqual(_alternate_tmpdir(), '/dev/shm')
+            with patch.dict('os.environ', {'TMPDIR': '/dev/shm'}, clear=True):
+                self.assertIsNone(_alternate_tmpdir())
+            with patch('collector.iperf3_runner.os.access', return_value=False):
+                self.assertIsNone(_alternate_tmpdir())
+        with patch('collector.iperf3_runner.platform.system', return_value='Windows'):
+            self.assertIsNone(_alternate_tmpdir())
+
     def test_json_refusal_and_busy_are_concise_and_retryable(self):
         for message in ("unable to connect to server: Connection refused", "the server is busy running a test"):
             completed = subprocess.CompletedProcess([], 1, json.dumps({"system_info": "private-machine", "error": message}), "")
@@ -256,3 +317,18 @@ class IperfDiagnosticTests(unittest.TestCase):
             with self.assertRaises(RuntimeError) as captured:
                 _run_once_metrics("fixture", "target.example", 5201, 10, 5, False)
         self.assertNotIsInstance(captured.exception, Iperf3TargetUnavailable)
+
+    def test_disconnected_control_channel_can_fail_over_but_resource_failure_cannot(self):
+        from collector.collector import Collector
+        cases = [
+            ('unable to receive control message: Transport endpoint is not connected', Iperf3TargetUnavailable),
+            ('iperf3: error - failed to read /dev/urandom: Bad address', Iperf3ResourceError),
+        ]
+        for message, error_type in cases:
+            completed = subprocess.CompletedProcess([], 1, '', message)
+            with self.subTest(message=message), patch('collector.iperf3_runner.subprocess.run', return_value=completed):
+                with self.assertRaises(error_type) as captured:
+                    _run_once_metrics('fixture', 'target.example', 5201, 10, 5, False)
+                if error_type is Iperf3ResourceError:
+                    self.assertEqual(Collector._classify_failure(None, captured.exception), 'iperf_resource')
+                    self.assertNotIsInstance(captured.exception, Iperf3TargetUnavailable)

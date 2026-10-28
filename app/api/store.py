@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import sqlite3
 import threading
 from contextlib import contextmanager
@@ -51,8 +52,11 @@ from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Iterable, List, Optional
 
+from speedtester_protocol.quadrants import MIN_SLOT_GAP_SECONDS
+
 SCHEMA_VERSION = 12
 WRITE_TRANSACTION = "BEGIN IMMEDIATE"
+LEGACY_SCHEDULE_SEPARATION_SECONDS = 10 * 60
 
 DB_SCHEMA = """
 CREATE TABLE IF NOT EXISTS auth_sessions (
@@ -537,6 +541,72 @@ class SampleStore:
         return recovered
 
     # --- scheduling ---------------------------------------------------------
+    def local_schedule_seed(self) -> str:
+        """Persist one random scheduling seed per database, including across restarts."""
+        with self._connection() as conn:
+            conn.execute(WRITE_TRANSACTION)
+            conn.execute("INSERT OR IGNORE INTO schema_meta(key, value) VALUES ('local_schedule_seed', ?)",
+                         (secrets.token_hex(16),))
+            return conn.execute("SELECT value FROM schema_meta WHERE key='local_schedule_seed'").fetchone()[0]
+
+    def has_legacy_future_slots(self, local_date: str, cutoff: str, legacy_seed: str) -> bool:
+        with self._connection() as conn:
+            return bool(conn.execute(
+                "SELECT 1 FROM measurement_slots WHERE local_date=? AND schedule_seed=? "
+                "AND status='PENDING' AND attempt_count=0 AND scheduled_for>? LIMIT 1",
+                (local_date, legacy_seed, cutoff),
+            ).fetchone())
+
+    def migrate_legacy_future_slots(self, local_date, proposals, cutoff, legacy_seed):
+        """Move only untouched future legacy slots, keeping all other rows unchanged."""
+        changed = 0
+        updated_at = _utc_from_epoch(_utcnow())
+        with self._connection() as conn:
+            conn.execute(WRITE_TRANSACTION)
+            rows = conn.execute(
+                "SELECT s.*, EXISTS(SELECT 1 FROM samples WHERE slot_id=s.id) AS has_sample, "
+                "EXISTS(SELECT 1 FROM measurement_attempts WHERE slot_id=s.id) AS has_attempt "
+                "FROM measurement_slots AS s WHERE s.local_date=?", (local_date,),
+            ).fetchall()
+            for quadrant in {row["quadrant"] for row in rows}:
+                group = [row for row in rows if row["quadrant"] == quadrant]
+                for old, new in self._legacy_schedule_replacements(group, proposals, cutoff, legacy_seed):
+                    conn.execute(
+                        "UPDATE measurement_slots SET scheduled_for=?, schedule_seed=?, updated_at=? WHERE id=?",
+                        (new.scheduled_for, new.schedule_seed, updated_at, old["id"]),
+                    )
+                    changed += 1
+        return changed
+
+    @classmethod
+    def _legacy_schedule_replacements(cls, group, proposals, cutoff, legacy_seed):
+        movable = [row for row in group if row["schedule_seed"] == legacy_seed
+                   and row["status"] == "PENDING" and row["attempt_count"] == 0
+                   and not row["has_sample"] and not row["has_attempt"] and row["scheduled_for"] > cutoff]
+        if not movable:
+            return []
+        immutable = [row for row in group if row not in movable]
+        for proposal in proposals:
+            options = {(slot.quadrant, slot.slot_index): slot for slot in proposal}
+            selected = [options.get((row["quadrant"], row["slot_index"])) for row in movable]
+            if any(slot is None or slot.scheduled_for <= cutoff for slot in selected):
+                continue
+            if cls._safe_schedule_replacements(selected, immutable, group, legacy_seed):
+                return list(zip(movable, selected))
+        return []
+
+    @staticmethod
+    def _safe_schedule_replacements(selected, immutable, original, legacy_seed):
+        def epoch(value):
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        chosen = [epoch(slot.scheduled_for) for slot in selected]
+        fixed = [epoch(row["scheduled_for"]) for row in immutable]
+        old_shared = [epoch(row["scheduled_for"]) for row in original if row["schedule_seed"] == legacy_seed]
+        return (all(abs(value - other) >= MIN_SLOT_GAP_SECONDS for index, value in enumerate(chosen)
+                    for other in chosen[index + 1:])
+                and all(abs(new - old) >= MIN_SLOT_GAP_SECONDS for new in chosen for old in fixed)
+                and all(abs(new - old) >= LEGACY_SCHEDULE_SEPARATION_SECONDS for new in chosen for old in old_shared))
+
     def add_slots(self, slots: Iterable[MeasurementSlot]) -> int:
         """Insert planned slots idempotently and return rows newly added."""
         now = _utc_from_epoch(_utcnow())

@@ -24,10 +24,18 @@ upload, download e ping. Não há varredura de hosts nem comparação de velocid
 para escolher um resultado favorável.
 
 O upload e o download de um resultado usam obrigatoriamente o mesmo destino.
-Se houver recusa/servidor ocupado no download, o upload parcial é descartado e
+Se houver recusa, servidor ocupado ou desconexão reconhecida do canal de controle
+no download, o upload parcial é descartado e
 as **duas etapas** recomeçam no próximo destino, dentro do prazo original.
 Velocidades, bytes e retransmissões do destino anterior não são reaproveitados.
-Falhas por outros motivos não provocam essa troca. Velocidade
+Falhas de recurso do iPerf3, como erro ao ler `/dev/urandom`, são registradas
+como erro de medição e não provocam troca de destino nem acusação da operadora.
+No Linux, para o erro específico `failed to read /dev/urandom: Bad address`,
+o coletor tenta uma vez o mesmo destino usando `/dev/shm`, se disponível e
+diferente do diretório atual. O upload parcial é descartado e ambas as direções
+são refeitas dentro dos 60 segundos originais; o histórico de destinos registra
+a falha inicial e o uso do diretório alternativo. Se a recuperação falhar, o erro
+continua registrado. Falhas por outros motivos não provocam essa troca. Velocidade
 baixa não provoca troca de destino: continua submetida à regra de anomalia já
 existente. Timeouts mantêm a política de diagnóstico de conectividade e nova
 primeira tentativa; não são convertidos em conexão recusada. Um servidor manual

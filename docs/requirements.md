@@ -26,7 +26,10 @@ O dia local é dividido em quatro quadrantes de seis horas:
 
 Em cada quadrante o scheduler deve criar pelo menos duas janelas de medição.
 Os horários devem ser sorteados dentro do quadrante, com uma semente/registro
-que permita auditoria. O sorteio precisa respeitar:
+que permita auditoria. Cada banco local recebe uma semente aleatória persistida,
+para evitar que instalações distintas iniciem todos os testes no mesmo instante.
+Sementes independentes reduzem coincidências, mas não coordenam instalações na
+mesma rede nem impedem sobreposições ocasionais. O sorteio precisa respeitar:
 
 - distância mínima configurável entre as duas medições;
 - duração do teste e uma margem para não ultrapassar o fim do quadrante;
@@ -35,6 +38,11 @@ que permita auditoria. O sorteio precisa respeitar:
   restart;
 - execução imediata ou replanejamento de uma tentativa quando o teste falhar,
   sem apagar o slot original.
+
+Na atualização de versões com semente compartilhada, slots futuros pendentes
+sem tentativa podem ser replanejados; slots em andamento, já vencidos, com
+histórico ou classificados são preservados. Se não houver um novo horário
+seguro dentro do quadrante, o horário anterior é mantido.
 
 O mínimo recomendado é `2 slots × 4 quadrantes = 8 medições esperadas por dia`.
 Mais medições são permitidas, mas a cobertura deve continuar informando quais

@@ -87,13 +87,7 @@ def _measure_target(target, execute, deadline, attempts, recovery):
             outcome = "download_error"
             download = execute(target, True, _target_timeout(deadline, attempts), recovery["temporary_directory"])
         except Iperf3ResourceError as exc:
-            attempts.append(_target_evidence(target, outcome, str(exc)[:400]))
-            exc.target_attempts = attempts
-            alternate = _alternate_tmpdir() if recovery["temporary_directory"] is None else None
-            if alternate is None or "bad address" not in str(exc).lower():
-                raise
-            recovery["temporary_directory"] = alternate
-            print("[iperf3] retrying both directions using an alternate temporary directory", flush=True)
+            _recover_temporary_directory(exc, target, outcome, attempts, recovery)
         except RuntimeError as exc:
             attempts.append(_target_evidence(target, outcome, str(exc)[:400]))
             exc.target_attempts = attempts
@@ -104,6 +98,16 @@ def _measure_target(target, execute, deadline, attempts, recovery):
                 evidence["temporary_directory_recovery"] = True
             attempts.append(evidence)
             return upload, download
+
+
+def _recover_temporary_directory(exc, target, outcome, attempts, recovery):
+    attempts.append(_target_evidence(target, outcome, str(exc)[:400]))
+    exc.target_attempts = attempts
+    alternate = _alternate_tmpdir() if recovery["temporary_directory"] is None else None
+    if alternate is None or "bad address" not in str(exc).lower():
+        raise exc
+    recovery["temporary_directory"] = alternate
+    print("[iperf3] retrying both directions using an alternate temporary directory", flush=True)
 
 
 def _alternate_tmpdir():
@@ -322,17 +326,24 @@ def _run_once_metrics(
             ) from exc
         raise RuntimeError("iperf3 excedeu o timeout") from exc
     if completed.returncode != 0:
-        detail = _failure_detail(completed)
-        message = f"iperf3 {server}:{port} falhou ({completed.returncode}): {detail}"
-        normalized = detail.lower()
-        if "failed to read /dev/urandom" in normalized:
-            raise Iperf3ResourceError(message)
-        if (any(marker in normalized for marker in ("connection refused", "server is busy"))
-                or ("unable to receive control message" in normalized
-                    and "transport endpoint is not connected" in normalized)):
-            raise Iperf3TargetUnavailable(message)
-        raise RuntimeError(message)
+        _raise_iperf_failure(completed, server, port)
+    return _parse_iperf_metrics(completed, reverse)
 
+
+def _raise_iperf_failure(completed, server, port):
+    detail = _failure_detail(completed)
+    message = f"iperf3 {server}:{port} falhou ({completed.returncode}): {detail}"
+    normalized = detail.lower()
+    if "failed to read /dev/urandom" in normalized:
+        raise Iperf3ResourceError(message)
+    if (any(marker in normalized for marker in ("connection refused", "server is busy"))
+            or ("unable to receive control message" in normalized
+                and "transport endpoint is not connected" in normalized)):
+        raise Iperf3TargetUnavailable(message)
+    raise RuntimeError(message)
+
+
+def _parse_iperf_metrics(completed, reverse):
     try:
         payload = json.loads(completed.stdout)
         end = payload["end"]

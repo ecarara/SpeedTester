@@ -125,6 +125,14 @@ class StagingHttpsTests(unittest.TestCase):
         self.assertEqual(verify.call_count, 2)
         sleep.assert_called_once_with(1)
 
+    def test_preparation_uses_the_deployment_lock(self):
+        with patch.object(sys, 'argv', ['staging_https.py', 'prepare', '--root', str(self.root)]), \
+             patch.object(staging, 'prepare') as prepare, patch.object(staging.fcntl, 'flock') as flock:
+            staging.main()
+        prepare.assert_called_once_with(self.root)
+        self.assertEqual(flock.call_count, 1)
+        self.assertEqual(flock.call_args.args[1], staging.fcntl.LOCK_EX | staging.fcntl.LOCK_NB)
+
     def test_host_profile_rejects_unsafe_nginx_input(self):
         path = self.root / 'profile.json'
         path.write_text(json.dumps(self.profile))

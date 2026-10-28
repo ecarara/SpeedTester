@@ -7,6 +7,7 @@ The certificate and private key are host secrets and must be restored separately
 Run prepare before starting the stack on a freshly provisioned staging host.
 """
 import argparse
+import fcntl
 import ipaddress
 import json
 import os
@@ -203,7 +204,9 @@ def main():
     parser.add_argument('--root', type=Path, default=ROOT)
     args = parser.parse_args()
     if args.action == 'prepare':
-        prepare(args.root)
+        with (args.root / '.deployment.lock').open('a') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            prepare(args.root)
     else:
         # nginx reload is asynchronous; allow workers a short time to converge.
         for attempt in range(10):

@@ -337,7 +337,8 @@ sudo python3 /opt/speedtester/scripts/staging_https.py prepare --root /opt/speed
 
 A preparação ajusta apenas as chaves gerenciadas do `.env` e do deploy, aplica
 o rótulo SELinux necessário para nginx na porta 8000 e valida a configuração
-do nginx antes do reload. Em falha restaura os arquivos e a regra anterior.
+do nginx antes do reload. Ela usa o mesmo lock do deploy; em falha restaura os
+arquivos e a regra anterior.
 Ela não gera nem sobrescreve credenciais e certificados. Após iniciar a stack,
 confirme o fluxo real:
 

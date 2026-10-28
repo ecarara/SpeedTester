@@ -570,28 +570,30 @@ class SampleStore:
             ).fetchall()
             for quadrant in {row["quadrant"] for row in rows}:
                 group = [row for row in rows if row["quadrant"] == quadrant]
-                movable = [row for row in group if row["schedule_seed"] == legacy_seed
-                           and row["status"] == "PENDING" and row["attempt_count"] == 0
-                           and not row["has_sample"] and not row["has_attempt"]
-                           and row["scheduled_for"] > cutoff]
-                if not movable:
-                    continue
-                immutable = [row for row in group if row not in movable]
-                for proposal in proposals:
-                    options = {(slot.quadrant, slot.slot_index): slot for slot in proposal}
-                    selected = [options.get((quadrant, row["slot_index"])) for row in movable]
-                    if any(slot is None or slot.scheduled_for <= cutoff for slot in selected):
-                        continue
-                    if not self._safe_schedule_replacements(selected, immutable, group, legacy_seed):
-                        continue
-                    for old, new in zip(movable, selected):
-                        conn.execute(
-                            "UPDATE measurement_slots SET scheduled_for=?, schedule_seed=?, updated_at=? WHERE id=?",
-                            (new.scheduled_for, new.schedule_seed, updated_at, old["id"]),
-                        )
-                        changed += 1
-                    break
+                for old, new in self._legacy_schedule_replacements(group, proposals, cutoff, legacy_seed):
+                    conn.execute(
+                        "UPDATE measurement_slots SET scheduled_for=?, schedule_seed=?, updated_at=? WHERE id=?",
+                        (new.scheduled_for, new.schedule_seed, updated_at, old["id"]),
+                    )
+                    changed += 1
         return changed
+
+    @classmethod
+    def _legacy_schedule_replacements(cls, group, proposals, cutoff, legacy_seed):
+        movable = [row for row in group if row["schedule_seed"] == legacy_seed
+                   and row["status"] == "PENDING" and row["attempt_count"] == 0
+                   and not row["has_sample"] and not row["has_attempt"] and row["scheduled_for"] > cutoff]
+        if not movable:
+            return []
+        immutable = [row for row in group if row not in movable]
+        for proposal in proposals:
+            options = {(slot.quadrant, slot.slot_index): slot for slot in proposal}
+            selected = [options.get((row["quadrant"], row["slot_index"])) for row in movable]
+            if any(slot is None or slot.scheduled_for <= cutoff for slot in selected):
+                continue
+            if cls._safe_schedule_replacements(selected, immutable, group, legacy_seed):
+                return list(zip(movable, selected))
+        return []
 
     @staticmethod
     def _safe_schedule_replacements(selected, immutable, original, legacy_seed):

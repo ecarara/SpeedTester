@@ -15,7 +15,7 @@ import re
 import unicodedata
 
 
-CATALOG_REVISION = "2026-10-23"
+CATALOG_REVISION = "2026-10-29"
 CATALOG_SOURCE = "https://export.iperf3serverlist.net/listed_iperf3_servers.json"
 
 
@@ -34,14 +34,17 @@ class Target:
     capacity_gbps: float = 0
     mode: str = "automatic"
     distance_km: float | None = None
+    alternate_ports: tuple[int, ...] = ()
 
 
-# City centroids and endpoints published in CATALOG_SOURCE on CATALOG_REVISION.
-# All entries support TCP upload and reverse/download. Advertised capacity is
+# Base endpoints were collected on 2026-10-23; the São Paulo port range was
+# checked again on CATALOG_REVISION. Coordinates are city centroids. Published
+# metadata indicates TCP upload and reverse/download. Advertised capacity is
 # only a tie-breaker at the same geographic distance, not a speed guarantee.
 TARGETS = (
     Target("138.199.4.1", 5201, "BR", "São Paulo", -23.5505, -46.6333, 20),
-    Target("148.230.60.200", 30001, "BR", "São Paulo", -23.5505, -46.6333, 10),
+    Target("148.230.60.200", 30001, "BR", "São Paulo", -23.5505, -46.6333, 10,
+           alternate_ports=tuple(range(30002, 30010))),
     Target("79.127.209.1", 5201, "CL", "Santiago", -33.4489, -70.6693, 20),
     Target("speedtest.mtl2.ca.leaseweb.net", 5201, "CA", "Montreal", 45.5019, -73.5674, 10),
     Target("138.199.57.129", 5201, "CA", "Toronto", 43.6532, -79.3832, 20),

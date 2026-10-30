@@ -127,6 +127,11 @@ jobs:
           docker run --rm -i --network none --user 10001:10001 --memory 128m --pids-limit 32 \
             --tmpfs /tmp:rw,nosuid,size=64k,mode=1777 --entrypoint python \
             ghcr.io/ecarara/speedtester-collector:main - < tests/iperf_tmp_recovery_smoke.py
+      - name: Verify advertised iPerf port failover on loopback
+        run: |
+          docker run --rm -i --network none --user 10001:10001 --memory 128m --pids-limit 32 \
+            --tmpfs /tmp:rw,nosuid,size=64m,mode=1777 --entrypoint python \
+            ghcr.io/ecarara/speedtester-collector:main - < tests/iperf_port_failover_smoke.py
       - name: Clean up
         if: always()
         run: docker compose -f docker/compose.yaml down --volumes

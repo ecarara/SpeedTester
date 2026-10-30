@@ -9,7 +9,7 @@ import os
 import platform
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 from collector.network_metrics import measure_ping
@@ -53,18 +53,19 @@ def _target_evidence(target, outcome, detail=None):
 
 
 def _measure_on_available_target(targets, execute, deadline):
-    """Complete both directions on one of at most three geographic targets.
+    """Complete both directions on one of at most three geographic hosts.
 
-    Refusal/busy in either direction discards the entire partial pair. The next
-    destination starts with a fresh upload, never retaining the old throughput,
-    transfer bytes or retransmits. The original wall-clock deadline is shared.
+    Refusal/busy in either direction discards the entire partial pair. Try only
+    ports explicitly published in the catalog, then the next geographic host.
+    A new port starts a fresh upload; no previous throughput, transfer bytes or
+    retransmits are retained. The original wall-clock deadline is shared.
     Timeouts and other errors retain their type for connectivity diagnostics.
     """
     if not targets:
         raise TargetSelectionError("Nenhum destino de medição disponível no catálogo.")
     attempts = []
     recovery = {"temporary_directory": None}
-    for target in targets[:MAX_AUTOMATIC_TARGETS]:
+    for target in _candidate_ports(targets):
         try:
             upload, download = _measure_target(target, execute, deadline, attempts, recovery)
             return target, upload, download, attempts
@@ -76,6 +77,15 @@ def _measure_on_available_target(targets, execute, deadline):
                   f"phase={phase}; discarding partial measurement", flush=True)
             last_error = exc
     raise last_error
+
+
+def _candidate_ports(targets):
+    """Expand advertised ports only for the first three geographic hosts."""
+    for target in targets[:MAX_AUTOMATIC_TARGETS]:
+        yield target
+        if target.mode != "manual":
+            for port in target.alternate_ports:
+                yield replace(target, port=port, alternate_ports=())
 
 
 def _measure_target(target, execute, deadline, attempts, recovery):

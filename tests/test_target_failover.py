@@ -13,10 +13,14 @@ from collector.iperf3_runner import (
 )
 from collector.network_metrics import PingMetrics
 from collector.network_link import NetworkLink
-from collector.target_selection import Target, TargetSelectionError, rank_targets
+from collector.target_selection import TARGETS, Target, TargetSelectionError, rank_targets
 
 
 class TargetRankingTests(unittest.TestCase):
+    def test_sao_paulo_fortisase_has_only_the_advertised_port_range(self):
+        target = next(t for t in TARGETS if t.host == "148.230.60.200")
+        self.assertEqual((target.port, *target.alternate_ports), tuple(range(30001, 30010)))
+
     def test_all_candidates_are_geographic_not_throughput_ranked(self):
         targets = (
             Target("far.example", latitude=40, longitude=0, capacity_gbps=1000),
@@ -67,6 +71,67 @@ class GeographicRecoveryTests(unittest.TestCase):
         self.assertEqual([c.kwargs["reverse"] for c in execute.call_args_list], [False, False, True])
         self.assertEqual(result.server_name, "iperf3:target-2.example:5201")
         self.assertEqual([a["outcome"] for a in result.target_attempts], ["error", "selected"])
+
+    def test_busy_first_host_and_refused_primary_port_use_advertised_alternate(self):
+        self.mocks["rank_targets"].return_value = (
+            self.targets[0], replace(self.targets[1], port=30001, alternate_ports=(30002, 30003)),
+            self.targets[2],
+        )
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = [Iperf3TargetUnavailable("busy"), Iperf3TargetUnavailable("refused"),
+                               self.metrics, self.metrics]
+        result = run_iperf3(**self.options)
+        self.assertEqual([(c.args[1], c.args[2], c.kwargs["reverse"]) for c in execute.call_args_list], [
+            (self.targets[0].host, 5201, False), (self.targets[1].host, 30001, False),
+            (self.targets[1].host, 30002, False), (self.targets[1].host, 30002, True),
+        ])
+        self.assertEqual(result.server_name, "iperf3:target-2.example:30002")
+        self.assertEqual([a["server_name"] for a in result.target_attempts], [
+            "iperf3:target-1.example:5201", "iperf3:target-2.example:30001", "iperf3:target-2.example:30002"])
+        self.assertEqual([a["outcome"] for a in result.target_attempts], ["error", "error", "selected"])
+
+    def test_failed_download_on_one_port_restarts_both_directions_on_next(self):
+        self.mocks["rank_targets"].return_value = (replace(self.targets[0], port=30001, alternate_ports=(30002,)),)
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = [IperfRunMetrics(123, 99, 100), Iperf3TargetUnavailable("busy"),
+                               IperfRunMetrics(500, 2, 200), IperfRunMetrics(900, 3, 300)]
+        result = run_iperf3(**self.options)
+        self.assertEqual([(c.args[2], c.kwargs["reverse"]) for c in execute.call_args_list],
+                         [(30001, False), (30001, True), (30002, False), (30002, True)])
+        self.assertEqual((result.upload_mbps, result.download_mbps, result.transfer_bytes), (500, 900, 500))
+        self.assertEqual([a["outcome"] for a in result.target_attempts], ["download_error", "selected"])
+
+    def test_after_all_advertised_ports_fail_next_geographic_host_is_used(self):
+        self.mocks["rank_targets"].return_value = (
+            replace(self.targets[0], port=30001, alternate_ports=tuple(range(30002, 30010))),
+            self.targets[1],
+        )
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = [Iperf3TargetUnavailable("busy") for _ in range(9)] + [self.metrics, self.metrics]
+        result = run_iperf3(**self.options)
+        self.assertEqual([c.args[2] for c in execute.call_args_list[:9]], list(range(30001, 30010)))
+        self.assertEqual(result.server_name, "iperf3:target-2.example:5201")
+        self.assertEqual(len(result.target_attempts), 10)
+
+    def test_manual_target_never_uses_alternate_ports(self):
+        self.mocks["rank_targets"].return_value = (replace(self.targets[0], mode="manual", alternate_ports=(30002,)),)
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = Iperf3TargetUnavailable("busy")
+        with self.assertRaises(Iperf3TargetUnavailable):
+            run_iperf3(server="target-1.example", **self.options)
+        self.assertEqual(execute.call_count, 1)
+
+    def test_deadline_stops_alternate_ports_without_an_extra_process(self):
+        self.mocks["rank_targets"].return_value = (replace(self.targets[0], port=30001, alternate_ports=(30002,)),)
+        def refuse(*_args, **_kwargs):
+            self.now = 60
+            raise Iperf3TargetUnavailable("busy")
+        execute = self.mocks["_run_once_metrics"]
+        execute.side_effect = refuse
+        with self.assertRaises(Iperf3Timeout) as captured:
+            run_iperf3(timeout_seconds=60, **self.options)
+        self.assertEqual(execute.call_count, 1)
+        self.assertEqual(len(captured.exception.target_attempts), 1)
 
     def test_refusals_are_bounded_and_keep_every_destination(self):
         execute = self.mocks["_run_once_metrics"]

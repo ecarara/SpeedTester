@@ -18,15 +18,20 @@ de 60 segundos; instalar não executa teste de banda.
 
 Se o destino automático recusar a conexão ou informar que está ocupado no
 upload **ou no download**, o coletor tenta o próximo da mesma ordenação.
-São no máximo três destinos por tentativa, incluindo o primeiro,
-todos compartilhando o mesmo orçamento de 60 segundos, inclusive geolocalização,
-upload, download e ping. Não há varredura de hosts nem comparação de velocidades
-para escolher um resultado favorável.
+São no máximo três hosts por tentativa, incluindo o primeiro. Quando o catálogo
+anuncia várias portas para um mesmo host, o coletor pode tentar essas portas
+na ordem publicada antes de passar ao próximo host geográfico. Por exemplo,
+`148.230.60.200` anuncia `30001–30009`; recusa ou ocupação em uma porta permite
+tentar a seguinte. Não há descoberta de hosts ou portas fora do catálogo, nem
+comparação de velocidades para escolher um resultado favorável. Todos os hosts
+e portas compartilham o orçamento original de 60 segundos, incluindo localização,
+upload, download e ping.
 
 O upload e o download de um resultado usam obrigatoriamente o mesmo destino.
 Se houver recusa, servidor ocupado ou desconexão reconhecida do canal de controle
 no download, o upload parcial é descartado e
-as **duas etapas** recomeçam no próximo destino, dentro do prazo original.
+as **duas etapas** recomeçam na próxima porta anunciada ou no próximo host,
+dentro do prazo original.
 Velocidades, bytes e retransmissões do destino anterior não são reaproveitados.
 Falhas de recurso do iPerf3, como erro ao ler `/dev/urandom`, são registradas
 como erro de medição e não provocam troca de destino nem acusação da operadora.
@@ -43,10 +48,12 @@ nunca é substituído automaticamente.
 
 O catálogo inicial fica em `app/collector/target_selection.py`, com data e
 fonte explícitas: [catálogo público iPerf3](https://github.com/R0GGER/public-iperf3-servers).
-Os hosts/portas e suporte a upload/download foram conferidos nos metadados
-publicados em 23/10/2026. Os endpoints são públicos e externos ao SpeedTester;
+Os hosts foram obtidos dos metadados publicados em 23/10/2026. Os três destinos
+citados neste diagnóstico e a faixa de portas de São Paulo foram conferidos
+novamente em 29/10/2026. Os endpoints são públicos e externos ao SpeedTester;
 capacidade anunciada, disponibilidade e proximidade geográfica não garantem
-roteamento, velocidade ou SLA. O destino efetivo é persistido com cada
+roteamento, velocidade ou SLA; a recuperação reduz falhas, mas não pode impedir
+indisponibilidade simultânea dos destinos públicos. O destino efetivo é persistido com cada
 resultado; modo de seleção, distância estimada e revisão do catálogo ficam
 no registro de tentativa.
 O histórico de destinos tentados (`target_attempts`) também é persistido nos

@@ -19,7 +19,8 @@ from collector.target_selection import TARGETS, Target, TargetSelectionError, ra
 class TargetRankingTests(unittest.TestCase):
     def test_sao_paulo_fortisase_has_only_the_advertised_port_range(self):
         target = next(t for t in TARGETS if t.host == "148.230.60.200")
-        self.assertEqual((target.port, *target.alternate_ports), tuple(range(30001, 30010)))
+        ports = (target.port, *target.alternate_ports)
+        self.assertEqual(ports, (30001, 30002, 30003, 30004, 30005, 30006, 30007, 30008, 30009))
 
     def test_all_candidates_are_geographic_not_throughput_ranked(self):
         targets = (
@@ -109,7 +110,8 @@ class GeographicRecoveryTests(unittest.TestCase):
         execute = self.mocks["_run_once_metrics"]
         execute.side_effect = [Iperf3TargetUnavailable("busy") for _ in range(9)] + [self.metrics, self.metrics]
         result = run_iperf3(**self.options)
-        self.assertEqual([c.args[2] for c in execute.call_args_list[:9]], list(range(30001, 30010)))
+        self.assertEqual([c.args[2] for c in execute.call_args_list[:9]],
+                         [30001, 30002, 30003, 30004, 30005, 30006, 30007, 30008, 30009])
         self.assertEqual(result.server_name, "iperf3:target-2.example:5201")
         self.assertEqual(len(result.target_attempts), 10)
 

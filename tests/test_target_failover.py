@@ -19,8 +19,8 @@ from collector.target_selection import TARGETS, Target, TargetSelectionError, ra
 class TargetRankingTests(unittest.TestCase):
     def test_sao_paulo_fortisase_has_only_the_advertised_port_range(self):
         target = next(t for t in TARGETS if t.host == "148.230.60.200")
-        self.assertEqual((target.port, *target.alternate_ports),
-                         (30001, 30002, 30003, 30004, 30005, 30006, 30007, 30008, 30009))
+        ports = (target.port, *target.alternate_ports)
+        self.assertEqual(ports, (30001, 30002, 30003, 30004, 30005, 30006, 30007, 30008, 30009))
 
     def test_all_candidates_are_geographic_not_throughput_ranked(self):
         targets = (

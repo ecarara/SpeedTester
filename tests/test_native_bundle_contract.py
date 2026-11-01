@@ -57,6 +57,24 @@ class NativeBundleTests(unittest.TestCase):
             self.assertFalse(path.exists())
             self.assertFalse(path.with_suffix(path.suffix + '.tmp').exists())
 
+    def test_transient_download_classification_and_exhaustion(self):
+        url = 'https://fixtures.invalid/source'
+        for error in (TimeoutError(), ConnectionError(), urllib.error.URLError(ConnectionError()),
+                      urllib.error.HTTPError(url, 429, 'rate limit', {}, None)):
+            with self.subTest(error=error):
+                self.assertTrue(bundle._transient_download_error(error))
+        self.assertFalse(bundle._transient_download_error(urllib.error.URLError('invalid certificate')))
+        self.assertFalse(bundle._transient_download_error(ValueError('unexpected')))
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'source.tar.gz'
+            entry = {'url': url, 'sha256': 'irrelevant'}
+            with patch.object(bundle.urllib.request, 'urlopen', side_effect=TimeoutError()) as download, \
+                    patch.object(bundle.time, 'sleep'):
+                with self.assertRaises(TimeoutError):
+                    bundle.fetch(entry, path)
+                self.assertEqual(download.call_count, 3)
+            self.assertFalse(path.exists())
+
     def test_native_build_preserves_sources_licenses_hashes_and_runtime_inventory(self):
         for system in ('Linux', 'Darwin', 'Windows'):
             with self.subTest(system=system), tempfile.TemporaryDirectory() as temporary:

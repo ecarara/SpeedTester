@@ -22,35 +22,36 @@ MSYS_RUNTIME_DLL = "msys-2.0.dll"
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def _transient_download_error(error):
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code == 429 or 500 <= error.code < 600
+    if isinstance(error, urllib.error.URLError):
+        return isinstance(error.reason, (TimeoutError, ConnectionError))
+    return isinstance(error, (TimeoutError, ConnectionError))
+
+
+def _download(request, temporary):
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(request, timeout=120) as source, temporary.open('wb') as target:
+                shutil.copyfileobj(source, target)
+            return
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
+            temporary.unlink(missing_ok=True)
+            if attempt == 2 or not _transient_download_error(error):
+                raise
+            time.sleep(attempt + 1)
+
+
 def fetch(entry, destination):
     if not destination.exists():
         request = urllib.request.Request(entry['url'], headers={'User-Agent':'CararaLab-SpeedTester-build'})
         temporary = destination.with_suffix(destination.suffix + '.tmp')
-        for attempt in range(3):
-            try:
-                with urllib.request.urlopen(request, timeout=120) as source, temporary.open('wb') as target:
-                    shutil.copyfileobj(source, target)
-            except urllib.error.HTTPError as error:
-                temporary.unlink(missing_ok=True)
-                if error.code != 429 and not 500 <= error.code < 600:
-                    raise
-                if attempt == 2:
-                    raise
-            except urllib.error.URLError as error:
-                temporary.unlink(missing_ok=True)
-                if not isinstance(error.reason, (TimeoutError, ConnectionError)) or attempt == 2:
-                    raise
-            except (TimeoutError, ConnectionError):
-                temporary.unlink(missing_ok=True)
-                if attempt == 2:
-                    raise
-            else:
-                if hashlib.sha256(temporary.read_bytes()).hexdigest() != entry['sha256']:
-                    temporary.unlink(missing_ok=True)
-                    raise ValueError('native source checksum mismatch')
-                temporary.replace(destination)
-                break
-            time.sleep(attempt + 1)
+        _download(request, temporary)
+        if hashlib.sha256(temporary.read_bytes()).hexdigest() != entry['sha256']:
+            temporary.unlink(missing_ok=True)
+            raise ValueError('native source checksum mismatch')
+        temporary.replace(destination)
     if hashlib.sha256(destination.read_bytes()).hexdigest() != entry['sha256']:
         raise ValueError('native source checksum mismatch')
     return destination

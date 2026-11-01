@@ -12,6 +12,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
+import urllib.error
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
 import bundle_iperf as bundle
@@ -32,6 +33,29 @@ class NativeBundleTests(unittest.TestCase):
             path.write_bytes(b'changed')
             with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
                 bundle.fetch(entry, path)
+
+    def test_fetch_retries_transient_errors_but_rejects_other_errors_and_bad_hashes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'source.tar.gz'
+            content = b'verified source'
+            entry = {'url': 'https://fixtures.invalid/source', 'sha256': hashlib.sha256(content).hexdigest()}
+            transient = urllib.error.HTTPError(entry['url'], 500, 'server error', {}, None)
+            with patch.object(bundle.urllib.request, 'urlopen', side_effect=[transient, urllib.error.URLError(TimeoutError()), io.BytesIO(content)]) as download, \
+                    patch.object(bundle.time, 'sleep'):
+                self.assertEqual(bundle.fetch(entry, path), path)
+                self.assertEqual(download.call_count, 3)
+            path.unlink()
+            permanent = urllib.error.HTTPError(entry['url'], 404, 'not found', {}, None)
+            with patch.object(bundle.urllib.request, 'urlopen', side_effect=permanent) as download:
+                with self.assertRaises(urllib.error.HTTPError):
+                    bundle.fetch(entry, path)
+                download.assert_called_once()
+            with patch.object(bundle.urllib.request, 'urlopen', return_value=io.BytesIO(b'bad')) as download:
+                with self.assertRaisesRegex(ValueError, 'checksum mismatch'):
+                    bundle.fetch(entry, path)
+                download.assert_called_once()
+            self.assertFalse(path.exists())
+            self.assertFalse(path.with_suffix(path.suffix + '.tmp').exists())
 
     def test_native_build_preserves_sources_licenses_hashes_and_runtime_inventory(self):
         for system in ('Linux', 'Darwin', 'Windows'):

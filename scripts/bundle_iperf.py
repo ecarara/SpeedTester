@@ -12,6 +12,8 @@ import shlex
 import shutil
 import subprocess
 import tarfile
+import time
+import urllib.error
 import urllib.request
 
 OPENSSL_NOTICES = "THIRD-PARTY-LICENSES/OpenSSL"
@@ -24,9 +26,31 @@ def fetch(entry, destination):
     if not destination.exists():
         request = urllib.request.Request(entry['url'], headers={'User-Agent':'CararaLab-SpeedTester-build'})
         temporary = destination.with_suffix(destination.suffix + '.tmp')
-        with urllib.request.urlopen(request, timeout=120) as source, temporary.open('wb') as target:
-            shutil.copyfileobj(source, target)
-        temporary.replace(destination)
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(request, timeout=120) as source, temporary.open('wb') as target:
+                    shutil.copyfileobj(source, target)
+            except urllib.error.HTTPError as error:
+                temporary.unlink(missing_ok=True)
+                if error.code != 429 and not 500 <= error.code < 600:
+                    raise
+                if attempt == 2:
+                    raise
+            except urllib.error.URLError as error:
+                temporary.unlink(missing_ok=True)
+                if not isinstance(error.reason, (TimeoutError, ConnectionError)) or attempt == 2:
+                    raise
+            except (TimeoutError, ConnectionError):
+                temporary.unlink(missing_ok=True)
+                if attempt == 2:
+                    raise
+            else:
+                if hashlib.sha256(temporary.read_bytes()).hexdigest() != entry['sha256']:
+                    temporary.unlink(missing_ok=True)
+                    raise ValueError('native source checksum mismatch')
+                temporary.replace(destination)
+                break
+            time.sleep(attempt + 1)
     if hashlib.sha256(destination.read_bytes()).hexdigest() != entry['sha256']:
         raise ValueError('native source checksum mismatch')
     return destination

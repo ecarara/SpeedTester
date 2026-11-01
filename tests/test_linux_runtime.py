@@ -27,7 +27,8 @@ class NativeEntryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             database = Path(temporary) / "must-not-exist.db"
             environment = dict(os.environ, PYTHONPATH=str(ROOT / "app"), DB_PATH=str(database))
-            for name in ("native_api_entry", "native_client_entry", "desktop_launcher"):
+            for name in ("native_api_entry", "native_client_entry", "desktop_launcher",
+                         "macos_client_entry", "windows_client_entry"):
                 with self.subTest(entry=name):
                     result = subprocess.run([sys.executable, str(ROOT / "app" / (name + ".py")),
                         "--runtime-info"], capture_output=True, text=True, timeout=15, env=environment)

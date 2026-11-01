@@ -9,6 +9,7 @@ VENV="${SPEEDTESTER_VENV:-$SOURCE_DIR/.venv}"
 OUTPUT_DIR="${OUTPUT_DIR:-$SOURCE_DIR/dist}"
 command -v appimagetool >/dev/null || { echo "appimagetool é necessário para gerar o AppImage" >&2; exit 2; }
 [[ -x "$VENV/bin/python" ]] || { echo "venv não encontrado: defina SPEEDTESTER_VENV" >&2; exit 2; }
+"$VENV/bin/python" "$SOURCE_DIR/scripts/check_embedded_python.py"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 APPDIR="$TMP_DIR/SpeedTester.AppDir"

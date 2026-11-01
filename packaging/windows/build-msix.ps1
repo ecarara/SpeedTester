@@ -7,6 +7,7 @@ param(
     [string]$LauncherPath = "$(Join-Path $PSScriptRoot '..\..\dist\windows\SpeedTesterLauncher.exe')",
     [string]$ClientPath = "$(Join-Path $PSScriptRoot '..\..\dist\windows\SpeedTesterClient.exe')",
     [string]$OutputDirectory = "$(Join-Path $PSScriptRoot '..\..\dist\windows')",
+    [string]$Python = 'python',
     [switch]$Sign,
     [string]$CertificatePath,
     [string]$CertificatePassword
@@ -29,14 +30,18 @@ if (-not $makeAppxPath) { throw 'Não foi possível determinar o caminho do Make
 if (-not (Test-Path $LauncherPath)) { throw "Launcher não encontrado: $LauncherPath" }
 if (-not (Test-Path $ClientPath)) { throw "Cliente não encontrado: $ClientPath" }
 $repo = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$apiPath = Join-Path (Split-Path $ClientPath -Parent) 'SpeedTesterAPI.exe'
+if (-not (Test-Path $apiPath)) { throw "API não encontrado: $apiPath" }
+foreach ($executable in @($LauncherPath, $ClientPath, $apiPath)) {
+    & $Python (Join-Path $repo 'scripts\check_embedded_python.py') $executable
+    if ($LASTEXITCODE -ne 0) { throw "Python incorporado inseguro: $executable" }
+}
 $stage = Join-Path $env:TEMP ("speedtester-msix-" + [guid]::NewGuid().ToString('N'))
 $assets = Join-Path $stage 'Assets'
 New-Item -ItemType Directory -Force -Path $assets | Out-Null
 try {
     Copy-Item $LauncherPath (Join-Path $stage 'SpeedTesterLauncher.exe')
     Copy-Item $ClientPath (Join-Path $stage 'SpeedTesterClient.exe')
-    $apiPath = Join-Path (Split-Path $ClientPath -Parent) 'SpeedTesterAPI.exe'
-    if (-not (Test-Path $apiPath)) { throw "API não encontrado: $apiPath" }
     Copy-Item $apiPath (Join-Path $stage 'SpeedTesterAPI.exe')
     $runtimeRoot = Split-Path $ClientPath -Parent
     foreach ($name in @('tools', 'THIRD-PARTY-LICENSES', 'iperf-components.json', 'runtime-components.json', 'native-sbom.cdx.json', 'LICENSE')) {

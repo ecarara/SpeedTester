@@ -40,6 +40,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.14'
+          check-latest: true
           cache: pip
           cache-dependency-path: requirements-dev.txt
       - run: python -m pip install -r requirements-dev.txt
@@ -85,6 +86,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.14'
+          check-latest: true
       - name: Install packaging dependencies
         run: python -m pip install -r app/requirements.txt pyinstaller==6.22.3
       - name: Native macOS crypto runtime
@@ -110,6 +112,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.14'
+          check-latest: true
       - name: Install packaging dependencies
         run: python -m pip install -r app/requirements.txt pyinstaller==6.22.3
       - name: Native Windows measurement toolchain
@@ -160,6 +163,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.14'
+          check-latest: true
       - name: Install RPM toolchain
         if: matrix.format == 'rpm'
         run: sudo apt-get update && sudo apt-get install --yes rpm
@@ -254,6 +258,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.14'
+          check-latest: true
       - name: Install installer prerequisites
         run: sudo apt-get update && sudo apt-get install --yes iperf3
       - name: Run isolated install, upgrade and removal test

@@ -20,6 +20,8 @@ import sys
 import sysconfig
 import tempfile
 
+from check_embedded_python import check as check_python_security
+
 
 ROOT = Path(__file__).resolve().parents[1]
 ENTRIES = {"SpeedTesterAPI": "native_api_entry.py",
@@ -31,6 +33,7 @@ def check_environment():
     if (platform.system() != "Linux" or sys.implementation.name != "cpython"
             or sys.version_info[:2] != (3, 14)):
         raise ValueError("build with CPython 3.14 on the target Linux architecture")
+    check_python_security(".".join(map(str, sys.version_info[:3])), "CPython")
     if metadata.version("pyinstaller") != "6.22.3":
         raise ValueError("PyInstaller 6.22.3 is required")
     name, version = platform.libc_ver()
@@ -87,6 +90,7 @@ def verify_runtime(output, version):
             or document.get("libc", {}).get("name") != "glibc"
             or not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", document["libc"].get("version", ""))):
         raise ValueError("runtime version, architecture or glibc metadata does not match")
+    check_python_security(document["python"], "CPython")
     verify_runtime_paths(output)
     environment = os.environ.copy()
     for key in ("PYTHONHOME", "PYTHONPATH", "APP_VERSION"):
@@ -101,6 +105,7 @@ def verify_runtime(output, version):
                 or not info.get("python", "").startswith("3.14.")
                 or info.get("app_version") != version):
             raise ValueError("incorrect frozen runtime: " + name)
+        check_python_security(info["python"], info["implementation"])
     for name in ("LICENSE", "PYTHON-LICENSE.txt", "THIRD-PARTY-LICENSES"):
         if not (output / name).exists():
             raise ValueError("runtime notices missing: " + name)

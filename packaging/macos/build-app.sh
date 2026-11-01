@@ -13,6 +13,7 @@ ARCHITECTURE="${MACOS_ARCH:-$(uname -m)}"
 
 die() { echo "[speedtester] $*" >&2; exit 1; }
 command -v "$PYTHON" >/dev/null || die "Python não encontrado: $PYTHON"
+"$PYTHON" "$REPO_ROOT/scripts/check_embedded_python.py"
 command -v hdiutil >/dev/null || die "hdiutil não encontrado; execute este builder no macOS"
 "$PYTHON" -m PyInstaller --version >/dev/null 2>&1 || die "PyInstaller não encontrado; instale-o no ambiente do build"
 
@@ -34,6 +35,7 @@ trap cleanup EXIT
   --name SpeedTesterClient --paths app app/macos_client_entry.py
 "$PYTHON" -m PyInstaller --noconfirm --clean --onefile --console \
   --name SpeedTesterAPI --paths app --add-data "app/dashboard:dashboard" app/native_api_entry.py
+"$PYTHON" scripts/check_embedded_python.py dist/SpeedTesterAPI
 
 STAGE="$(mktemp -d "${TMPDIR:-/tmp}/speedtester-macos.XXXXXX")"
 APP="$STAGE/SpeedTester.app"

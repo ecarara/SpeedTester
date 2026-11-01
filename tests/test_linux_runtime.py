@@ -27,7 +27,8 @@ class NativeEntryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             database = Path(temporary) / "must-not-exist.db"
             environment = dict(os.environ, PYTHONPATH=str(ROOT / "app"), DB_PATH=str(database))
-            for name in ("native_api_entry", "native_client_entry", "desktop_launcher"):
+            for name in ("native_api_entry", "native_client_entry", "desktop_launcher",
+                         "macos_client_entry", "windows_client_entry"):
                 with self.subTest(entry=name):
                     result = subprocess.run([sys.executable, str(ROOT / "app" / (name + ".py")),
                         "--runtime-info"], capture_output=True, text=True, timeout=15, env=environment)
@@ -81,7 +82,7 @@ class LinuxRuntimeTests(unittest.TestCase):
     def runtime(self, root):
         output = root / "runtime"
         output.mkdir()
-        document = {"format": "speedtester-linux-runtime-v1", "python": "3.14.9",
+        document = {"format": "speedtester-linux-runtime-v1", "python": "3.14.10",
                     "app_version": "1.2.3", "architecture": builder.platform.machine(),
                     "libc": {"name": "glibc", "version": "2.35"}}
         (output / "runtime-components.json").write_text(json.dumps(document))
@@ -92,7 +93,7 @@ class LinuxRuntimeTests(unittest.TestCase):
     def test_verification_checks_each_frozen_interpreter_without_build_environment(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = self.runtime(Path(temporary))
-            info = {"python": "3.14.9", "implementation": "CPython", "frozen": True,
+            info = {"python": "3.14.10", "implementation": "CPython", "frozen": True,
                     "app_version": "1.2.3"}
             with patch.object(builder.subprocess, "run", return_value=SimpleNamespace(stdout=json.dumps(info))) as run, \
                     patch.dict(os.environ, {"PYTHONPATH": "/host/venv", "PYTHONHOME": "/host/python", "APP_VERSION": "wrong"}):
@@ -102,6 +103,23 @@ class LinuxRuntimeTests(unittest.TestCase):
                 self.assertEqual(call.args[0][-1], "--runtime-info")
                 for key in ("PYTHONPATH", "PYTHONHOME", "APP_VERSION"):
                     self.assertNotIn(key, call.kwargs["env"])
+
+    def test_vulnerable_python_is_rejected_in_inventory_and_executable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = self.runtime(Path(temporary))
+            inventory = output / "runtime-components.json"
+            document = json.loads(inventory.read_text())
+            document["python"] = "3.14.9"
+            inventory.write_text(json.dumps(document))
+            with self.assertRaisesRegex(ValueError, "3.14.10"):
+                builder.verify_runtime(output, "1.2.3")
+            document["python"] = "3.14.10"
+            inventory.write_text(json.dumps(document))
+            info = {"python": "3.14.9", "implementation": "CPython", "frozen": True,
+                    "app_version": "1.2.3"}
+            with patch.object(builder.subprocess, "run", return_value=SimpleNamespace(stdout=json.dumps(info))):
+                with self.assertRaisesRegex(ValueError, "3.14.10"):
+                    builder.verify_runtime(output, "1.2.3")
 
     @unittest.skipIf(os.name == "nt", "POSIX symlink contract")
     def test_host_interpreter_symlink_is_rejected_before_running_payload(self):
@@ -122,7 +140,7 @@ class LinuxRuntimeTests(unittest.TestCase):
             output = self.runtime(Path(temporary))
             with self.assertRaisesRegex(ValueError, "does not match"):
                 builder.verify_runtime(output, "9.9.9")
-            with patch.object(builder.subprocess, "run", return_value=SimpleNamespace(stdout='{"python":"3.14.9","frozen":false}')):
+            with patch.object(builder.subprocess, "run", return_value=SimpleNamespace(stdout='{"python":"3.14.10","frozen":false}')):
                 with self.assertRaisesRegex(ValueError, "incorrect frozen"):
                     builder.verify_runtime(output, "1.2.3")
 
@@ -153,14 +171,14 @@ class LinuxRuntimeTests(unittest.TestCase):
                 execute.assert_not_called()
             marker.unlink()
             (output / "PYTHON-LICENSE.txt").unlink()
-            info = {"python": "3.14.9", "implementation": "CPython", "frozen": True,
+            info = {"python": "3.14.10", "implementation": "CPython", "frozen": True,
                     "app_version": "1.2.3"}
             with patch.object(builder.subprocess, "run", return_value=SimpleNamespace(stdout=json.dumps(info))):
                 with self.assertRaisesRegex(ValueError, "notices missing: PYTHON-LICENSE"):
                     builder.verify_runtime(output, "1.2.3")
 
     def test_diagnostic_crash_or_incorrect_runtime_never_passes_verification(self):
-        info = {"python": "3.14.9", "implementation": "CPython", "frozen": True,
+        info = {"python": "3.14.10", "implementation": "CPython", "frozen": True,
                 "app_version": "1.2.3"}
         for change in ({"python": "3.15.0"}, {"implementation": "PyPy"}, {"app_version": "dev"}):
             with self.subTest(change=change), tempfile.TemporaryDirectory() as temporary:
@@ -235,7 +253,7 @@ class BuildEnvironmentTests(unittest.TestCase):
 
     def test_packager_pin_and_glibc_must_be_verified_before_freezing(self):
         with patch.object(builder.platform, "system", return_value="Linux"), \
-                patch.object(sys.implementation, "name", "cpython"), patch.object(sys, "version_info", (3, 14)):
+                patch.object(sys.implementation, "name", "cpython"), patch.object(sys, "version_info", (3, 14, 10)):
             with patch.object(builder.metadata, "version", return_value="6.16.0"):
                 with self.assertRaisesRegex(ValueError, "PyInstaller 6.22.3"):
                     builder.check_environment()

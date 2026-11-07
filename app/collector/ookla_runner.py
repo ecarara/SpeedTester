@@ -14,23 +14,14 @@ from collector.speedtest_runner import SpeedTestResult
 from collector.network_link import detect_link
 
 
-def run_ookla(
-    duration_seconds: int = 30,
-    share: bool = False,
-    server_ids: Optional[list[int]] = None,
-    max_bytes: int = 10_000_000,
-    bandwidth_contracted_mbps: Optional[float] = None,
-    isp_lookup_enabled: bool = True,
-    isp_lookup_timeout_seconds: float = 5.0,
-    binary: str = "speedtest",
-) -> SpeedTestResult:
-    """Run Ookla's native CLI and convert its JSON result to project fields."""
-    del duration_seconds, share, max_bytes, isp_lookup_enabled, isp_lookup_timeout_seconds
+def _command(binary: str, server_ids: Optional[list[int]]) -> list[str]:
     command = [binary, "--accept-license", "--accept-gdpr", "--progress=no", "--format=json"]
     if server_ids:
         command.extend(["--server-id", str(server_ids[0])])
+    return command
 
-    started = time.monotonic()
+
+def _execute(command: list[str], binary: str) -> str:
     try:
         completed = subprocess.run(
             command,
@@ -47,8 +38,10 @@ def run_ookla(
     if completed.returncode != 0:
         detail = (completed.stderr or completed.stdout or "sem detalhes").strip()
         raise RuntimeError(f"Ookla CLI falhou ({completed.returncode}): {detail[-400:]}")
+    return completed.stdout
 
-    payload = _extract_json(completed.stdout)
+
+def _build_result(payload: dict, started: float, bandwidth_contracted_mbps: Optional[float]) -> SpeedTestResult:
     server = payload.get("server") or {}
     client = payload.get("client") or {}
     interface = payload.get("interface") or {}
@@ -89,6 +82,24 @@ def run_ookla(
         isp=payload.get("isp"),
         duration_sec=time.monotonic() - started,
     )
+
+
+def run_ookla(
+    duration_seconds: int = 30,
+    share: bool = False,
+    server_ids: Optional[list[int]] = None,
+    max_bytes: int = 10_000_000,
+    bandwidth_contracted_mbps: Optional[float] = None,
+    isp_lookup_enabled: bool = True,
+    isp_lookup_timeout_seconds: float = 5.0,
+    binary: str = "speedtest",
+) -> SpeedTestResult:
+    """Run Ookla's native CLI and convert its JSON result to project fields."""
+    del duration_seconds, share, max_bytes, isp_lookup_enabled, isp_lookup_timeout_seconds
+    command = _command(binary, server_ids)
+    started = time.monotonic()
+    payload = _extract_json(_execute(command, binary))
+    return _build_result(payload, started, bandwidth_contracted_mbps)
 
 
 def _extract_json(output: str) -> dict:

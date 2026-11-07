@@ -71,16 +71,32 @@ class Settings:
 
     def __post_init__(self) -> None:
         ZoneInfo(self.timezone)
-        if self.iperf3_location and any(self.iperf3_location.get(key) is not None for key in ('latitude', 'longitude')):
-            from collector.target_selection import coordinates
-            if coordinates(self.iperf3_location) is None:
-                raise ValueError('both latitude and longitude must be valid finite coordinates')
+        self._validate_location()
+        self._validate_api_limits()
+        self._validate_positive_fields()
+        self._validate_ports_and_choices()
+        self._validate_contracts()
+
+    def _validate_location(self) -> None:
+        if not self.iperf3_location:
+            return
+        if not any(self.iperf3_location.get(key) is not None for key in ('latitude', 'longitude')):
+            return
+        from collector.target_selection import coordinates
+        if coordinates(self.iperf3_location) is None:
+            raise ValueError('both latitude and longitude must be valid finite coordinates')
+
+    def _validate_api_limits(self) -> None:
         if not 60 <= self.api_session_seconds <= 86400:
             raise ValueError("api_session_seconds must be between 60 and 86400")
         if not 1024 <= self.api_max_body_bytes <= 1048576:
             raise ValueError('api_max_body_bytes must be between 1024 and 1048576')
         if not 1 <= self.api_rate_limit_max_clients <= 10000:
             raise ValueError('api_rate_limit_max_clients must be between 1 and 10000')
+        if self.slot_lease_seconds < 60:
+            raise ValueError('slot_lease_seconds must be at least 60')
+
+    def _validate_positive_fields(self) -> None:
         positive = ('sample_interval_seconds', 'sample_duration_seconds', 'measurements_per_quadrant',
                     'max_bytes', 'iperf3_duration_seconds', 'iperf3_parallel_streams',
                     'measurement_timeout_seconds', 'api_rate_limit_per_minute',
@@ -88,6 +104,8 @@ class Settings:
         for name in positive:
             if not isfinite(getattr(self, name)) or getattr(self, name) <= 0:
                 raise ValueError(f'{name} must be positive and finite')
+
+    def _validate_ports_and_choices(self) -> None:
         if self.measurements_per_quadrant > 100:
             raise ValueError('measurements_per_quadrant must not exceed 100')
         for name in ('iperf3_port', 'api_port'):
@@ -97,10 +115,10 @@ class Settings:
             raise ValueError('speedtest_runner must be iperf3, ookla or fast')
         if not 0 < self.anomaly_retry_ratio <= 1:
             raise ValueError('anomaly_retry_ratio must be between 0 and 1')
-        if self.slot_lease_seconds < 60:
-            raise ValueError('slot_lease_seconds must be at least 60')
         if self.scheduler_late_tolerance_seconds < 0 or self.alert_cooldown_seconds < 0:
             raise ValueError('tolerance and cooldown must not be negative')
+
+    def _validate_contracts(self) -> None:
         for value in (self.bandwidth_contracted_mbps, self.bandwidth_contracted_upload_mbps,
                       self.anomaly_retry_min_download_mbps):
             if value is not None and (not isfinite(value) or value <= 0):

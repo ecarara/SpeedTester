@@ -9,6 +9,36 @@ em <https://github.com/ecarara/SpeedTester>.
 
 ## [Unreleased]
 
+## [0.4.48] - 2026-11-07
+
+### Corrigido
+
+- corrigidos dois bugs bloqueadores em `scripts/compare_runners.py`: o script
+  agora usa `Iperf3Target` em vez dos parâmetros removidos `iperf3_server` e
+  `iperf3_port`;
+- reduzida a complexidade cognitiva de nove funções em `server.py`,
+  `collector.py`, `speedtest_runner.py`, `ookla_runner.py`, `settings.py`,
+  `check_license.py`, `check_publication.py` e `doctor.py`;
+- literais duplicados substituídos por constantes, parâmetros não usados
+  removidos e timeouts convertidos para `asyncio.timeout`;
+- IPs privados de `check_publication.py` derivados de inteiros, eliminando os
+  achados S1313 sem suprimir a verificação;
+- simplificado o retry de download de fontes nativas do iPerf3;
+- atualizado o digest fixado de `python:3.14.10-slim-trixie` para corrigir
+  CVE-2026-109518 em `apt`/`libapt-pkg7.0` (3.0.3 → 3.0.4).
+
+### Qualidade e atualização
+
+- SonarQube com Quality Gate aprovado: zero bugs, vulnerabilidades, code smells
+  e hotspots; ratings **A** em Reliability, Security e Maintainability;
+- cobertura de 83,6% no total, 84,8% no código novo e 0% de duplicação;
+- adicionados testes de higiene para os scripts refatorados, além da validação
+  de GUI e do fluxo E2E do dashboard;
+- atualização sem migração de schema; instalação, configuração e dados são
+  preservados. Distribuição GPL-3.0-or-later nos mesmos formatos.
+
+## [0.4.47] - 2026-11-01
+
 ### Corrigido
 
 - instaladores POSIX (Linux/macOS) e PowerShell perguntam e persistem download

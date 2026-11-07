@@ -11,7 +11,7 @@ from shared.settings import load_settings
 
 class SettingsHardeningTests(unittest.TestCase):
     def setUp(self):
-        with patch('shared.settings.load_user_environment', lambda: None), \
+        with patch('shared.settings.load_user_environment', return_value=None), \
              patch.dict(os.environ, {}, clear=True):
             self.settings = load_settings()
 

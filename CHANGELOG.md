@@ -9,6 +9,15 @@ em <https://github.com/ecarara/SpeedTester>.
 
 ## [Unreleased]
 
+### Alterado
+
+- SQLite do painel/coletor usa WAL, `busy_timeout` e conexão persistente por
+  thread, reduzindo bloqueios entre leitura e gravação;
+- dashboard reduz o polling para 30 segundos e pausa quando a aba não está
+  visível;
+- configuração da API rejeita modo local com bind não-loopback, exige cookie
+  seguro quando `API_PUBLIC_ORIGIN` é HTTPS e remove o antigo `API_HOST` morto.
+
 ## [0.4.48] - 2026-11-07
 
 ### Corrigido

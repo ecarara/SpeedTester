@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 from math import isfinite
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from shared.user_config import load_user_environment
@@ -45,7 +46,6 @@ class Settings:
     db_path: str
 
     # --- api ---
-    api_host: str
     api_bind_address: str
     api_port: int
     api_admin_token: str
@@ -63,6 +63,7 @@ class Settings:
     api_admin_password_hash: str = ""
     api_session_seconds: int = 28800
     api_cookie_secure: bool = False
+    api_public_origin: str = ""
     measurement_target_controlled: bool = False
     api_max_body_bytes: int = 65536
     api_rate_limit_max_clients: int = 10000
@@ -73,6 +74,7 @@ class Settings:
         ZoneInfo(self.timezone)
         self._validate_location()
         self._validate_api_limits()
+        self._validate_api_security()
         self._validate_positive_fields()
         self._validate_ports_and_choices()
         self._validate_contracts()
@@ -95,6 +97,17 @@ class Settings:
             raise ValueError('api_rate_limit_max_clients must be between 1 and 10000')
         if self.slot_lease_seconds < 60:
             raise ValueError('slot_lease_seconds must be at least 60')
+
+    def _validate_api_security(self) -> None:
+        if not self.api_require_login and self.api_bind_address not in {"127.0.0.1", "::1", "localhost"}:
+            raise ValueError("local mode requires a loopback API bind")
+        if self.api_public_origin:
+            parsed = urlsplit(self.api_public_origin)
+            if (parsed.scheme not in {"http", "https"} or not parsed.hostname
+                    or parsed.username or parsed.password or parsed.path not in ("", "/")):
+                raise ValueError("invalid API_PUBLIC_ORIGIN")
+            if parsed.scheme == "https" and not self.api_cookie_secure:
+                raise ValueError("API_COOKIE_SECURE must be enabled for an HTTPS public origin")
 
     def _validate_positive_fields(self) -> None:
         positive = ('sample_interval_seconds', 'sample_duration_seconds', 'measurements_per_quadrant',
@@ -130,7 +143,7 @@ class Settings:
         return (
             f"Settings(interval={self.sample_interval_seconds}s, "
             f"duration={self.sample_duration_seconds}s, "
-            f"db={self.db_path}, api={self.api_host}:{self.api_port})"
+            f"db={self.db_path}, api={self.api_bind_address}:{self.api_port})"
         )
 
 
@@ -241,7 +254,6 @@ def load_settings() -> Settings:
         isp_lookup_enabled=_env_bool("ISP_LOOKUP_ENABLED", True),
         isp_lookup_timeout_seconds=_env_float("ISP_LOOKUP_TIMEOUT_SECONDS", 5.0),
         db_path=db_path,
-        api_host=_env_str("API_HOST", "0.0.0.0"),
         api_bind_address=_env_str("API_BIND_ADDRESS", "127.0.0.1"),
         api_port=_env_int("API_PORT", 8000),
         api_admin_token=os.environ.get("API_ADMIN_TOKEN", ""),
@@ -266,6 +278,7 @@ def load_settings() -> Settings:
         api_admin_password_hash=os.environ.get("API_ADMIN_PASSWORD_HASH", ""),
         api_session_seconds=_env_int("API_SESSION_SECONDS", 28800),
         api_cookie_secure=_env_bool("API_COOKIE_SECURE", False),
+        api_public_origin=_env_str("API_PUBLIC_ORIGIN", ""),
         measurement_target_controlled=_env_bool("MEASUREMENT_TARGET_CONTROLLED", False),
         api_max_body_bytes=_env_int('API_MAX_BODY_BYTES', 65536),
         api_rate_limit_max_clients=_env_int('API_RATE_LIMIT_MAX_CLIENTS', 10000),

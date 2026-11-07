@@ -418,10 +418,14 @@ class SampleStore:
     # --- connection handling -------------------------------------------------
     def _connect(self) -> sqlite3.Connection:
         if not hasattr(self._local, "conn"):
-            self._local.conn = sqlite3.connect(
-                self.db_path, check_same_thread=False
+            connection = sqlite3.connect(
+                self.db_path, timeout=5.0, check_same_thread=False
             )
-            self._local.conn.row_factory = sqlite3.Row
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA busy_timeout=5000")
+            connection.execute("PRAGMA synchronous=NORMAL")
+            self._local.conn = connection
         return self._local.conn
 
     def close(self) -> None:
@@ -440,8 +444,6 @@ class SampleStore:
         except Exception:
             conn.rollback()
             raise
-        finally:
-            self.close()
 
     # --- writes --------------------------------------------------------------
     def add_samples(self, samples: Iterable[Sample]) -> int:

@@ -166,8 +166,8 @@ def backup_database(root, image, volume, sha):
     directory = root/'deployment-backups'
     directory.mkdir(mode=0o700, exist_ok=True)
     name = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f')+'-'+sha+'.db'
-    code = "import sqlite3,os;from contextlib import closing;os.umask(0o077)\nwith closing(sqlite3.connect('file:/data/speedtester.db?mode=ro',uri=True)) as source,closing(sqlite3.connect('/snapshots/"+name+"')) as target:\n source.backup(target)\n assert target.execute('PRAGMA integrity_check').fetchone()[0]=='ok'"
-    run('docker', 'run', '--rm', '--network', 'none', '--user', '0', '-v', volume+':/data:ro',
+    code = "import sqlite3,os;from contextlib import closing;os.umask(0o077)\nwith closing(sqlite3.connect('file:/data/speedtester.db?mode=rw',uri=True)) as source,closing(sqlite3.connect('/snapshots/"+name+"')) as target:\n source.backup(target)\n assert target.execute('PRAGMA integrity_check').fetchone()[0]=='ok'"
+    run('docker', 'run', '--rm', '--network', 'none', '--user', '0', '-v', volume+':/data',
         '-v', str(directory)+':/snapshots:Z', image, 'python', '-c', code)
     return name
 

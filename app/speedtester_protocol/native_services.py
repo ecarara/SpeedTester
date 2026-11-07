@@ -352,7 +352,7 @@ def verify_database(directory):
     # Read-only inspection; no implicit schema creation, data correction or key generation.
     cipher = object.__new__(EncryptedQueue)
     cipher.key = key
-    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as connection:
+    with closing(sqlite3.connect(database.as_uri() + "?mode=rw", uri=True)) as connection:
         if connection.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
             raise ValueError("local_database_corrupt")
         for key_name, value in connection.execute("SELECT key,value FROM state"):
@@ -373,7 +373,7 @@ def backup_state(layout):
     destination.mkdir(mode=0o700, parents=True)
     if layout.system == "Windows":
         windows_acl(destination, apply=True, directory=True)
-    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as source:
+    with closing(sqlite3.connect(database.as_uri() + "?mode=rw", uri=True)) as source:
         with closing(sqlite3.connect(destination / INDEX_FILENAME)) as target:
             source.backup(target)
     shutil.copyfile(directory / STORAGE_KEY_FILENAME, destination / STORAGE_KEY_FILENAME)

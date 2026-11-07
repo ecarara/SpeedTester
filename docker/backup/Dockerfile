@@ -10,7 +10,7 @@ RUN GOOS="$TARGETOS" GOARCH="$TARGETARCH" go install filippo.io/age/cmd/age@v1.3
     && mkdir /out \
     && find /go/bin -type f \( -name age -o -name age-keygen \) -exec cp {} /out/ \;
 
-FROM python:3.14.10-slim-trixie@sha256:3cabfd7d7aaf394e6040e79fa1eec6ca1c52b74ed9188650472695d9a9326999 AS ssh-builder
+FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d AS ssh-builder
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends build-essential libssl-dev zlib1g-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
@@ -21,7 +21,7 @@ RUN tar -xzf /tmp/openssh.tar.gz -C /tmp \
     && ./configure --prefix=/usr/local --without-pam --without-kerberos5 --without-libedit \
     && make -j2 ssh scp
 
-FROM python:3.14.10-slim-trixie@sha256:3cabfd7d7aaf394e6040e79fa1eec6ca1c52b74ed9188650472695d9a9326999
+FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d
 
 RUN apt-get update && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/*

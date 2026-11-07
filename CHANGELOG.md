@@ -9,6 +9,16 @@ em <https://github.com/ecarara/SpeedTester>.
 
 ## [Unreleased]
 
+## [0.4.50] - 2026-11-07
+
+### Corrigido
+
+- backup e deploy compatíveis com SQLite em WAL: o volume do banco é montado
+  em leitura/escrita durante o snapshot e as conexões de origem usam `mode=rw`,
+  permitindo criar o arquivo `-shm` quando necessário;
+- backup nativo e verificação de integridade do Client também aceitam bancos em
+  WAL sem falhar com `unable to open database file`.
+
 ## [0.4.49] - 2026-11-07
 
 ### Alterado

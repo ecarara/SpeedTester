@@ -54,7 +54,7 @@ def api_facts(project):
 from contextlib import closing
 request=urllib.request.Request('http://127.0.0.1:8000/health',headers={'X-Admin-Token':os.environ.get('API_ADMIN_TOKEN','')})
 health=json.load(urllib.request.urlopen(request,timeout=5))
-with closing(sqlite3.connect('file:/data/speedtester.db?mode=ro',uri=True)) as db:
+with closing(sqlite3.connect('file:/data/speedtester.db?mode=rw',uri=True)) as db:
     latest=db.execute('SELECT MAX(started_at) FROM samples').fetchone()[0]
 print(json.dumps({'collector_ok':health.get('collector',{}).get('status')=='ok','latest_sample':latest}))"""
     return json.loads(execute(['docker', 'exec', project + '-api-1', 'python', '-c', code]))

@@ -48,6 +48,11 @@ from shared.version import APP_VERSION
 settings = load_settings()
 store = SampleStore(settings.db_path)
 
+UTC_ISO_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+UTC_OFFSET_SUFFIX = "+00:00"
+EXPORT_PAGE_SIZE = 1000
+FORMULA_PREFIXES = ("=", "+", "-", "@")
+
 API_ERRORS = {401: {"description": "Authentication required"}, 403: {"description": "Forbidden or invalid CSRF"},
               413: {"description": "Request body too large"},
               404: {"description": "Resource not found"}, 415: {"description": "JSON required"},
@@ -168,7 +173,7 @@ def logout(request: Request):
 
 
 def _utcnow_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(timezone.utc).strftime(UTC_ISO_FORMAT)
 
 
 def _collector_health() -> dict:
@@ -181,7 +186,7 @@ def _collector_health() -> dict:
             "metadata": {},
         }
     try:
-        observed = datetime.fromisoformat(heartbeat["observed_at"].replace("Z", "+00:00"))
+        observed = datetime.fromisoformat(heartbeat["observed_at"].replace("Z", UTC_OFFSET_SUFFIX))
         age_seconds = max(0.0, (datetime.now(timezone.utc) - observed).total_seconds())
     except (KeyError, ValueError):
         age_seconds = None
@@ -225,19 +230,32 @@ def api_alerts(limit: int = Query(50, ge=1, le=200)):
     return JSONResponse(store.alerts(limit))
 
 
-def _query_filters(local_date=None, from_date=None, to_date=None, runner=None, quadrant=None):
+def _checked_date(value):
+    if value and date.fromisoformat(value).isoformat() != value:
+        raise ValueError("date must use YYYY-MM-DD")
+    return value
+
+
+def _checked_date_span(from_date, to_date):
+    span = (date.fromisoformat(to_date) - date.fromisoformat(from_date)).days
+    if span < 0 or span > 366:
+        raise ValueError("period must be between 0 and 366 days")
+
+
+def _validate_query_dates(local_date, from_date, to_date):
     if local_date and (from_date or to_date):
         raise HTTPException(422, "date cannot be combined with from/to")
     try:
         for value in (local_date, from_date, to_date):
-            if value and date.fromisoformat(value).isoformat() != value:
-                raise ValueError("date must use YYYY-MM-DD")
+            _checked_date(value)
         if from_date and to_date:
-            span = (date.fromisoformat(to_date) - date.fromisoformat(from_date)).days
-            if span < 0 or span > 366:
-                raise ValueError("period must be between 0 and 366 days")
+            _checked_date_span(from_date, to_date)
     except ValueError as exc:
         raise HTTPException(422, "invalid date or period") from exc
+
+
+def _query_filters(local_date=None, from_date=None, to_date=None, runner=None, quadrant=None):
+    _validate_query_dates(local_date, from_date, to_date)
     if runner and runner not in {"iperf3", "ookla", "fast"}:
         raise HTTPException(422, "invalid runner")
     if quadrant and quadrant not in {"madrugada", "manha", "tarde", "noite"}:
@@ -259,14 +277,14 @@ def api_samples(
     filters = _query_filters(local_date, from_date, to_date, runner, quadrant)
     if since:
         try:
-            timestamp = datetime.fromisoformat(since.replace("Z", "+00:00"))
+            timestamp = datetime.fromisoformat(since.replace("Z", UTC_OFFSET_SUFFIX))
             if timestamp.tzinfo is None:
                 raise ValueError("timezone required")
-            since = timestamp.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            since = timestamp.astimezone(timezone.utc).strftime(UTC_ISO_FORMAT)
         except ValueError as exc:
             raise HTTPException(422, "since must be an ISO timestamp with timezone") from exc
     if minutes:
-        since = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        since = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).strftime(UTC_ISO_FORMAT)
     return JSONResponse(store.query_samples(**filters, since=since, limit=limit,
                                            offset=offset, descending=order == "desc"))
 
@@ -300,13 +318,13 @@ def api_series(local_date: Optional[str] = Query(None, alias="date"),
     days = {}
     zone = ZoneInfo(settings.timezone)
     for row in rows:
-        day = row.get("local_date") or datetime.fromisoformat(row["started_at"].replace("Z", "+00:00")).astimezone(zone).date().isoformat()
+        day = row.get("local_date") or datetime.fromisoformat(row["started_at"].replace("Z", UTC_OFFSET_SUFFIX)).astimezone(zone).date().isoformat()
         days.setdefault(day, []).append(row)
     series = []
     for day, group in sorted(days.items()):
         good = pd.DataFrame([row for row in group if not row["is_failure"]])
         timestamp = datetime.fromisoformat(day).replace(hour=12, tzinfo=zone).astimezone(timezone.utc)
-        series.append({"started_at": timestamp.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        series.append({"started_at": timestamp.strftime(UTC_ISO_FORMAT),
                        "is_failure": good.empty, "download_mbps": _metric_median(good, "download_mbps"),
                        "upload_mbps": _metric_median(good, "upload_mbps")})
     return {"rows": series, "count": count, "aggregated": True}
@@ -330,6 +348,46 @@ def api_network_map(
     return build_network_map(rows)
 
 
+def _iter_export_rows(filters, ceiling):
+    offset = 0
+    while True:
+        rows = store.query_samples(**filters, limit=EXPORT_PAGE_SIZE, offset=offset, max_id=ceiling)
+        if not rows:
+            return
+        for row in rows:
+            if row["id"] <= ceiling:
+                yield row
+        offset += len(rows)
+        if len(rows) < EXPORT_PAGE_SIZE:
+            return
+
+
+def _json_export(filters, ceiling):
+    yield "["
+    first = True
+    for row in _iter_export_rows(filters, ceiling):
+        yield ("" if first else ",") + json.dumps(row, ensure_ascii=False, allow_nan=False)
+        first = False
+    yield "]"
+
+
+def _csv_escape(value):
+    if isinstance(value, str) and value.startswith(FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
+def _csv_export(filters, ceiling):
+    headers = None
+    for row in _iter_export_rows(filters, ceiling):
+        output = io.StringIO()
+        if headers is None:
+            headers = list(row)
+            csv.writer(output).writerow(headers)
+        csv.writer(output).writerow([_csv_escape(row[key]) for key in headers])
+        yield output.getvalue()
+
+
 @app.get("/api/export", responses=API_ERRORS)
 def api_export(format: str = Query("json", pattern="^(json|csv)$"),
                local_date: Optional[str] = Query(None, alias="date"),
@@ -340,36 +398,9 @@ def api_export(format: str = Query("json", pattern="^(json|csv)$"),
     filters = _query_filters(local_date, from_date, to_date, runner, quadrant)
     # Freeze the high-water mark so new samples do not make the export endless.
     ceiling = store.max_sample_id()
-    def chunks():
-        offset, first = 0, True
-        if format == "json":
-            yield "["
-        headers = None
-        while True:
-            rows = store.query_samples(**filters, limit=1000, offset=offset, max_id=ceiling)
-            if not rows:
-                break
-            for row in rows:
-                if row["id"] > ceiling:
-                    continue
-                if format == "json":
-                    yield ("" if first else ",") + json.dumps(row, ensure_ascii=False, allow_nan=False)
-                else:
-                    output = io.StringIO()
-                    if headers is None:
-                        headers = list(row)
-                        csv.writer(output).writerow(headers)
-                    # Escape spreadsheet formulas in free-text fields.
-                    values = ["'" + value if isinstance(value, str) and value.startswith(("=", "+", "-", "@")) else value for value in (row[key] for key in headers)]
-                    csv.writer(output).writerow(values)
-                    yield output.getvalue()
-                first = False
-            offset += len(rows)
-            if len(rows) < 1000:
-                break
-        if format == "json":
-            yield "]"
-    return StreamingResponse(chunks(), media_type="application/json" if format == "json" else "text/csv",
+    is_json = format == "json"
+    chunks = _json_export(filters, ceiling) if is_json else _csv_export(filters, ceiling)
+    return StreamingResponse(chunks, media_type="application/json" if is_json else "text/csv",
         headers={"Content-Disposition": f'attachment; filename="speedtester-export.{format}"'})
 
 
@@ -502,8 +533,8 @@ def api_summary(
     df = pd.DataFrame(all_rows)
     df["started_at"] = pd.to_datetime(df["started_at"], utc=True)
     df = df.sort_values("started_at").reset_index(drop=True)
-    first = df["started_at"].iloc[0].strftime("%Y-%m-%dT%H:%M:%SZ")
-    last = df["started_at"].iloc[-1].strftime("%Y-%m-%dT%H:%M:%SZ")
+    first = df["started_at"].iloc[0].strftime(UTC_ISO_FORMAT)
+    last = df["started_at"].iloc[-1].strftime(UTC_ISO_FORMAT)
     latest = all_rows[-1]
 
     # --- mean speeds (only over successful samples) --------------------------
@@ -590,12 +621,73 @@ def _events_in_period(events, start, end):
     result = []
     now = datetime.now(timezone.utc)
     for event in events:
-        begin = datetime.fromisoformat(event["started_at"].replace("Z", "+00:00"))
-        finish = datetime.fromisoformat(event["ended_at"].replace("Z", "+00:00")) if event.get("ended_at") else now
+        begin = datetime.fromisoformat(event["started_at"].replace("Z", UTC_OFFSET_SUFFIX))
+        finish = datetime.fromisoformat(event["ended_at"].replace("Z", UTC_OFFSET_SUFFIX)) if event.get("ended_at") else now
         begin, finish = max(begin, lower) if lower else begin, min(finish, upper) if upper else finish
         if finish > begin:
             result.append({**event, "started_at": begin.isoformat(), "ended_at": finish.isoformat()})
     return result
+
+
+def _row_local_date(row):
+    row_day = row.get("local_date")
+    if row_day:
+        return row_day
+    timestamp = pd.to_datetime(row.get("started_at"), utc=True)
+    return timestamp.tz_convert(ZoneInfo(settings.timezone)).strftime("%Y-%m-%d")
+
+
+def _samples_by_day(rows, from_date, to_date):
+    rows_by_day: dict[str, list[dict]] = {}
+    for row in rows:
+        row_day = _row_local_date(row)
+        if from_date <= row_day <= to_date:
+            rows_by_day.setdefault(row_day, []).append(row)
+    return rows_by_day
+
+
+def _slots_by_day(slots, from_date, to_date):
+    slots_by_day: dict[str, list[dict]] = {}
+    for slot in slots:
+        if from_date <= slot.get("local_date", "") <= to_date:
+            slots_by_day.setdefault(slot["local_date"], []).append(slot)
+    return slots_by_day
+
+
+def _numeric_values(rows, field):
+    return [float(row[field]) for row in rows if row.get(field) is not None]
+
+
+def _day_comparison(day_key, day_rows, day_slots):
+    good = [row for row in day_rows if not row.get("is_failure")]
+    downloads = _numeric_values(good, "download_mbps")
+    uploads = _numeric_values(good, "upload_mbps")
+    contracted_values = _numeric_values(day_rows, "bandwidth_contracted_mbps")
+    contracted = contracted_values[-1] if contracted_values else settings.bandwidth_contracted_mbps
+    download_avg = sum(downloads) / len(downloads) if downloads else None
+    coverage = _compute_coverage(day_slots)
+    stats = _speed_statistics(pd.DataFrame(good))
+    return {
+        **stats,
+        "date": day_key,
+        "samples": len(day_rows),
+        "success_count": len(good),
+        "failure_count": len(day_rows) - len(good),
+        "failure_rate_pct": round(100 * (len(day_rows) - len(good)) / len(day_rows), 2) if day_rows else None,
+        "download_avg_mbps": round(download_avg, 2) if download_avg is not None else None,
+        "upload_avg_mbps": round(sum(uploads) / len(uploads), 2) if uploads else None,
+        "contracted_mbps": contracted,
+        "delivery_pct": round(100 * download_avg / contracted, 2) if download_avg is not None and contracted else None,
+        "coverage_pct": coverage["coverage_pct"],
+        "coverage": coverage,
+    }
+
+
+def _date_range(start, end):
+    current = start
+    while current <= end:
+        yield current
+        current += timedelta(days=1)
 
 
 @app.get("/api/comparison", responses=API_ERRORS)
@@ -615,53 +707,13 @@ def api_comparison(
     if (end - start).days > 366:
         raise HTTPException(status_code=422, detail="comparison range is limited to 366 days")
     rows = store.query_samples(**_query_filters(None, from_date, to_date, runner))
-    rows_by_day: dict[str, list[dict]] = {}
-    for row in rows:
-        row_day = row.get("local_date")
-        if not row_day:
-            timestamp = pd.to_datetime(row.get("started_at"), utc=True)
-            row_day = timestamp.tz_convert(ZoneInfo(settings.timezone)).strftime("%Y-%m-%d")
-        if from_date <= row_day <= to_date:
-            rows_by_day.setdefault(row_day, []).append(row)
-    slots = store.all_slots()
-    slots_by_day: dict[str, list[dict]] = {}
-    for slot in slots:
-        if from_date <= slot.get("local_date", "") <= to_date:
-            slots_by_day.setdefault(slot["local_date"], []).append(slot)
-    days = []
-    current = start
-    while current <= end:
-        day_key = current.isoformat()
-        day_rows = rows_by_day.get(day_key, [])
-        good = [row for row in day_rows if not row.get("is_failure")]
-        downloads = [float(row["download_mbps"]) for row in good if row.get("download_mbps") is not None]
-        uploads = [float(row["upload_mbps"]) for row in good if row.get("upload_mbps") is not None]
-        contracted_values = [
-            float(row["bandwidth_contracted_mbps"])
-            for row in day_rows
-            if row.get("bandwidth_contracted_mbps") is not None
-        ]
-        contracted = contracted_values[-1] if contracted_values else settings.bandwidth_contracted_mbps
-        download_avg = sum(downloads) / len(downloads) if downloads else None
-        coverage = _compute_coverage(slots_by_day.get(day_key, []))
-        stats = _speed_statistics(pd.DataFrame(good))
-        days.append(
-            {
-                **stats,
-                "date": day_key,
-                "samples": len(day_rows),
-                "success_count": len(good),
-                "failure_count": len(day_rows) - len(good),
-                "failure_rate_pct": round(100 * (len(day_rows) - len(good)) / len(day_rows), 2) if day_rows else None,
-                "download_avg_mbps": round(download_avg, 2) if download_avg is not None else None,
-                "upload_avg_mbps": round(sum(uploads) / len(uploads), 2) if uploads else None,
-                "contracted_mbps": contracted,
-                "delivery_pct": round(100 * download_avg / contracted, 2) if download_avg is not None and contracted else None,
-                "coverage_pct": coverage["coverage_pct"],
-                "coverage": coverage,
-            }
-        )
-        current += timedelta(days=1)
+    rows_by_day = _samples_by_day(rows, from_date, to_date)
+    slots_by_day = _slots_by_day(store.all_slots(), from_date, to_date)
+    days = [
+        _day_comparison(current.isoformat(), rows_by_day.get(current.isoformat(), []),
+                        slots_by_day.get(current.isoformat(), []))
+        for current in _date_range(start, end)
+    ]
     return {"from": from_date, "to": to_date, "runner": runner, "days": days}
 
 

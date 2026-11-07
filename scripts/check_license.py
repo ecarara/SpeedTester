@@ -46,38 +46,53 @@ def source_files() -> list[Path]:
     return sorted(set(files))
 
 
-def main() -> int:
-    """Validate license metadata and return a shell-friendly status code."""
-
-    errors: list[str] = []
+def _license_errors() -> list[str]:
     license_path = ROOT / "LICENSE"
     license_text = license_path.read_text(encoding="utf-8") if license_path.exists() else ""
     normalized_license = " ".join(license_text.split())
-    for marker in REQUIRED_LICENSE_MARKERS:
-        if marker not in normalized_license:
-            errors.append(f"LICENSE is missing required GPL marker: {marker}")
+    return [
+        f"LICENSE is missing required GPL marker: {marker}"
+        for marker in REQUIRED_LICENSE_MARKERS
+        if marker not in normalized_license
+    ]
 
+
+def _reuse_errors() -> list[str]:
     reuse_path = ROOT / "REUSE.toml"
     if not reuse_path.exists():
-        errors.append("REUSE.toml is missing")
-    else:
-        reuse_text = reuse_path.read_text(encoding="utf-8")
-        for marker in ("GPL-3.0-or-later", "Edson Angelo Carara", "version = 1"):
-            if marker not in reuse_text:
-                errors.append(f"REUSE.toml is missing: {marker}")
+        return ["REUSE.toml is missing"]
+    reuse_text = reuse_path.read_text(encoding="utf-8")
+    return [
+        f"REUSE.toml is missing: {marker}"
+        for marker in ("GPL-3.0-or-later", "Edson Angelo Carara", "version = 1")
+        if marker not in reuse_text
+    ]
 
+
+def _readme_errors() -> list[str]:
     readme_text = (ROOT / "README.md").read_text(encoding="utf-8")
-    for marker in ("Edson Angelo Carara", "ecarara/SpeedTester", "GPL-3.0-or-later"):
-        if marker not in readme_text:
-            errors.append(f"README.md is missing project metadata: {marker}")
+    return [
+        f"README.md is missing project metadata: {marker}"
+        for marker in ("Edson Angelo Carara", "ecarara/SpeedTester", "GPL-3.0-or-later")
+        if marker not in readme_text
+    ]
 
+
+def _source_errors() -> list[str]:
+    errors = []
     for path in source_files():
         text = path.read_text(encoding="utf-8")
         if "SPDX-License-Identifier: GPL-3.0-or-later" not in text:
             errors.append(f"{path.relative_to(ROOT)} is missing the GPL SPDX identifier")
         if "Copyright (C) 2026 Edson Angelo Carara" not in text:
             errors.append(f"{path.relative_to(ROOT)} is missing the copyright notice")
+    return errors
 
+
+def main() -> int:
+    """Validate license metadata and return a shell-friendly status code."""
+
+    errors = _license_errors() + _reuse_errors() + _readme_errors() + _source_errors()
     if errors:
         print("license-check-failed")
         for error in errors:

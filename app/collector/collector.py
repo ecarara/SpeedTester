@@ -31,6 +31,7 @@ from shared.observation import start_observation
 
 
 TARGET_ATTEMPTS = "target_attempts"
+UTC_ISO_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 def _with_target_evidence(snapshot, source):
@@ -91,7 +92,7 @@ class Collector:
         """Execute one claimed slot and return its representative sample."""
         self._current_slot = slot
         self._last_attempt_id = None
-        self._attempt_started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self._attempt_started_at = datetime.now(timezone.utc).strftime(UTC_ISO_FORMAT)
         connectivity = probe_connectivity()
         if not connectivity.gateway_reachable:
             return self._save_failure(
@@ -128,7 +129,7 @@ class Collector:
         if anomalies:
             self._mark_attempt("discarded", f"Below anomaly threshold: {', '.join(anomalies)}; immediate retry selected")
             first_started_at = datetime.now(timezone.utc).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
+                UTC_ISO_FORMAT
             )
             print(
                 f"[collector] {first_started_at} "
@@ -151,7 +152,7 @@ class Collector:
             except Exception as exc:
                 return self._save_measurement_failure(slot, connectivity, exc)
             retry_started_at = datetime.now(timezone.utc).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
+                UTC_ISO_FORMAT
             )
             print(
                 f"[collector] {retry_started_at} retry selected as representative "
@@ -232,7 +233,7 @@ class Collector:
 
     def _execute_speedtest(self):
         """Dispatch one measurement using the configured runner."""
-        self._attempt_started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self._attempt_started_at = datetime.now(timezone.utc).strftime(UTC_ISO_FORMAT)
         try:
             result = self._dispatch_speedtest()
         except Exception as exc:
@@ -258,7 +259,7 @@ class Collector:
         record = getattr(self.store, "add_attempt", None)
         if record and self._current_slot:
             self._last_attempt_id = record(self._current_slot["id"], self._attempt_started_at,
-                datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), outcome, reason, metrics)
+                datetime.now(timezone.utc).strftime(UTC_ISO_FORMAT), outcome, reason, metrics)
 
     def _mark_attempt(self, outcome: str, reason: str) -> None:
         mark = getattr(self.store, "mark_attempt", None)
@@ -375,7 +376,7 @@ class Collector:
         exc: Exception,
     ) -> Sample:
         cause = self._classify_failure(exc)
-        started_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        started_at = datetime.now(timezone.utc).strftime(UTC_ISO_FORMAT)
         print(
             f"[collector] {started_at} FAILURE cause={cause}: {exc}",
             flush=True,
@@ -397,7 +398,7 @@ class Collector:
         note: Optional[str] = None,
         classification_confidence: Optional[str] = None,
     ) -> Sample:
-        started_at = self._attempt_started_at or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        started_at = self._attempt_started_at or datetime.now(timezone.utc).strftime(UTC_ISO_FORMAT)
         failure_note = note or json.dumps(snapshot.evidence, sort_keys=True)
         sample = Sample(
             started_at=started_at,
@@ -446,37 +447,49 @@ class Collector:
         except Exception as exc:  # pragma: no cover - defensive operational path
             print(f"[collector] heartbeat unavailable: {exc}", flush=True)
 
+    def _alert_for_sample(self, sample: Sample) -> tuple[Optional[str], str, str]:
+        """Return the alert kind, severity and message for one sample."""
+        if sample.is_failure and sample.failure_origin == "OPERATOR":
+            return (
+                "operator_outage",
+                "critical",
+                "Três falhas externas consecutivas indicam provável indisponibilidade da operadora.",
+            )
+        if sample.is_failure:
+            return None, "warning", ""
+        contracted = sample.bandwidth_contracted_mbps
+        if not (contracted and contracted > 0 and sample.download_mbps is not None):
+            return None, "warning", ""
+        threshold = getattr(self.settings, "alert_speed_threshold_pct", 80.0)
+        delivery = sample.download_mbps / contracted * 100
+        if delivery >= threshold:
+            return None, "warning", ""
+        message = (
+            f"Download abaixo do limite configurado: {sample.download_mbps:.2f} Mbps "
+            f"({delivery:.1f}% do contrato de {contracted:.2f} Mbps)."
+        )
+        return "speed_degraded", "warning", message
+
+    def _transition_alerts(self, sample: Sample, sample_id: Optional[int], kind: Optional[str]) -> None:
+        """Apply alert state transitions for the current sample."""
+        transition = getattr(self.store, 'transition_alert_state', None)
+        if not transition:
+            return
+        if kind:
+            transition(kind, True)
+        if sample.is_failure:
+            return
+        for incident, resolved in (('operator_outage', True), ('speed_degraded', kind != 'speed_degraded')):
+            if resolved:
+                transition(incident, False, sample_id, {'started_at': sample.started_at})
+
     def _evaluate_alerts(self, sample: Sample, sample_id: Optional[int]) -> None:
         """Persist actionable alerts and optionally deliver them to a webhook."""
         add_alert = getattr(self.store, "add_alert", None)
         if add_alert is None:
             return
-        kind = None
-        severity = "warning"
-        message = ""
-        if sample.is_failure and sample.failure_origin == "OPERATOR":
-            kind = "operator_outage"
-            severity = "critical"
-            message = "Três falhas externas consecutivas indicam provável indisponibilidade da operadora."
-        elif not sample.is_failure:
-            contracted = sample.bandwidth_contracted_mbps
-            if contracted and contracted > 0 and sample.download_mbps is not None:
-                threshold = getattr(self.settings, "alert_speed_threshold_pct", 80.0)
-                delivery = sample.download_mbps / contracted * 100
-                if delivery < threshold:
-                    kind = "speed_degraded"
-                    message = (
-                        f"Download abaixo do limite configurado: {sample.download_mbps:.2f} Mbps "
-                        f"({delivery:.1f}% do contrato de {contracted:.2f} Mbps)."
-                    )
-        transition = getattr(self.store, 'transition_alert_state', None)
-        if transition:
-            if kind:
-                transition(kind, True)
-            if not sample.is_failure:
-                for incident, resolved in (('operator_outage', True), ('speed_degraded', kind != 'speed_degraded')):
-                    if resolved:
-                        transition(incident, False, sample_id, {'started_at': sample.started_at})
+        kind, severity, message = self._alert_for_sample(sample)
+        self._transition_alerts(sample, sample_id, kind)
         if not kind:
             return
         alert_id = add_alert(
@@ -540,7 +553,7 @@ class Collector:
         )
         day = local_day.isoformat()
         if day not in self._reconciled_days:
-            cutoff = (datetime.now(timezone.utc) + timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            cutoff = (datetime.now(timezone.utc) + timedelta(seconds=60)).strftime(UTC_ISO_FORMAT)
             if self.store.has_legacy_future_slots(day, cutoff, DEFAULT_SCHEDULE_SEED):
                 alternatives = [planned]
                 for attempt in range(1, 64):
@@ -554,6 +567,57 @@ class Collector:
                 if moved:
                     print(f"[collector] rescheduled {moved} future legacy slot(s) independently", flush=True)
             self._reconciled_days.add(day)
+
+    def _dispatch_alerts(self, stop: Event) -> None:
+        """Deliver due alerts until the collector stops."""
+        try:
+            while not stop.is_set():
+                try:
+                    deliver_due(self.store, self.settings.alert_webhook_url)
+                except Exception as exc:
+                    print(f"[collector] alert dispatcher unavailable: {type(exc).__name__}", flush=True)
+                stop.wait(5)
+        finally:
+            self.store.close()
+
+    def _process_due_slots(self, now) -> bool:
+        """Recover stale leases and execute every due slot."""
+        self.store.recover_stale_slots(now.strftime(UTC_ISO_FORMAT),
+            lease_seconds=getattr(self.settings, "slot_lease_seconds", 300),
+            late_tolerance_seconds=self.settings.scheduler_late_tolerance_seconds)
+        cutoff = now - timedelta(
+            seconds=self.settings.scheduler_late_tolerance_seconds
+        )
+        self.store.mark_overdue_slots(
+            cutoff.strftime(UTC_ISO_FORMAT)
+        )
+        due = self.store.due_slots(now.strftime(UTC_ISO_FORMAT))
+        if not due:
+            return False
+        for slot in due:
+            if self._stop:
+                break
+            if not self.store.claim_slot(slot["id"]):
+                continue
+            self._heartbeat(
+                "measuring",
+                {"runner": self.settings.speedtest_runner, "slot_id": slot["id"]},
+                force=True,
+            )
+            with self._keep_measurement_alive(slot["id"]):
+                sample = self._run_single(slot)
+            # add_sample commits the representative row and terminal
+            # slot state in one transaction, including failure results.
+            self._heartbeat(
+                "idle",
+                {
+                    "runner": self.settings.speedtest_runner,
+                    "last_slot_id": slot["id"],
+                    "last_measurement_at": sample.started_at if sample else None,
+                },
+                force=True,
+            )
+        return True
 
     def run_forever(self) -> None:
         """Maintain the daily plan and process due slots until stopped."""
@@ -572,61 +636,15 @@ class Collector:
         )
         start_observation(self.store, self.settings)
         dispatcher_stop = Event()
-        def dispatch_alerts():
-            try:
-                while not dispatcher_stop.is_set():
-                    try:
-                        deliver_due(self.store, self.settings.alert_webhook_url)
-                    except Exception as exc:
-                        print(f"[collector] alert dispatcher unavailable: {type(exc).__name__}", flush=True)
-                    dispatcher_stop.wait(5)
-            finally:
-                self.store.close()
-        dispatcher = Thread(target=dispatch_alerts, daemon=True)
+        dispatcher = Thread(target=self._dispatch_alerts, args=(dispatcher_stop,), daemon=True)
         dispatcher.start()
         while not self._stop:
             now = datetime.now(timezone.utc)
             today = local_date_now(self.settings.timezone, now)
             self._ensure_schedule(today)
             self._ensure_schedule(today + timedelta(days=1))
-
-            self.store.recover_stale_slots(now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                lease_seconds=getattr(self.settings, "slot_lease_seconds", 300),
-                late_tolerance_seconds=self.settings.scheduler_late_tolerance_seconds)
-
-            cutoff = now - timedelta(
-                seconds=self.settings.scheduler_late_tolerance_seconds
-            )
-            self.store.mark_overdue_slots(
-                cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
-            )
-            due = self.store.due_slots(now.strftime("%Y-%m-%dT%H:%M:%SZ"))
-            if due:
-                for slot in due:
-                    if self._stop:
-                        break
-                    if not self.store.claim_slot(slot["id"]):
-                        continue
-                    self._heartbeat(
-                        "measuring",
-                        {"runner": self.settings.speedtest_runner, "slot_id": slot["id"]},
-                        force=True,
-                    )
-                    with self._keep_measurement_alive(slot["id"]):
-                        sample = self._run_single(slot)
-                    # add_sample commits the representative row and terminal
-                    # slot state in one transaction, including failure results.
-                    self._heartbeat(
-                        "idle",
-                        {
-                            "runner": self.settings.speedtest_runner,
-                            "last_slot_id": slot["id"],
-                            "last_measurement_at": sample.started_at if sample else None,
-                        },
-                        force=True,
-                    )
+            if self._process_due_slots(now):
                 continue
-
             # Poll frequently enough to start a slot close to its planned time.
             self._heartbeat("idle", {"runner": self.settings.speedtest_runner})
             time.sleep(5)

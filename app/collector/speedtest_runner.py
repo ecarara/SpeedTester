@@ -50,6 +50,8 @@ MIN_STABLE_MEASUREMENTS = 6
 # finishes, so we never need more than five concurrent downloads.
 CHUNK_SIZE = 64 * 1024
 CONCURRENT_CONNECTIONS = 5
+FAST_COM_HOST = "fast.com"
+RTT_TIMEOUT_SECONDS = 2.0
 
 
 @dataclass
@@ -126,6 +128,7 @@ def run_speedtest(
         A :class:`SpeedTestResult` with speeds in Mbps (Megabits per second).
     """
     t0 = time.monotonic()
+    del share, server_ids
 
     loop = asyncio.new_event_loop()
     try:
@@ -197,7 +200,7 @@ async def _run_async(
         )
 
     # --- ping --------------------------------------------------------------
-    network = await asyncio.to_thread(measure_ping, "fast.com")
+    network = await asyncio.to_thread(measure_ping, FAST_COM_HOST)
     if network.ping_ms is None:
         # ICMP is commonly filtered on public endpoints; keep the existing
         # TCP/HTTPS fallback so fast.com still reports a useful latency.
@@ -235,7 +238,7 @@ async def _run_async(
         "packet_loss_pct": packet_loss_pct,
         "tcp_retransmits": None,
         "server_id": None,
-        "server_name": "fast.com",
+        "server_name": FAST_COM_HOST,
         "country": identity.get("country"),
         "isp": identity.get("isp") or isp,
         "city": identity.get("city"),
@@ -280,6 +283,54 @@ async def _get_urls(
     return [entry["url"] for entry in data]
 
 
+def _current_speed(moving_total: int, moving_start: float) -> float:
+    elapsed = max(time.monotonic() - moving_start, 1e-6)
+    return (moving_total / elapsed) * 8.0 / 1e6  # bytes/s -> Mbps
+
+
+def _record_sample(measurements: list[float], deltas: list[float],
+                   moving_total: int, moving_start: float) -> None:
+    speed = _current_speed(moving_total, moving_start)
+    measurements.append(speed)
+    if len(measurements) > 10:
+        measurements.pop(0)
+    if len(measurements) > 1:
+        prev = measurements[-2]
+        if prev > 0:
+            deltas.append(abs(speed - prev) / prev * 100.0)
+            if len(deltas) > 10:
+                deltas.pop(0)
+
+
+def _is_stabilized(deltas: list[float], start: float, duration_seconds: int) -> bool:
+    return (
+        len(deltas) >= 2
+        and (time.monotonic() - start) > min(float(duration_seconds), MIN_DURATION)
+        and max(deltas) < STABILITY_DELTA
+    )
+
+
+async def _pump_round(session, connections, direction, max_bytes, deadline) -> int:
+    moved_this_round = [0]
+    await asyncio.gather(
+        *[
+            _pump_one(session, conn, direction, max_bytes, moved_this_round, deadline)
+            for _url, conn in connections
+        ]
+    )
+    return moved_this_round[0]
+
+
+async def _refresh_connections(connections, direction, session, max_bytes):
+    refreshed = []
+    for url, conn in connections:
+        if conn._exhausted:
+            await _release(conn)
+            conn = await _open_connection(url, direction, session, max_bytes)
+        refreshed.append((url, conn))
+    return refreshed
+
+
 async def _measure_speed(
     session: "aiohttp.ClientSession",
     urls: list[str],
@@ -320,57 +371,20 @@ async def _measure_speed(
     measurements: list[float] = []
     deltas: list[float] = []
 
-    def _current_speed() -> float:
-        elapsed = max(time.monotonic() - moving_start, 1e-6)
-        return (moving_total / elapsed) * 8.0 / 1e6  # bytes/s -> Mbps
-
-    def _sample() -> None:
-        nonlocal moving_total
-        speed = _current_speed()
-        measurements.append(speed)
-        if len(measurements) > 10:
-            measurements.pop(0)
-        if len(measurements) > 1:
-            prev = measurements[-2]
-            if prev > 0:
-                deltas.append(abs(speed - prev) / prev * 100.0)
-                if len(deltas) > 10:
-                    deltas.pop(0)
-
-    def _stabilized() -> bool:
-        return (
-            len(deltas) >= 2
-            and (time.monotonic() - start) > min(float(duration_seconds), MIN_DURATION)
-            and max(deltas) < STABILITY_DELTA
-        )
-
     # Pump every stream concurrently, feeding a shared moving window. Each
     # stream pumps until the wall-clock deadline (enforced by the session
     # timeout) or its payload is exhausted, so liveness is tracked by the
     # session timeout rather than per-connection completion.
     try:
         while time.monotonic() < phase_deadline:
-            moved_this_round = [0]
-            await asyncio.gather(
-                *[
-                    _pump_one(session, conn, direction, max_bytes, moved_this_round, phase_deadline)
-                    for _url, conn in connections
-                ]
-            )
-            moving_total += moved_this_round[0]
-            _sample()
-            if _stabilized():
+            moving_total += await _pump_round(session, connections, direction, max_bytes, phase_deadline)
+            _record_sample(measurements, deltas, moving_total, moving_start)
+            if _is_stabilized(deltas, start, duration_seconds):
                 break
             # fast.com may finish a finite CDN response before the phase ends.
             # Replace that response so the next round still measures network
             # traffic instead of repeatedly polling an EOF StreamReader.
-            refreshed = []
-            for url, conn in connections:
-                if conn._exhausted:
-                    await _release(conn)
-                    conn = await _open_connection(url, direction, session, max_bytes)
-                refreshed.append((url, conn))
-            connections = refreshed
+            connections = await _refresh_connections(connections, direction, session, max_bytes)
             await asyncio.sleep(0.2)
     finally:
         # Ensure all streams are released even on early stop.
@@ -379,7 +393,7 @@ async def _measure_speed(
             return_exceptions=True,
         )
 
-    return _current_speed()
+    return _current_speed(moving_total, moving_start)
 
 
 async def _open_connection(url, direction, session, max_bytes):
@@ -405,6 +419,7 @@ async def _release(conn):
 
 
 async def _pump_one(session, conn, direction, max_bytes, moved_sink, deadline):
+    del session
     moved = await _pump(conn, direction, max_bytes, deadline)
     moved_sink[0] += moved
 
@@ -422,6 +437,7 @@ async def _pump(
     The download path drains the stream in 64 KiB chunks (mirroring fast.com).
     Upload is measured separately by completed POST requests.
     """
+    del max_bytes
     moved = 0
     if conn._exhausted:
         return 0
@@ -527,7 +543,7 @@ class _ConnTracker:
 
 
 async def _measure_ping(
-    timeout: float = 2.0, attempts: int = 10
+    attempts: int = 10
 ) -> tuple[Optional[float], Optional[float]]:
     """Round-trip time to fast.com using raw sockets.
 
@@ -537,10 +553,11 @@ async def _measure_ping(
     (median) and jitter (mean absolute deviation between consecutive RTTs).
     """
     rtts: list[float] = []
-    host = "fast.com"
+    host = FAST_COM_HOST
     for _ in range(attempts):
         try:
-            rtts.append(await _one_rtt(host, timeout))
+            async with asyncio.timeout(RTT_TIMEOUT_SECONDS):
+                rtts.append(await _one_rtt(host))
         except Exception:
             continue
     if not rtts:
@@ -554,7 +571,7 @@ async def _measure_ping(
     return ping, jitter
 
 
-async def _one_rtt(host: str, timeout: float) -> float:
+async def _one_rtt(host: str) -> float:
     """Time TLS connection and the first response byte within a total budget."""
     writer = None
     start = time.perf_counter()
@@ -562,7 +579,7 @@ async def _one_rtt(host: str, timeout: float) -> float:
         context = ssl.create_default_context()
         context.check_hostname = True
         context.verify_mode = ssl.CERT_REQUIRED
-        async with asyncio.timeout(timeout):
+        async with asyncio.timeout(RTT_TIMEOUT_SECONDS):
             reader, writer = await asyncio.open_connection(
                 host, 443, ssl=context, server_hostname=host)
             writer.write(b"GET / HTTP/1.1\r\nHost: fast.com\r\nConnection: close\r\n\r\n")
@@ -574,7 +591,7 @@ async def _one_rtt(host: str, timeout: float) -> float:
         if writer is not None:
             writer.close()
             try:
-                async with asyncio.timeout(min(timeout, 1.0)):
+                async with asyncio.timeout(1.0):
                     await writer.wait_closed()
             except OSError:
                 pass

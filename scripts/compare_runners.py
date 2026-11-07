@@ -11,7 +11,7 @@ import sys
 from dataclasses import asdict
 from datetime import datetime, timezone
 
-from collector.runner_dispatch import RUNNER_NAMES, run_named_runner
+from collector.runner_dispatch import Iperf3Target, RUNNER_NAMES, run_named_runner
 from shared.settings import load_settings
 
 
@@ -50,8 +50,10 @@ def main() -> int:
                 isp_lookup_enabled=settings.isp_lookup_enabled,
                 isp_lookup_timeout_seconds=settings.isp_lookup_timeout_seconds,
                 ookla_binary=settings.ookla_binary,
-                iperf3_server=args.iperf3_server or settings.iperf3_server,
-                iperf3_port=args.iperf3_port or settings.iperf3_port,
+                iperf3_target=Iperf3Target(
+                    server=args.iperf3_server or settings.iperf3_server,
+                    port=args.iperf3_port or settings.iperf3_port,
+                ),
                 iperf3_duration_seconds=settings.iperf3_duration_seconds,
                 iperf3_parallel_streams=settings.iperf3_parallel_streams,
                 measurement_timeout_seconds=settings.measurement_timeout_seconds,

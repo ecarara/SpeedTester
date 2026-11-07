@@ -150,13 +150,17 @@ class FastTests(unittest.IsolatedAsyncioTestCase):
         reader=SimpleNamespace(read=AsyncMock(return_value=b'H'))
         writer=MagicMock();writer.drain=AsyncMock();writer.wait_closed=AsyncMock()
         with patch.object(fast.asyncio,'open_connection',AsyncMock(return_value=(reader,writer))) as connect:
-            self.assertGreaterEqual(await fast._one_rtt('example.com',1),0)
+            self.assertGreaterEqual(await fast._one_rtt('example.com'),0)
             self.assertTrue(connect.call_args.kwargs['ssl'].check_hostname)
             self.assertEqual(connect.call_args.kwargs['ssl'].verify_mode,fast.ssl.CERT_REQUIRED)
             reader.read.assert_awaited_with(1)
             reader.read.return_value=b''
-            with self.assertRaises(OSError):await fast._one_rtt('example.com',1)
+            with self.assertRaises(OSError):await fast._one_rtt('example.com')
             writer.close.assert_called()
         async def hung(*args,**kwargs):await asyncio.sleep(10)
         with patch.object(fast.asyncio,'open_connection',side_effect=hung):
-            with self.assertRaises(TimeoutError):await fast._one_rtt('example.com',.01)
+            async def probe_with_short_timeout():
+                async with asyncio.timeout(.01):
+                    await fast._one_rtt('example.com')
+            with self.assertRaises(TimeoutError):
+                await probe_with_short_timeout()

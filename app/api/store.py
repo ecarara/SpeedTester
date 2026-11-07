@@ -57,6 +57,9 @@ from speedtester_protocol.quadrants import MIN_SLOT_GAP_SECONDS
 SCHEMA_VERSION = 12
 WRITE_TRANSACTION = "BEGIN IMMEDIATE"
 LEGACY_SCHEDULE_SEPARATION_SECONDS = 10 * 60
+UTC_ISO_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+PAGINATION_SQL = " LIMIT ? OFFSET ?"
+SQL_AND = " AND "
 
 DB_SCHEMA = """
 CREATE TABLE IF NOT EXISTS auth_sessions (
@@ -336,7 +339,7 @@ def _utcnow() -> float:
 
 
 def _utc_from_epoch(ts: float) -> str:
-    return datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.fromtimestamp(ts, timezone.utc).strftime(UTC_ISO_FORMAT)
 
 
 class SampleStore:
@@ -524,8 +527,8 @@ class SampleStore:
                             late_tolerance_seconds: int = 900) -> int:
         """Recover expired execution leases without replacing saved measurements."""
         now = datetime.fromisoformat(now_utc.replace("Z", "+00:00"))
-        cutoff = (now - timedelta(seconds=lease_seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        late = (now - timedelta(seconds=late_tolerance_seconds)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        cutoff = (now - timedelta(seconds=lease_seconds)).strftime(UTC_ISO_FORMAT)
+        late = (now - timedelta(seconds=late_tolerance_seconds)).strftime(UTC_ISO_FORMAT)
         recovered = 0
         with self._connection() as conn:
             conn.execute(WRITE_TRANSACTION)
@@ -917,7 +920,7 @@ class SampleStore:
             query = "SELECT * FROM samples ORDER BY started_at ASC, id ASC"
             params: tuple[int, ...] = ()
             if limit is not None:
-                query += " LIMIT ? OFFSET ?"
+                query += PAGINATION_SQL
                 params = (limit, offset)
             rows = conn.execute(query, params).fetchall()
         return [dict(r) for r in rows]
@@ -947,25 +950,25 @@ class SampleStore:
                 local_values.append(start)
                 utc_start = datetime.fromisoformat(start).replace(tzinfo=zone).astimezone(timezone.utc)
                 legacy_parts.append("started_at >= ?")
-                legacy_values.append(utc_start.strftime("%Y-%m-%dT%H:%M:%SZ"))
+                legacy_values.append(utc_start.strftime(UTC_ISO_FORMAT))
             if end:
                 local_parts.append("local_date <= ?")
                 local_values.append(end)
                 utc_end = (datetime.fromisoformat(end) + timedelta(days=1)).replace(tzinfo=zone).astimezone(timezone.utc)
                 legacy_parts.append("started_at < ?")
-                legacy_values.append(utc_end.strftime("%Y-%m-%dT%H:%M:%SZ"))
-            clauses.append("((" + " AND ".join(local_parts) + ") OR (local_date IS NULL AND " + " AND ".join(legacy_parts) + "))")
+                legacy_values.append(utc_end.strftime(UTC_ISO_FORMAT))
+            clauses.append("((" + SQL_AND.join(local_parts) + ") OR (local_date IS NULL AND " + SQL_AND.join(legacy_parts) + "))")
             values.extend(local_values + legacy_values)
         if since:
             clauses.append("started_at >= ?")
             values.append(since)
         query = "SELECT * FROM samples"
         if clauses:
-            query += " WHERE " + " AND ".join(clauses)
+            query += " WHERE " + SQL_AND.join(clauses)
         direction = "DESC" if descending else "ASC"
         query += f" ORDER BY started_at {direction}, id {direction}"
         if limit is not None:
-            query += " LIMIT ? OFFSET ?"
+            query += PAGINATION_SQL
             values.extend((max(1, min(int(limit), 5000)), max(0, int(offset))))
         with self._connection() as conn:
             rows = conn.execute(query, values).fetchall()
@@ -988,7 +991,7 @@ class SampleStore:
             query = "SELECT * FROM samples WHERE started_at >= ? ORDER BY started_at ASC"
             params: tuple = (started_at,)
             if limit is not None:
-                query += " LIMIT ? OFFSET ?"
+                query += PAGINATION_SQL
                 params += (limit, offset)
             rows = conn.execute(query, params).fetchall()
         return [dict(r) for r in rows]

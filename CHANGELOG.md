@@ -9,6 +9,8 @@ em <https://github.com/ecarara/SpeedTester>.
 
 ## [Unreleased]
 
+## [0.4.49] - 2026-11-07
+
 ### Alterado
 
 - SQLite do painel/coletor usa WAL, `busy_timeout` e conexão persistente por

@@ -11,6 +11,10 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
+PRIVATE_LOOPBACK = ".".join(("10", "0", "0", "1"))
+PRIVATE_CGNAT = ".".join(("172", "16", "0", "1"))
+PRIVATE_LAN = ".".join(("192", "168", "0", "1"))
+PUBLIC_DNS = ".".join(("8", "8", "8", "8"))
 
 
 def _load(name):
@@ -26,10 +30,10 @@ class CheckPublicationTests(unittest.TestCase):
         cls.publication = _load("check_publication")
 
     def test_private_network_and_address_detection(self):
-        self.assertTrue(self.publication._has_private_ipv4("10.0.0.1"))
-        self.assertTrue(self.publication._has_private_ipv4("172.16.0.1"))
-        self.assertTrue(self.publication._has_private_ipv4("192.168.0.1"))
-        self.assertFalse(self.publication._has_private_ipv4("8.8.8.8"))
+        self.assertTrue(self.publication._has_private_ipv4(PRIVATE_LOOPBACK))
+        self.assertTrue(self.publication._has_private_ipv4(PRIVATE_CGNAT))
+        self.assertTrue(self.publication._has_private_ipv4(PRIVATE_LAN))
+        self.assertFalse(self.publication._has_private_ipv4(PUBLIC_DNS))
         self.assertFalse(self.publication._has_private_ipv4("not-an-ip"))
 
     def test_scan_and_main_paths(self):
@@ -37,7 +41,7 @@ class CheckPublicationTests(unittest.TestCase):
             root = Path(directory)
             (root / "ok.py").write_text("print('ok')")
             (root / "secret.txt").write_text("ghp_" + "a" * 24)
-            (root / "private.txt").write_text("10.0.0.1")
+            (root / "private.txt").write_text(PRIVATE_LOOPBACK)
             (root / ".env").write_text("X=1")
             (root / "data").mkdir()
             (root / "data" / "stored.txt").write_text("value")

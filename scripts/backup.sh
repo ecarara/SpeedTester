@@ -29,6 +29,7 @@ source, destination = sys.argv[1:]
 with closing(sqlite3.connect(Path(source).resolve().as_uri() + "?mode=ro", uri=True)) as source_connection:
     with closing(sqlite3.connect(destination)) as destination_connection:
         source_connection.backup(destination_connection)
+        destination_connection.execute("PRAGMA journal_mode=DELETE").fetchone()
         result = destination_connection.execute("PRAGMA integrity_check").fetchone()[0]
         if result != "ok":
             raise SystemExit(f"Backup integrity check failed: {result}")

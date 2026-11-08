@@ -13,8 +13,9 @@ import tempfile
 from restore import restore
 
 
-def signature(path):
-    with closing(sqlite3.connect(path.resolve().as_uri() + '?mode=ro', uri=True)) as db:
+def signature(path, immutable=False):
+    suffix = '?mode=ro&immutable=1' if immutable else '?mode=ro'
+    with closing(sqlite3.connect(path.resolve().as_uri() + suffix, uri=True)) as db:
         if db.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
             raise ValueError('Backup integrity failed')
         tables = [row[0] for row in db.execute(
@@ -38,10 +39,10 @@ def signature(path):
 
 def check(source):
     source = Path(source)
-    expected = signature(source)
+    expected = signature(source, immutable=True)
     with tempfile.TemporaryDirectory(prefix='speedtester-recovery-') as temporary:
         target = Path(temporary) / 'restored.db'
-        restore(source, target)
+        restore(source, target, immutable=True)
         if signature(target) != expected:
             raise ValueError('Restored data differs from snapshot')
     return {'status': 'passed', 'rows': expected[0]['samples'],

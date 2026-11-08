@@ -11,13 +11,14 @@ import sqlite3
 import tempfile
 
 
-def restore(source: Path, destination: Path):
+def restore(source: Path, destination: Path, immutable: bool = False):
     source, destination = source.resolve(), destination.resolve()
     if source == destination:
         raise ValueError('Source and destination must differ')
     if any(Path(str(destination) + suffix).exists() for suffix in ('-wal', '-shm', '-journal')):
         raise ValueError('Database sidecars are present; stop all services before restoring')
-    with closing(sqlite3.connect(source.as_uri() + '?mode=ro', uri=True)) as origin:
+    suffix = '?mode=ro&immutable=1' if immutable else '?mode=ro'
+    with closing(sqlite3.connect(source.as_uri() + suffix, uri=True)) as origin:
         if origin.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
             raise ValueError('Source integrity check failed')
         if not origin.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='samples'").fetchone():
@@ -53,7 +54,7 @@ def main():
                         help='Confirm that API, collector, backup and other SQLite clients are stopped')
     args = parser.parse_args()
     try:
-        restore(args.source, args.destination)
+        restore(args.source, args.destination, immutable=True)
     except (OSError, ValueError, sqlite3.Error) as exc:
         parser.exit(1, f'restore failed: {exc}\n')
 

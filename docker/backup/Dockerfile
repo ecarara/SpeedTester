@@ -24,6 +24,7 @@ RUN tar -xzf /tmp/openssh.tar.gz -C /tmp \
 FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd5b0f48ed71090949dd7cb1d
 
 RUN apt-get update && apt-get upgrade -y \
+    && apt-get install -y --only-upgrade zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python -m pip uninstall -y setuptools wheel pip

@@ -2,18 +2,26 @@
 # Copyright (C) 2026 Edson Angelo Carara
 
 """Strict per-metric records; unavailable values never become zero."""
+
 from typing import Annotated, Literal
 from uuid import UUID
 from .profile_text import normalize_text
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-Identifier = Annotated[str, Field(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")]
+Identifier = Annotated[
+    str,
+    Field(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"),
+]
 Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 METRICS = {
-    "download": ("bit/s", 10**12, "higher"), "upload": ("bit/s", 10**12, "higher"),
-    "latency": ("us", 600_000_000, "lower"), "jitter": ("us", 600_000_000, "lower"),
-    "packet_loss": ("ppm", 1_000_000, "lower"), "duration": ("ms", 300_000, "context"),
-    "transfer": ("byte", 10**12, "context"), "tcp_retransmits": ("count", 10**9, "context"),
+    "download": ("bit/s", 10**12, "higher"),
+    "upload": ("bit/s", 10**12, "higher"),
+    "latency": ("us", 600_000_000, "lower"),
+    "jitter": ("us", 600_000_000, "lower"),
+    "packet_loss": ("ppm", 1_000_000, "lower"),
+    "duration": ("ms", 300_000, "context"),
+    "transfer": ("byte", 10**12, "context"),
+    "tcp_retransmits": ("count", 10**9, "context"),
 }
 REQUIRED_METRICS = frozenset(METRICS)
 
@@ -28,7 +36,9 @@ class Profile(StrictModel):
     country_code: str = Field(pattern=r"^[A-Z]{2}$")
     region: str = Field(max_length=80)
     city: str = Field(max_length=80)
-    access_type: Literal["fiber", "coaxial", "radio", "satellite", "cellular", "dsl", "other", "unknown"]
+    access_type: Literal[
+        "fiber", "coaxial", "radio", "satellite", "cellular", "dsl", "other", "unknown"
+    ]
     link_type: Literal["ethernet", "wifi"]
     contracted_download_bps: int | None = Field(default=None, gt=0, le=10**12)
     contracted_upload_bps: int | None = Field(default=None, gt=0, le=10**12)
@@ -74,7 +84,16 @@ class Observation(StrictModel):
     protocol_version: Literal["1"] = "1"
     observation_id: Identifier
     attempt_id: Identifier
-    metric: Literal["download", "upload", "latency", "jitter", "packet_loss", "duration", "transfer", "tcp_retransmits"]
+    metric: Literal[
+        "download",
+        "upload",
+        "latency",
+        "jitter",
+        "packet_loss",
+        "duration",
+        "transfer",
+        "tcp_retransmits",
+    ]
     unit: str = Field(max_length=10)
     value: int | None = Field(ge=0, default=None)
     status: Literal["valid", "not-supported", "not-collected", "error"]
@@ -101,9 +120,14 @@ class Manifest(StrictModel):
     profile_digest: Digest
     legal_digest: Digest
     previous_receipt: Digest | None = None
-    client_version: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9._+-]+$")
-    build_revision: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._+-]+$")
+    client_version: str | None = Field(
+        default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9._+-]+$"
+    )
+    build_revision: str | None = Field(
+        default=None, min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._+-]+$"
+    )
     observations: dict[str, Digest]
+
     @field_validator("observations")
     @classmethod
     def complete_metrics(cls, value):
@@ -138,10 +162,11 @@ class Acceptance(StrictModel):
     privacy_read: Literal[True]
     contribute: Literal[True]
 
-    @field_validator("accept_terms","privacy_read","contribute",mode="before")
+    @field_validator("accept_terms", "privacy_read", "contribute", mode="before")
     @classmethod
-    def actual_checkbox(cls,value):
-        if type(value) is not bool or not value:raise ValueError("explicit true boolean required")
+    def actual_checkbox(cls, value):
+        if type(value) is not bool or not value:
+            raise ValueError("explicit true boolean required")
         return value
 
 
@@ -195,11 +220,19 @@ class PairingApproval(StrictModel):
 
 class SystemEnvironment(StrictModel):
     system: Literal["linux", "windows", "macos", "freebsd", "other"]
-    distribution: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[a-z0-9._-]+$")
-    version: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9._+-]+$")
+    distribution: str | None = Field(
+        default=None, min_length=1, max_length=64, pattern=r"^[a-z0-9._-]+$"
+    )
+    version: str | None = Field(
+        default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9._+-]+$"
+    )
     architecture: Literal["amd64", "arm64", "x86", "arm", "other"]
-    client_version: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9._+-]+$")
-    build_revision: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._+-]+$")
+    client_version: str | None = Field(
+        default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9._+-]+$"
+    )
+    build_revision: str | None = Field(
+        default=None, min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._+-]+$"
+    )
 
 
 class EnvironmentReport(StrictModel):
@@ -229,6 +262,7 @@ class MachineReport(StrictModel):
     @classmethod
     def valid_timezone(cls, value):
         from .central_slots import central_zone
+
         central_zone(value)
         return value
 

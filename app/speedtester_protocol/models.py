@@ -101,6 +101,8 @@ class Manifest(StrictModel):
     profile_digest: Digest
     legal_digest: Digest
     previous_receipt: Digest | None = None
+    client_version: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9._+-]+$")
+    build_revision: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._+-]+$")
     observations: dict[str, Digest]
     @field_validator("observations")
     @classmethod
@@ -196,6 +198,8 @@ class SystemEnvironment(StrictModel):
     distribution: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[a-z0-9._-]+$")
     version: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9._+-]+$")
     architecture: Literal["amd64", "arm64", "x86", "arm", "other"]
+    client_version: str | None = Field(default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9._+-]+$")
+    build_revision: str | None = Field(default=None, min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._+-]+$")
 
 
 class EnvironmentReport(StrictModel):

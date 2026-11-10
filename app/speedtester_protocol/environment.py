@@ -6,6 +6,7 @@ from uuid import uuid4
 from .models import SystemEnvironment,EnvironmentReport
 from .crypto import b64,public_bytes,digest,sign
 from .client import ProtocolError
+from .version import CLIENT_VERSION,BUILD_REVISION
 
 PENDING_SUFFIX = ":pending"
 
@@ -22,7 +23,8 @@ def collect_environment():
         if re.fullmatch(r"[a-z0-9._-]{1,64}",candidate):distribution=candidate
         candidate=release.get("VERSION_ID","")
         if re.fullmatch(r"[A-Za-z0-9._+-]{1,40}",candidate):version=candidate
-    return SystemEnvironment(system=system,distribution=distribution,version=version,architecture=architecture)
+    return SystemEnvironment(system=system,distribution=distribution,version=version,architecture=architecture,
+        client_version=CLIENT_VERSION,build_revision=BUILD_REVISION)
 
 
 def sync_environment(credentials,measurement_key):

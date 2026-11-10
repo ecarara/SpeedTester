@@ -12,6 +12,7 @@ from speedtester_protocol.models import CredentialBundle,EnvironmentReport,Envir
 from speedtester_protocol.enrollment import Credentials
 from speedtester_protocol.installation import protected_queue
 from speedtester_protocol.environment import collect_environment,sync_environment
+from speedtester_protocol.version import CLIENT_VERSION,BUILD_REVISION
 from speedtester_protocol.client import ProtocolError
 
 class EnvironmentContractTests(unittest.TestCase):
@@ -40,11 +41,12 @@ class EnvironmentContractTests(unittest.TestCase):
     def test_only_allowlisted_os_fields_are_collected_and_malformed_release_is_omitted(self):
         release={'ID':'test-linux','VERSION_ID':'44','PRETTY_NAME':'PRIVATE HOST','HOME_URL':'https://private.example','HOSTNAME':'PRIVATE HOST'}
         with patch('platform.system',return_value='Linux'),patch('platform.machine',return_value='x86_64'),patch('platform.freedesktop_os_release',return_value=release):
-            self.assertEqual(collect_environment().model_dump(),dict(system='linux',distribution='test-linux',version='44',architecture='amd64'))
+            self.assertEqual(collect_environment().model_dump(),dict(system='linux',distribution='test-linux',version='44',architecture='amd64',client_version=CLIENT_VERSION,build_revision=BUILD_REVISION))
         release={'ID':'contains spaces','VERSION_ID':'hostname\nsecret'}
         with patch('platform.system',return_value='Linux'),patch('platform.freedesktop_os_release',return_value=release):
             value=collect_environment();self.assertIsNone(value.distribution);self.assertIsNone(value.version)
         with self.assertRaises(ValidationError):SystemEnvironment(system='linux',architecture='amd64',hostname='PRIVATE')
+        with self.assertRaises(ValidationError):SystemEnvironment(system='linux',architecture='amd64',client_version='bad version')
 
     def test_unpaired_client_never_collects_or_sends_os_metadata(self):
         with patch('speedtester_protocol.environment.collect_environment') as collect:

@@ -8,6 +8,7 @@ from uuid import uuid4
 from .crypto import digest,sign
 from .models import Observation,Manifest,METRICS
 from .client import ProtocolError
+from .version import CLIENT_VERSION,BUILD_REVISION
 
 
 TERMINAL_ATTEMPT_CODES=frozenset({"start_expired","grant_expired","attempt_expired","legal_context_changed","test_target_changed","machine_identity_required","schedule_update_required"})
@@ -129,7 +130,8 @@ class CommunityAgent:
         # The signed grant carries the Server chain head, including lost receipts.
         previous=grant.previous_receipt
         manifest=Manifest(attempt_id=grant.attempt_id,nonce=grant.nonce,profile_digest=grant.profile_digest,
-                          legal_digest=grant.legal_digest,previous_receipt=previous,observations=checksums)
+                          legal_digest=grant.legal_digest,previous_receipt=previous,
+                          client_version=CLIENT_VERSION,build_revision=BUILD_REVISION,observations=checksums)
         records.append({"id":grant.attempt_id,"kind":"manifest","envelope":sign(manifest.model_dump(),self.key,"manifest-v1")})
         # All captured metrics and their manifest enter the encrypted queue atomically.
         self.queue.put_batch(records,self.destination,state_updates={self.destination+":grant_request":str(uuid4()),self.destination+":active_attempt":None})

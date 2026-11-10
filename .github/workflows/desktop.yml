@@ -52,7 +52,7 @@ jobs:
             $url = "https://repo.msys2.org/msys/x86_64/$name-x86_64.pkg.tar.zst"
             $file = Join-Path $env:RUNNER_TEMP "$name.pkg.tar.zst"
             Invoke-WebRequest -Uri $url -OutFile $file
-            & $tar --zstd -xf $file -C $root
+            & $tar --force-local --zstd -xf $file -C $root
           }
       - name: Native macOS OpenSSL
         if: runner.os == 'macOS'

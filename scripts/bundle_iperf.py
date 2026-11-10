@@ -122,7 +122,8 @@ def _copy_darwin_runtime(bundle, binary, tools, prefix):
     shutil.copy2(Path(prefix) / "LICENSE.txt", notice / "LICENSE.txt")
 
 
-def _copy_msys_dependencies(binary, tools, bash, msys, environment, crypto_dir):
+def _copy_msys_dependencies(binary, tools, bash, msys, environment, crypto_dir=None):
+    crypto_dir = crypto_dir or (msys / "usr/bin")
     pending = [binary]
     seen = set()
     while pending:

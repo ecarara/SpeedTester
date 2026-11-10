@@ -147,7 +147,10 @@ def _copy_msys_dependencies(binary, tools, bash, msys, environment, crypto_dir=N
             seen.add(name.lower())
             destination = tools / name
             if name.lower() != MSYS_RUNTIME_DLL:
-                shutil.copy2(crypto_dir / name, destination)
+                source = crypto_dir / name
+                if not source.exists():
+                    source = msys / "usr/bin" / name
+                shutil.copy2(source, destination)
             pending.append(destination)
 
 

@@ -122,7 +122,7 @@ def _copy_darwin_runtime(bundle, binary, tools, prefix):
     shutil.copy2(Path(prefix) / "LICENSE.txt", notice / "LICENSE.txt")
 
 
-def _copy_msys_dependencies(binary, tools, bash, msys, environment):
+def _copy_msys_dependencies(binary, tools, bash, msys, environment, crypto_dir):
     pending = [binary]
     seen = set()
     while pending:
@@ -140,19 +140,21 @@ def _copy_msys_dependencies(binary, tools, bash, msys, environment):
             if name.lower() not in (
                 MSYS_RUNTIME_DLL,
                 "msys-crypto-3.dll",
-                "msys-crypto-4.dll",
                 "msys-z.dll",
             ):
                 raise ValueError("Unexpected native dependency: " + name)
             seen.add(name.lower())
             destination = tools / name
             if name.lower() != MSYS_RUNTIME_DLL:
-                shutil.copy2(msys / "usr/bin" / name, destination)
+                shutil.copy2(crypto_dir / name, destination)
             pending.append(destination)
 
 
 def _copy_windows_runtime(bundle, binary, tools, pins, work, environment, version):
     msys = Path(environment["SPEEDTESTER_MSYS_ROOT"])
+    openssl_root = environment.get("SPEEDTESTER_OPENSSL_ROOT")
+    openssl_root = Path(openssl_root) if openssl_root else None
+    crypto_dir = openssl_root / "bin" if openssl_root else msys / "usr/bin"
     bash = msys / "usr/bin/bash.exe"
     # Compile ourselves; copy only known dependency DLLs from the official
     # package installation. The POSIX runtime itself is independently pinned.
@@ -168,14 +170,18 @@ def _copy_windows_runtime(bundle, binary, tools, pins, work, environment, versio
     )
     run([str(bash), "-lc", command], env=environment)
     shutil.copy2(extraction / "usr/bin/msys-2.0.dll", tools / MSYS_RUNTIME_DLL)
-    _copy_msys_dependencies(binary, tools, bash, msys, environment)
+    _copy_msys_dependencies(binary, tools, bash, msys, environment, crypto_dir)
     license_dir = bundle / "THIRD-PARTY-LICENSES/MSYS2"
     license_dir.mkdir(exist_ok=True)
     for item in (extraction / "usr/share/doc/Cygwin").iterdir():
         shutil.copy2(item, license_dir / item.name)
     notice = bundle / OPENSSL_NOTICES
     notice.mkdir(exist_ok=True)
-    candidates = list((msys / "usr/share/licenses").glob("*openssl*/LICENSE*"))
+    candidates = []
+    if openssl_root:
+        candidates = list((openssl_root / "share/licenses").glob("*openssl*/LICENSE*"))
+    if not candidates:
+        candidates = list((msys / "usr/share/licenses").glob("*openssl*/LICENSE*"))
     if not candidates:
         candidates = list((msys / "usr/share/doc/openssl").glob("LICENSE*"))
     if not candidates:
@@ -243,15 +249,19 @@ def build(bundle, version):
         bash = msys / "usr/bin/bash.exe"
         environment["MSYSTEM"] = "MSYS"
         environment["CHERE_INVOKING"] = "1"
+        openssl_prefix = environment.get("SPEEDTESTER_OPENSSL_PREFIX", "/usr")
         command = (
             "cd "
             + shlex.quote(source.as_posix())
-            + " && ac_cv_func_SetProcessAffinityMask=no LDFLAGS=-static-libgcc ./configure --disable-shared --enable-static --without-sctp --with-openssl=/usr && make -j2"
+            + " && ac_cv_func_SetProcessAffinityMask=no LDFLAGS=-static-libgcc ./configure --disable-shared --enable-static --without-sctp --with-openssl="
+            + openssl_prefix
+            + " && make -j2"
         )
         run([str(bash), "-lc", command], env=environment)
-        crypto_version = run(
-            [str(bash), "-lc", "openssl version"], env=environment
-        ).split()[1]
+        crypto_version = (
+            environment.get("SPEEDTESTER_OPENSSL_VERSION")
+            or run([str(bash), "-lc", "openssl version"], env=environment).split()[1]
+        )
     if system != "Windows":
         subprocess.run(configure, cwd=source, env=environment, check=True)
         subprocess.run(["make", "-j2"], cwd=source, env=environment, check=True)

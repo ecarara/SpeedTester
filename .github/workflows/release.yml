@@ -123,6 +123,18 @@ jobs:
           location: C:\speedtester-msys64
           update: true
           install: gcc make diffutils openssl-devel openssl pkgconf tar zstd
+      - name: Pin OpenSSL 3 for the bundled iPerf3
+        shell: pwsh
+        run: |
+          $root = 'C:\speedtester-openssl3'
+          New-Item -ItemType Directory -Force $root | Out-Null
+          $tar = Join-Path '${{ steps.msys2.outputs.msys2-location }}' 'usr\bin\tar.exe'
+          foreach ($name in @('libopenssl-3.6.5-1','openssl-3.6.5-1','openssl-devel-3.6.5-1')) {
+            $url = "https://repo.msys2.org/msys/x86_64/$name-x86_64.pkg.tar.zst"
+            $file = Join-Path $env:RUNNER_TEMP "$name.pkg.tar.zst"
+            Invoke-WebRequest -Uri $url -OutFile $file
+            & $tar --force-local --zstd -xf $file -C $root
+          }
       - name: Add Windows SDK packaging tools to PATH
         shell: pwsh
         run: |
@@ -137,6 +149,9 @@ jobs:
           MSIX_VERSION: ${{ needs.metadata.outputs.msix-version }}
           APP_VERSION: ${{ needs.metadata.outputs.version }}
           SPEEDTESTER_MSYS_ROOT: ${{ steps.msys2.outputs.msys2-location }}
+          SPEEDTESTER_OPENSSL_ROOT: C:\speedtester-openssl3\usr
+          SPEEDTESTER_OPENSSL_PREFIX: /c/speedtester-openssl3/usr
+          SPEEDTESTER_OPENSSL_VERSION: '3.6.5'
         shell: pwsh
         run: |
           ./packaging/windows/build-launchers.ps1 -OutputDirectory dist/windows

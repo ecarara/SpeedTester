@@ -24,23 +24,32 @@ sudo speedtester-agent enable
 
 O helper usa o helper nativo do bundle para instalar o runtime em
 `/opt/cararalab-speedtester-client`, criar/atualizar o serviço de sistema e
-preservar `/var/lib/cararalab-speedtester-client` (fila cifrada). Em seguida,
-abra “SpeedTester Client” no menu para parear e aceitar os documentos.
+preservar `/var/lib/cararalab-speedtester-client` (fila cifrada). Só nesse
+momento o atalho “SpeedTester Client” aparece no menu; abra-o para parear e
+aceitar os documentos. Antes do `enable` nada é instalado em `/opt`, nenhum
+serviço é habilitado e nenhum dado sai da máquina.
 
 ## Atualizações
 
 O `pacman -U` substitui o bundle em `/usr/lib/speedtester-agent`; o
-`post_upgrade` executa `speedtester-agent repair`, que atualiza `/opt` e
-reinicia o serviço **somente se o agente já estiver instalado**. Nenhuma
-atualização do app/coletor habilita o compartilhamento.
+`post_upgrade` executa `speedtester-agent repair` **somente se o agente já
+estiver instalado e não tiver sido desativado**, atualizando `/opt` e
+reiniciando o serviço. O reparo pausa as medições por segurança: reabra o app
+para retomar o compartilhamento. Nenhuma atualização do app/coletor habilita o
+agente.
 
 ## Desativar/remover
 
 ```bash
 sudo speedtester-agent disable   # para o compartilhamento; dados preservados
-sudo speedtester-agent remove    # remove runtime/serviço; dados preservados
+sudo speedtester-agent status    # estado do serviço
+sudo speedtester-agent remove    # remove runtime/serviço/atalho; dados preservados
 ```
 
+`disable` grava um marcador em `/var/lib/cararalab-speedtester-client/disabled`
+e uma atualização do pacote **não** reativa o agente nesse estado.
+
 A instalação manual antiga em `/opt` (preview de 16/10) é reconhecida pelo
-bootstrap existente; o primeiro `enable` faz a atualização para este bundle e
-mantém a fila/pareamento.
+bootstrap existente; o primeiro `enable` faz a atualização para este bundle,
+mantém a fila/pareamento e alinha o `control.json` do usuário à chave do
+serviço.

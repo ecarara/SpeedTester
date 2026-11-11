@@ -8,21 +8,21 @@ arch=('x86_64')
 url='https://github.com/ecarara/SpeedTester'
 license=('GPL-3.0-or-later')
 depends=('python' 'systemd' 'glibc')
+optdepends=('speedtester: ícone do menu e coletor local')
 install=speedtester-agent.install
+# Replace the bundle SKIP with the sha256 published next to the release asset
+# (SpeedTesterClient-<release>-linux-x86_64.tar.gz.sha256) whenever it changes.
 source=("SpeedTesterClient-${pkgver}-linux-x86_64.tar.gz::https://github.com/ecarara/SpeedTester/releases/download/v${pkgver}/SpeedTesterClient-${pkgver}-linux-x86_64.tar.gz"
         'speedtester-agent.py'
-        'speedtester-agent.desktop'
         'speedtester-agent.install')
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP')
 
 package() {
   install -dm755 "${pkgdir}/usr/lib/speedtester-agent"
   tar -xzf "${srcdir}/SpeedTesterClient-${pkgver}-linux-x86_64.tar.gz" \
     -C "${pkgdir}/usr/lib/speedtester-agent"
-  install -Dm755 "${srcdir}/speedtester-agent.py" \
-    "${pkgdir}/usr/bin/speedtester-agent"
-  install -Dm644 "${srcdir}/speedtester-agent.desktop" \
-    "${pkgdir}/usr/share/applications/speedtester-agent.desktop"
   install -Dm644 "${pkgdir}/usr/lib/speedtester-agent/SpeedTesterClient/LICENSE" \
     "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm755 "${srcdir}/speedtester-agent.py" \
+    "${pkgdir}/usr/bin/speedtester-agent"
 }

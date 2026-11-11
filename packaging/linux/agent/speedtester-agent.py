@@ -17,6 +17,25 @@ BINARY = BUNDLE / "SpeedTesterClient"
 STATE = Path("/var/lib/cararalab-speedtester-client")
 BOOTSTRAP = STATE / "service.json"
 SERVICE = "cararalab-speedtester-client.service"
+RUNTIME = Path("/opt/cararalab/speedtester-client/SpeedTesterClient")
+ENTRY = Path("/usr/share/applications/speedtester-client.desktop")
+
+
+def entry_text():
+    return (
+        "[Desktop Entry]\n"
+        "Version=1.0\n"
+        "Type=Application\n"
+        "Name=SpeedTester Client\n"
+        "GenericName=Cliente comunitário de medições\n"
+        "Comment=Compartilha medições agregadas com o SpeedTester Server\n"
+        "Exec=" + str(RUNTIME) + "\n"
+        "Icon=speedtester\n"
+        "Terminal=false\n"
+        "Categories=Network;Utility;\n"
+        "Keywords=banda larga;internet;velocidade;iperf3;\n"
+        "StartupNotify=true\n"
+    )
 
 
 def fail(message):
@@ -81,18 +100,22 @@ def write_user_control(key):
     os.chown(target, entry.pw_uid, entry.pw_gid)
 
 
-def enable(repair=False):
+def enable():
     require_root()
     existing = BOOTSTRAP.exists()
     key = bootstrap_key() if existing else secrets.token_hex(32)
-    operation = "repair" if existing or repair else "install"
+    operation = "repair" if existing else "install"
     code = invoke(operation, key)
     (STATE / "disabled").unlink(missing_ok=True)
     write_user_control(key)
+    if RUNTIME.is_file():
+        ENTRY.parent.mkdir(parents=True, exist_ok=True)
+        ENTRY.write_text(entry_text(), encoding="utf-8")
+        ENTRY.chmod(0o644)
     subprocess.run(["systemctl", "daemon-reload"], check=False)
     subprocess.run(["systemctl", "enable", "--now", SERVICE], check=False)
     active = subprocess.run(
-        ["systemctl", "is-active", SERVICE], capture_output=True, text=True
+        ["systemctl", "is-active", SERVICE], check=False, capture_output=True, text=True
     ).stdout.strip()
     print("speedtester-agent: " + operation + " concluído; serviço=" + active)
     if code == 10:
@@ -103,8 +126,9 @@ def enable(repair=False):
 def disable():
     require_root()
     subprocess.run(["systemctl", "disable", "--now", SERVICE], check=False)
-    STATE.mkdir(parents=True, exist_ok=True)
-    (STATE / "disabled").write_text("")
+    if BOOTSTRAP.exists():
+        STATE.mkdir(parents=True, exist_ok=True)
+        (STATE / "disabled").write_text("", encoding="utf-8")
     print("speedtester-agent: compartilhamento desativado; dados preservados")
     return 0
 
@@ -114,6 +138,7 @@ def remove():
     if BOOTSTRAP.exists():
         invoke("uninstall", bootstrap_key())
     subprocess.run(["systemctl", "disable", SERVICE], check=False)
+    ENTRY.unlink(missing_ok=True)
     print("speedtester-agent: runtime removido; dados preservados")
     return 0
 
@@ -130,7 +155,7 @@ def main():
         if command == "enable":
             return enable()
         if command == "repair":
-            return enable(repair=True)
+            return enable()
         if command == "disable":
             return disable()
         if command == "remove":
@@ -138,7 +163,7 @@ def main():
         if command == "status":
             return status()
         return fail("uso: speedtester-agent enable|repair|disable|remove|status")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - CLI boundary reports any failure
         return fail(str(exc))
 
 

@@ -9,6 +9,16 @@ em <https://github.com/ecarara/SpeedTester>.
 
 ## [Unreleased]
 
+## [0.4.52] - 2026-11-11
+
+### Adicionado
+
+- pacote opt-in `speedtester-agent` com o agente comunitário congelado e
+  helper nativo: instala/atualiza o runtime, preserva a fila e só é habilitado
+  quando o participante executa `speedtester-agent enable`;
+- o pacote `speedtester` continua sendo o app/coletor; atualizar o coletor não
+  habilita o compartilhamento com o Server.
+
 ## [0.4.51] - 2026-11-11
 
 ### Adicionado

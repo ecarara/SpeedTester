@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+pkgname=speedtester-agent
+pkgver=0.4.52
+pkgrel=1
+pkgdesc='Agente comunitário SpeedTester (opt-in, compartilhamento com o Server)'
+arch=('x86_64')
+url='https://github.com/ecarara/SpeedTester'
+license=('GPL-3.0-or-later')
+depends=('python' 'systemd' 'glibc')
+install=speedtester-agent.install
+source=("SpeedTesterClient-${pkgver}-linux-x86_64.tar.gz::https://github.com/ecarara/SpeedTester/releases/download/v${pkgver}/SpeedTesterClient-${pkgver}-linux-x86_64.tar.gz"
+        'speedtester-agent.py'
+        'speedtester-agent.desktop'
+        'speedtester-agent.install')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+package() {
+  install -dm755 "${pkgdir}/usr/lib/speedtester-agent"
+  tar -xzf "${srcdir}/SpeedTesterClient-${pkgver}-linux-x86_64.tar.gz" \
+    -C "${pkgdir}/usr/lib/speedtester-agent"
+  install -Dm755 "${srcdir}/speedtester-agent.py" \
+    "${pkgdir}/usr/bin/speedtester-agent"
+  install -Dm644 "${srcdir}/speedtester-agent.desktop" \
+    "${pkgdir}/usr/share/applications/speedtester-agent.desktop"
+  install -Dm644 "${pkgdir}/usr/lib/speedtester-agent/SpeedTesterClient/LICENSE" \
+    "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

@@ -60,6 +60,7 @@ class GrantRequest(StrictModel):
     profile: Profile
     runner: Literal["iperf3", "ookla", "fast"]
     schedule_slot: ScheduleSlot | None = None
+    target_id: str | None = Field(default=None, pattern=r"^central-[0-9a-f]{64}$")
 
 
 class Grant(StrictModel):

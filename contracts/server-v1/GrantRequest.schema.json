@@ -155,6 +155,19 @@
         }
       ],
       "default": null
+    },
+    "target_id": {
+      "anyOf": [
+        {
+          "pattern": "^central-[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target Id"
     }
   },
   "required": [

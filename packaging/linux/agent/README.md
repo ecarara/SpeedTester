@@ -13,8 +13,9 @@ makepkg -si
 ```
 
 O pacote baixa o bundle congelado `SpeedTesterClient-0.4.52-linux-x86_64.tar.gz`
-da release privada e instala o helper `speedtester-agent`. O serviço fica
-**desabilitado** até o opt-in.
+da release privada, confere o sha256 publicado ao lado do asset e instala o
+helper `speedtester-agent`. O serviço fica **desabilitado** até o opt-in; o
+próprio `pacman` imprime o comando de ativação no final da instalação.
 
 ## Opt-in
 

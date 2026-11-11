@@ -1,5 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
+post_install() {
+  printf '%s\n' \
+    "SpeedTester Agent instalado; nada foi compartilhado." \
+    "Para compartilhar medições com o Server: sudo speedtester-agent enable" \
+    "Para manter tudo desativado, não execute o comando acima."
+}
+
 post_upgrade() {
   if [ -f /var/lib/cararalab-speedtester-client/service.json ] && [ ! -f /var/lib/cararalab-speedtester-client/disabled ]; then
     /usr/bin/speedtester-agent repair || true

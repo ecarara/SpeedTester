@@ -68,6 +68,21 @@
       "default": null,
       "title": "Client Version"
     },
+    "release_version": {
+      "anyOf": [
+        {
+          "maxLength": 40,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._+-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Release Version"
+    },
     "build_revision": {
       "anyOf": [
         {

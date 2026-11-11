@@ -5,8 +5,9 @@
 import platform
 import re
 
-CLIENT_VERSION = "0.3.0.dev16"
+CLIENT_VERSION = "0.3.0.dev17"
 BUILD_REVISION = "source"
+RELEASE_VERSION = "0.4.51"
 
 
 def set_build_revision(value):
@@ -17,19 +18,21 @@ def set_build_revision(value):
 
 
 def build_label():
-    return CLIENT_VERSION + " · " + BUILD_REVISION[:12]
+    return RELEASE_VERSION + " · " + CLIENT_VERSION
 
 
 def diagnostic_text(service=None):
     lines = [
-        "SpeedTester Client " + CLIENT_VERSION,
+        "SpeedTester Client " + RELEASE_VERSION,
+        "Protocol: " + CLIENT_VERSION,
         "Build: " + BUILD_REVISION,
         "Platform: " + platform.system() + " / " + platform.machine(),
     ]
     if service:
         lines.extend(
             [
-                "Service: " + str(service.get("client_version", "unknown")),
+                "Service release: " + str(service.get("release_version", "unknown")),
+                "Service protocol: " + str(service.get("client_version", "unknown")),
                 "Service build: " + str(service.get("build_revision", "unknown")),
             ]
         )

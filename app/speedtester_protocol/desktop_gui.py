@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
 """Native graphical installer. All I/O runs off the Tk event loop."""
+
 import queue
 import threading
 import time
@@ -22,7 +23,13 @@ from .desktop_history import HistoryScreen
 ESCAPE_EVENT = "<Escape>"
 CONFIGURE_EVENT = "<Configure>"
 
-BACKGROUND, PAPER, INK, MUTED, ACCENT = "#f2f1e9", "#ffffff", "#112b2a", "#49615c", "#c1ef55"
+BACKGROUND, PAPER, INK, MUTED, ACCENT = (
+    "#f2f1e9",
+    "#ffffff",
+    "#112b2a",
+    "#49615c",
+    "#c1ef55",
+)
 
 
 class Installer(HistoryScreen, tk.Tk):
@@ -31,7 +38,11 @@ class Installer(HistoryScreen, tk.Tk):
         self.controller = controller
         self.locale, self.page, self.operation = "pt-BR", "welcome", "install"
         self.history_data = None
-        self.history_metric, self.history_days, self.history_delivery = "download", 7, "all"
+        self.history_metric, self.history_days, self.history_delivery = (
+            "download",
+            7,
+            "all",
+        )
         self.history_cursor, self.history_stack = None, []
         self.history_tab = 0
         self.form_locale = self.locale
@@ -46,20 +57,36 @@ class Installer(HistoryScreen, tk.Tk):
         self.minsize(960, 780)
         self.configure(bg=BACKGROUND)
         self.schedule_timezone = local_timezone()
-        self.fields = {key: tk.StringVar(value=value) for key, value in {
-            "origin": DEFAULT_SERVER, "operator": "", "country": "BR", "region": "", "city": "",
-            "contracted_download": "", "contracted_upload": ""}.items()}
+        self.fields = {
+            key: tk.StringVar(value=value)
+            for key, value in {
+                "origin": DEFAULT_SERVER,
+                "operator": "",
+                "country": "BR",
+                "region": "",
+                "city": "",
+                "contracted_download": "",
+                "contracted_upload": "",
+            }.items()
+        }
         # Preserve spaces/cursor while typing; collapse whitespace on validation.
         for field in ("operator", "country", "region", "city"):
             variable = self.fields[field]
-            variable.trace_add("write", lambda *_args, value=variable: self.uppercase_field(value))
+            variable.trace_add(
+                "write", lambda *_args, value=variable: self.uppercase_field(value)
+            )
         self.access, self.link = tk.StringVar(), tk.StringVar()
-        self.contribute, self.purge = tk.BooleanVar(value=False), tk.BooleanVar(value=False)
+        self.contribute, self.purge = (
+            tk.BooleanVar(value=False),
+            tk.BooleanVar(value=False),
+        )
         self.languages = tk.StringVar(value="Português")
         self.style = ttk.Style(self)
         self.style.theme_use("clam")
         self.style.configure("TEntry", padding=8, fieldbackground=PAPER, foreground=INK)
-        self.style.configure("TCombobox", padding=7, fieldbackground=PAPER, foreground=INK)
+        self.style.configure(
+            "TCombobox", padding=7, fieldbackground=PAPER, foreground=INK
+        )
         self.protocol("WM_DELETE_WINDOW", self.close)
         self.render()
         self.after(100, self.drain)
@@ -74,15 +101,45 @@ class Installer(HistoryScreen, tk.Tk):
     def t(self, key):
         return TEXT[self.locale][key]
 
-    def label(self, parent, text, *, size=12, color=INK, bold=False, width=None, background=None):
-        return tk.Label(parent, text=text, fg=color, bg=background or parent.cget("bg"),
-            font=("Helvetica", size, "bold" if bold else "normal"), justify="left", anchor="w",
-            wraplength=width or 660)
+    def label(
+        self,
+        parent,
+        text,
+        *,
+        size=12,
+        color=INK,
+        bold=False,
+        width=None,
+        background=None,
+    ):
+        return tk.Label(
+            parent,
+            text=text,
+            fg=color,
+            bg=background or parent.cget("bg"),
+            font=("Helvetica", size, "bold" if bold else "normal"),
+            justify="left",
+            anchor="w",
+            wraplength=width or 660,
+        )
 
     def button(self, parent, key, command, primary=False):
-        return tk.Button(parent, text=self.t(key), command=command, bg=ACCENT if primary else PAPER,
-            fg=INK, activebackground="#b1df47", activeforeground=INK, relief="flat", borderwidth=0,
-            padx=18, pady=12, font=("Helvetica", 12, "bold"), cursor="hand2", takefocus=True)
+        return tk.Button(
+            parent,
+            text=self.t(key),
+            command=command,
+            bg=ACCENT if primary else PAPER,
+            fg=INK,
+            activebackground="#b1df47",
+            activeforeground=INK,
+            relief="flat",
+            borderwidth=0,
+            padx=18,
+            pady=12,
+            font=("Helvetica", 12, "bold"),
+            cursor="hand2",
+            takefocus=True,
+        )
 
     def ask_confirmation(self, title_key, message_key):
         """Own translated buttons; native message boxes follow the OS locale."""
@@ -97,11 +154,13 @@ class Installer(HistoryScreen, tk.Tk):
         window.transient(self)
         window.resizable(False, False)
         answer = False
+
         def finish(value=False):
             nonlocal answer
             answer = value
             if window.winfo_exists():
                 window.destroy()
+
         window.protocol("WM_DELETE_WINDOW", finish)
         self.label(window, self.t(message_key), size=13, width=460).pack(fill="x")
         actions = tk.Frame(window, bg=BACKGROUND)
@@ -112,9 +171,11 @@ class Installer(HistoryScreen, tk.Tk):
         no.pack(side="right")
         no.configure(default="active")
         window.bind(ESCAPE_EVENT, lambda _event: finish())
+
         def enter(_event):
             finish(window.focus_get() == yes)
             return "break"
+
         window.bind("<Return>", enter)
         window.update_idletasks()
         width, height = window.winfo_reqwidth(), window.winfo_reqheight()
@@ -132,65 +193,145 @@ class Installer(HistoryScreen, tk.Tk):
             return self.t("not_recorded")
         from datetime import datetime
         from .central_slots import central_zone
-        zone = (self.snapshot.get("configuration") or {}).get("timezone", self.schedule_timezone)
+
+        zone = (self.snapshot.get("configuration") or {}).get(
+            "timezone", self.schedule_timezone
+        )
         try:
-            return datetime.fromtimestamp(value, central_zone(zone)).strftime("%Y-%m-%d %H:%M:%S")
+            return datetime.fromtimestamp(value, central_zone(zone)).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
         except (ValueError, KeyError, OverflowError, OSError):
             return self.t("not_recorded")
 
     def render(self):
         for widget in self.winfo_children():
             widget.destroy()
-        self.title(self.t("title")+" — "+CLIENT_VERSION)
+        self.title(self.t("title") + " — " + build_label())
         rail = tk.Frame(self, bg=INK, width=245)
         rail.pack(side="left", fill="y")
         rail.pack_propagate(False)
-        self.label(rail, "CARARALAB", color=ACCENT, bold=True, size=13).pack(anchor="w", padx=25, pady=(36, 0))
-        tk.Label(rail, text="SPEED\nTESTER", fg=PAPER, bg=INK, font=("Georgia", 30, "bold"),
-            justify="left", anchor="w").pack(anchor="w", padx=24, pady=(18, 24))
-        self.label(rail, self.t("tagline"), color="#c5d6cf", size=15, width=200).pack(anchor="w", padx=25)
+        self.label(rail, "CARARALAB", color=ACCENT, bold=True, size=13).pack(
+            anchor="w", padx=25, pady=(36, 0)
+        )
+        tk.Label(
+            rail,
+            text="SPEED\nTESTER",
+            fg=PAPER,
+            bg=INK,
+            font=("Georgia", 30, "bold"),
+            justify="left",
+            anchor="w",
+        ).pack(anchor="w", padx=24, pady=(18, 24))
+        self.label(rail, self.t("tagline"), color="#c5d6cf", size=15, width=200).pack(
+            anchor="w", padx=25
+        )
         tk.Frame(rail, bg="#36504a", height=1).pack(fill="x", padx=25, pady=32)
-        self.label(rail, self.t("navigation"), color="#94b6a7", size=9, width=200).pack(anchor="w", padx=25)
+        self.label(rail, self.t("navigation"), color="#94b6a7", size=9, width=200).pack(
+            anchor="w", padx=25
+        )
         for number, key in (("01", "install"), ("02", "repair"), ("03", "uninstall")):
-            self.label(rail, number + "   " + self.t(key), color=PAPER, size=11, width=205).pack(anchor="w", padx=25, pady=(18, 0))
-        for key, command in (("status", self.load_status), ("history", self.open_history)):
+            self.label(
+                rail, number + "   " + self.t(key), color=PAPER, size=11, width=205
+            ).pack(anchor="w", padx=25, pady=(18, 0))
+        for key, command in (
+            ("status", self.load_status),
+            ("history", self.open_history),
+        ):
             navigation = self.button(rail, key, command)
-            navigation.configure(bg=INK, fg=ACCENT if self.page == key else PAPER, font=("Helvetica",11,"bold"), padx=10, pady=9)
-            navigation.pack(fill="x",padx=15,pady=(8,0))
-        self.label(rail, self.t("footer")+"\n"+build_label(), color="#94b6a7", size=10, width=200).pack(side="bottom", anchor="w", padx=25, pady=25)
+            navigation.configure(
+                bg=INK,
+                fg=ACCENT if self.page == key else PAPER,
+                font=("Helvetica", 11, "bold"),
+                padx=10,
+                pady=9,
+            )
+            navigation.pack(fill="x", padx=15, pady=(8, 0))
+        self.label(
+            rail,
+            self.t("footer") + "\n" + build_label(),
+            color="#94b6a7",
+            size=10,
+            width=200,
+        ).pack(side="bottom", anchor="w", padx=25, pady=25)
         shell = tk.Frame(self, bg=BACKGROUND)
         shell.pack(side="left", fill="both", expand=True, padx=30, pady=24)
         header = tk.Frame(shell, bg=BACKGROUND)
         header.pack(fill="x")
-        self.label(header, self.t("language"), size=10, color=MUTED).pack(side="right", padx=10)
-        choice = ttk.Combobox(header, values=list(LANGUAGES), textvariable=self.languages, state="readonly", width=13)
+        self.label(header, self.t("language"), size=10, color=MUTED).pack(
+            side="right", padx=10
+        )
+        choice = ttk.Combobox(
+            header,
+            values=list(LANGUAGES),
+            textvariable=self.languages,
+            state="readonly",
+            width=13,
+        )
         choice.pack(side="right")
         choice.bind("<<ComboboxSelected>>", self.change_language)
         banner = "preview" if self.controller.preview else "experimental"
-        self.label(shell, self.t(banner), size=10, color="#705016", width=680).pack(anchor="w", pady=(18, 0))
+        self.label(shell, self.t(banner), size=10, color="#705016", width=680).pack(
+            anchor="w", pady=(18, 0)
+        )
         self.content = tk.Frame(shell, bg=BACKGROUND)
         self.content.pack(fill="both", expand=True, pady=(14, 0))
         getattr(self, "page_" + self.page)()
-        self.feedback = self.label(shell, self.t(getattr(self, "busy_key", "busy")) if self.busy else "", color=MUTED, size=10)
+        self.feedback = self.label(
+            shell,
+            self.t(getattr(self, "busy_key", "busy")) if self.busy else "",
+            color=MUTED,
+            size=10,
+        )
         self.feedback.pack(fill="x", pady=(12, 0))
 
     def change_language(self, _event=None):
         self.locale = LANGUAGES[self.languages.get()]
         # Translate selected labels instead of silently discarding form choices.
         previous = getattr(self, "form_locale", "pt-BR")
-        for variable, choices in ((self.access, ("fiber", "coaxial", "radio", "satellite", "cellular", "dsl", "other", "unknown")),
-                (self.link, ("ethernet", "wifi"))):
-            selected = next((key for key in choices if TEXT[previous][key] == variable.get()), None)
+        for variable, choices in (
+            (
+                self.access,
+                (
+                    "fiber",
+                    "coaxial",
+                    "radio",
+                    "satellite",
+                    "cellular",
+                    "dsl",
+                    "other",
+                    "unknown",
+                ),
+            ),
+            (self.link, ("ethernet", "wifi")),
+        ):
+            selected = next(
+                (key for key in choices if TEXT[previous][key] == variable.get()), None
+            )
             variable.set(self.t(selected) if selected else "")
         self.form_locale = self.locale
         self.render()
 
     def heading(self, title, detail):
-        tk.Label(self.content, text=self.t(title), bg=BACKGROUND, fg=INK, font=("Georgia", 25),
-            anchor="w", justify="left", wraplength=670).pack(fill="x", pady=(0, 14))
-        description=self.t(detail)
-        if self.page=="status":description+="\n"+self.t("version_label")+": "+build_label()
-        self.label(self.content, description, color=MUTED, width=620 if self.page == "status" else 670).pack(fill="x", pady=(0, 22))
+        tk.Label(
+            self.content,
+            text=self.t(title),
+            bg=BACKGROUND,
+            fg=INK,
+            font=("Georgia", 25),
+            anchor="w",
+            justify="left",
+            wraplength=670,
+        ).pack(fill="x", pady=(0, 14))
+        description = self.t(detail)
+        if self.page == "status":
+            description += "\n" + self.t("version_label") + ": " + build_label()
+        self.label(
+            self.content,
+            description,
+            color=MUTED,
+            width=620 if self.page == "status" else 670,
+        ).pack(fill="x", pady=(0, 22))
 
     def show(self, page):
         self.page = page
@@ -198,17 +339,29 @@ class Installer(HistoryScreen, tk.Tk):
 
     def page_welcome(self):
         self.heading("welcome", "intro")
-        for operation, detail in (("install", "install_detail"), ("repair", "repair_detail"), ("uninstall", "uninstall_detail")):
+        for operation, detail in (
+            ("install", "install_detail"),
+            ("repair", "repair_detail"),
+            ("uninstall", "uninstall_detail"),
+        ):
             card = tk.Frame(self.content, bg=PAPER, padx=18, pady=14)
             card.pack(fill="x", pady=(0, 12))
-            self.button(card, operation, lambda action=operation: self.choose(action), primary=operation == "install").pack(anchor="w")
-            self.label(card, self.t(detail), color=MUTED, size=11, width=610).pack(anchor="w", pady=(8, 0))
+            self.button(
+                card,
+                operation,
+                lambda action=operation: self.choose(action),
+                primary=operation == "install",
+            ).pack(anchor="w")
+            self.label(card, self.t(detail), color=MUTED, size=11, width=610).pack(
+                anchor="w", pady=(8, 0)
+            )
 
     def _detect_installation(self):
         try:
             return self.controller.call("status")
         except OSError:
             return {"ok": True}
+
     def _installation_detected(self, result):
         self.snapshot = result
         if result.get("configured"):
@@ -228,20 +381,28 @@ class Installer(HistoryScreen, tk.Tk):
             self.purge.set(False)
         if operation == "repair":
             if self.ask_confirmation("repair", "repair_confirm"):
-                self.work(lambda: self.controller.native("repair"), lambda _result: self.load_status())
+                self.work(
+                    lambda: self.controller.native("repair"),
+                    lambda _result: self.load_status(),
+                )
         elif operation == "install":
             self.work(self._detect_installation, self._installation_detected)
         else:
             self.show("remove" if operation == "uninstall" else "configure")
 
     def page_configure(self):
-        self.entries={}
-        self.heading("upgrade" if self.operation == "upgrade" else "configure", "upgrade_detail" if self.operation == "upgrade" else "configure_detail")
+        self.entries = {}
+        self.heading(
+            "upgrade" if self.operation == "upgrade" else "configure",
+            "upgrade_detail" if self.operation == "upgrade" else "configure_detail",
+        )
         # Keep the actions visible on small displays and Linux font metrics.
         actions = tk.Frame(self.content, bg=BACKGROUND)
         actions.pack(side="bottom", fill="x", pady=(12, 0))
         self.button(actions, "back", lambda: self.show("welcome")).pack(side="left")
-        action = {"upgrade": "upgrade", "configure": "save"}.get(self.operation, "continue")
+        action = {"upgrade": "upgrade", "configure": "save"}.get(
+            self.operation, "continue"
+        )
         self.button(actions, action, self.install, primary=True).pack(side="right")
         self.data_button = self.button(self.content, "data", self.show_disclosure)
         self.data_button.pack(side="bottom", anchor="w", pady=(8, 0))
@@ -254,9 +415,15 @@ class Installer(HistoryScreen, tk.Tk):
         canvas.configure(yscrollcommand=scrollbar.set)
         form = tk.Frame(canvas, bg=BACKGROUND)
         item = canvas.create_window((0, 0), window=form, anchor="nw")
-        canvas.bind(CONFIGURE_EVENT, lambda event: canvas.itemconfigure(item, width=event.width))
-        form.bind(CONFIGURE_EVENT, lambda _event: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind(
+            CONFIGURE_EVENT, lambda event: canvas.itemconfigure(item, width=event.width)
+        )
+        form.bind(
+            CONFIGURE_EVENT,
+            lambda _event: canvas.configure(scrollregion=canvas.bbox("all")),
+        )
         self.form_canvas = canvas
+
         def reveal(event):
             canvas.update_idletasks()
             y = event.widget.winfo_rooty() - form.winfo_rooty()
@@ -264,51 +431,135 @@ class Installer(HistoryScreen, tk.Tk):
             top = canvas.canvasy(0)
             if y < top or y + height > top + canvas.winfo_height():
                 canvas.yview_moveto(max(0, y - 12) / max(1, form.winfo_height()))
-        tk.Checkbutton(form, text=self.t("contribute"), variable=self.contribute, bg=BACKGROUND,
-            fg=INK, activebackground=BACKGROUND, font=("Helvetica", 12, "bold"), anchor="w").pack(fill="x", pady=(0, 8))
+
+        tk.Checkbutton(
+            form,
+            text=self.t("contribute"),
+            variable=self.contribute,
+            bg=BACKGROUND,
+            fg=INK,
+            activebackground=BACKGROUND,
+            font=("Helvetica", 12, "bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 8))
         grid = tk.Frame(form, bg=BACKGROUND)
         grid.pack(fill="x")
         for column in (0, 1):
             grid.columnconfigure(column, weight=1)
-        for index, key in enumerate(("origin", "operator", "country", "region", "city")):
+        for index, key in enumerate(
+            ("origin", "operator", "country", "region", "city")
+        ):
             cell = tk.Frame(grid, bg=BACKGROUND)
-            cell.grid(row=index // 2, column=index % 2, columnspan=2 if key=="city" else 1, sticky="ew", padx=(0, 14), pady=(0, 6))
-            self.label(cell, self.t(key), size=10, color=MUTED).pack(anchor="w", pady=(0, 4))
-            entry=ttk.Entry(cell, textvariable=self.fields[key], width=25)
+            cell.grid(
+                row=index // 2,
+                column=index % 2,
+                columnspan=2 if key == "city" else 1,
+                sticky="ew",
+                padx=(0, 14),
+                pady=(0, 6),
+            )
+            self.label(cell, self.t(key), size=10, color=MUTED).pack(
+                anchor="w", pady=(0, 4)
+            )
+            entry = ttk.Entry(cell, textvariable=self.fields[key], width=25)
             entry.pack(fill="x")
             bind_dead_keys(entry)
-            self.entries[key]=entry
+            self.entries[key] = entry
             entry.bind("<FocusIn>", reveal, add="+")
-        for column, (key, variable, choices) in enumerate((("access", self.access, ("fiber", "coaxial", "radio", "satellite", "cellular", "dsl", "other", "unknown")),
-                ("link", self.link, ("ethernet", "wifi")))):
+        for column, (key, variable, choices) in enumerate(
+            (
+                (
+                    "access",
+                    self.access,
+                    (
+                        "fiber",
+                        "coaxial",
+                        "radio",
+                        "satellite",
+                        "cellular",
+                        "dsl",
+                        "other",
+                        "unknown",
+                    ),
+                ),
+                ("link", self.link, ("ethernet", "wifi")),
+            )
+        ):
             cell = tk.Frame(grid, bg=BACKGROUND)
             cell.grid(row=3, column=column, sticky="ew", padx=(0, 14), pady=(0, 6))
-            self.label(cell, self.t(key), size=10, color=MUTED).pack(anchor="w", pady=(0, 4))
-            ttk.Combobox(cell, values=[self.t(choice) for choice in choices], textvariable=variable, state="readonly", width=25).pack(fill="x")
+            self.label(cell, self.t(key), size=10, color=MUTED).pack(
+                anchor="w", pady=(0, 4)
+            )
+            ttk.Combobox(
+                cell,
+                values=[self.t(choice) for choice in choices],
+                textvariable=variable,
+                state="readonly",
+                width=25,
+            ).pack(fill="x")
         for column, key in enumerate(("contracted_download", "contracted_upload")):
             cell = tk.Frame(grid, bg=BACKGROUND)
             cell.grid(row=4, column=column, sticky="ew", padx=(0, 14), pady=(0, 6))
-            self.label(cell, self.t(key), size=10, color=MUTED).pack(anchor="w", pady=(0, 3))
+            self.label(cell, self.t(key), size=10, color=MUTED).pack(
+                anchor="w", pady=(0, 3)
+            )
             entry = ttk.Entry(cell, textvariable=self.fields[key], width=25)
             entry.pack(fill="x")
             self.entries[key] = entry
             entry.bind("<FocusIn>", reveal, add="+")
         self.label(form, self.t("plan_notice"), color=MUTED, size=10).pack(fill="x")
-        self.label(form, self.t("schedule_notice").format(timezone=self.schedule_timezone)+"\n"+self.t("target_notice"), color=MUTED, size=10).pack(fill="x", pady=(6, 10))
+        self.label(
+            form,
+            self.t("schedule_notice").format(timezone=self.schedule_timezone)
+            + "\n"
+            + self.t("target_notice"),
+            color=MUTED,
+            size=10,
+        ).pack(fill="x", pady=(6, 10))
 
     def configuration(self):
         if not self.contribute.get():
             return None
-        access_keys = ("fiber", "coaxial", "radio", "satellite", "cellular", "dsl", "other", "unknown")
-        access = next((key for key in access_keys if self.t(key) == self.access.get()), None)
-        link = next((key for key in ("ethernet", "wifi") if self.t(key) == self.link.get()), None)
-        value = lambda key: unicodedata.normalize("NFC", " ".join(self.fields[key].get().split()))
-        return DesktopConfiguration(origin=value("origin"), profile={"version": 1, "operator": value("operator"),
-            "country_code": value("country").upper(), "region": value("region"), "city": value("city"),
-            "access_type": access, "link_type": link,
-            "contracted_download_bps": parse_mbps(self.fields["contracted_download"].get()),
-            "contracted_upload_bps": parse_mbps(self.fields["contracted_upload"].get())},
-            timezone=self.schedule_timezone, contribute=True).model_dump()
+        access_keys = (
+            "fiber",
+            "coaxial",
+            "radio",
+            "satellite",
+            "cellular",
+            "dsl",
+            "other",
+            "unknown",
+        )
+        access = next(
+            (key for key in access_keys if self.t(key) == self.access.get()), None
+        )
+        link = next(
+            (key for key in ("ethernet", "wifi") if self.t(key) == self.link.get()),
+            None,
+        )
+        value = lambda key: unicodedata.normalize(
+            "NFC", " ".join(self.fields[key].get().split())
+        )
+        return DesktopConfiguration(
+            origin=value("origin"),
+            profile={
+                "version": 1,
+                "operator": value("operator"),
+                "country_code": value("country").upper(),
+                "region": value("region"),
+                "city": value("city"),
+                "access_type": access,
+                "link_type": link,
+                "contracted_download_bps": parse_mbps(
+                    self.fields["contracted_download"].get()
+                ),
+                "contracted_upload_bps": parse_mbps(
+                    self.fields["contracted_upload"].get()
+                ),
+            },
+            timezone=self.schedule_timezone,
+            contribute=True,
+        ).model_dump()
 
     def _install_configuration(self, action, configuration):
         if action in ("install", "upgrade"):
@@ -321,7 +572,7 @@ class Installer(HistoryScreen, tk.Tk):
             except OSError:
                 if time.monotonic() >= deadline:
                     raise
-                time.sleep(.5)
+                time.sleep(0.5)
         if action == "install" and status.get("configured"):
             # A stopped service may only reveal its existing state after the
             # helper restarts it. Never overwrite it with an empty form.
@@ -340,6 +591,7 @@ class Installer(HistoryScreen, tk.Tk):
             messagebox.showerror(self.t("configure"), self.t("invalid"), parent=self)
             return
         action = self.operation
+
         def completed(result):
             self.snapshot = result
             if configuration and not result.get("paired"):
@@ -347,27 +599,66 @@ class Installer(HistoryScreen, tk.Tk):
                 self.begin_pairing()
             else:
                 self.received_status(result)
+
         self.work(lambda: self._install_configuration(action, configuration), completed)
 
     def page_pair(self):
         self.heading("pair_title", "pair_detail")
         if self.pairing:
-            self.label(self.content, self.t("pair_code"), bold=True).pack(anchor="w", pady=(0, 8))
-            tk.Label(self.content, text=self.pairing["user_code"], bg=INK, fg=ACCENT,
-                padx=22, pady=14, font=("Courier", 30, "bold")).pack(fill="x", pady=(0, 8))
-            self.button(self.content, "copy_code", self.copy_pairing_code).pack(anchor="w", pady=(0, 12))
+            self.label(self.content, self.t("pair_code"), bold=True).pack(
+                anchor="w", pady=(0, 8)
+            )
+            tk.Label(
+                self.content,
+                text=self.pairing["user_code"],
+                bg=INK,
+                fg=ACCENT,
+                padx=22,
+                pady=14,
+                font=("Courier", 30, "bold"),
+            ).pack(fill="x", pady=(0, 8))
+            self.button(self.content, "copy_code", self.copy_pairing_code).pack(
+                anchor="w", pady=(0, 12)
+            )
             self.label(self.content, self.t("fingerprint"), bold=True).pack(anchor="w")
-            self.label(self.content, self.pairing["fingerprint"], size=10, width=650).pack(fill="x", pady=(4, 8))
-            expires = time.strftime("%H:%M:%S", time.localtime(self.pairing["expires_at"]))
-            self.label(self.content, self.t("code_deadline").format(time=expires), size=11, color=MUTED).pack(fill="x", pady=(0, 8))
-            self.button(self.content, "open_pair", self.open_pair, primary=True).pack(anchor="w")
-            self.label(self.content, self.t("waiting_pair"), color=MUTED).pack(fill="x", pady=10)
+            self.label(
+                self.content, self.pairing["fingerprint"], size=10, width=650
+            ).pack(fill="x", pady=(4, 8))
+            expires = time.strftime(
+                "%H:%M:%S", time.localtime(self.pairing["expires_at"])
+            )
+            self.label(
+                self.content,
+                self.t("code_deadline").format(time=expires),
+                size=11,
+                color=MUTED,
+            ).pack(fill="x", pady=(0, 8))
+            self.button(self.content, "open_pair", self.open_pair, primary=True).pack(
+                anchor="w"
+            )
+            self.label(self.content, self.t("waiting_pair"), color=MUTED).pack(
+                fill="x", pady=10
+            )
         else:
-            state = {"generating": "generating_code", "expired": "code_expired", "failed": "code_failed"}
-            self.label(self.content, self.t(state.get(self.pairing_state, "code_needed")), color=MUTED).pack(fill="x", pady=(0, 16))
-        self.label(self.content, self.t("data_detail"), size=10, color=MUTED).pack(fill="x", pady=(0, 12))
+            state = {
+                "generating": "generating_code",
+                "expired": "code_expired",
+                "failed": "code_failed",
+            }
+            self.label(
+                self.content,
+                self.t(state.get(self.pairing_state, "code_needed")),
+                color=MUTED,
+            ).pack(fill="x", pady=(0, 16))
+        self.label(self.content, self.t("data_detail"), size=10, color=MUTED).pack(
+            fill="x", pady=(0, 12)
+        )
         if self.pairing_state != "generating":
-            self.button(self.content, "retry_pair" if self.pairing else "pair", self.begin_pairing).pack(anchor="w")
+            self.button(
+                self.content,
+                "retry_pair" if self.pairing else "pair",
+                self.begin_pairing,
+            ).pack(anchor="w")
         self.button(self.content, "later", self.finish_pairing).pack(anchor="w", pady=8)
 
     def copy_pairing_code(self):
@@ -390,13 +681,21 @@ class Installer(HistoryScreen, tk.Tk):
         if result.get("paired"):
             self.show("status")
             return
-        expired = self.pairing_state == "expired" or result.get("code") == "pairing_expired" or (previous and previous["expires_at"] <= time.time())
+        expired = (
+            self.pairing_state == "expired"
+            or result.get("code") == "pairing_expired"
+            or (previous and previous["expires_at"] <= time.time())
+        )
         self.pairing_state = "expired" if expired else "failed"
         if self.pairing:
             self.pairing_state = "ready"
         # Stable status polling must not destroy the copyable portal window,
         # keyboard focus or the button the participant is about to click.
-        if self.page != "pair" or previous != self.pairing or previous_state != self.pairing_state:
+        if (
+            self.page != "pair"
+            or previous != self.pairing
+            or previous_state != self.pairing_state
+        ):
             self.show("pair")
         if self.pairing:
             self.schedule_pair_poll()
@@ -423,6 +722,7 @@ class Installer(HistoryScreen, tk.Tk):
         def completed(result):
             self.pairing = None
             self.received_status(result)
+
         self.work(lambda: self.controller.call("cancel_pairing"), completed)
 
     def show_disclosure(self):
@@ -439,34 +739,56 @@ class Installer(HistoryScreen, tk.Tk):
         window.transient(self)
         content = tk.Frame(window, bg=BACKGROUND, padx=22, pady=18)
         content.pack(fill="both", expand=True)
-        self.label(content, self.t("data"), bold=True, size=19).pack(fill="x", pady=(0, 12))
+        self.label(content, self.t("data"), bold=True, size=19).pack(
+            fill="x", pady=(0, 12)
+        )
         body = tk.Frame(content, bg=PAPER)
         body.pack(fill="both", expand=True)
         scrollbar = ttk.Scrollbar(body, orient="vertical")
         scrollbar.pack(side="right", fill="y")
-        text = tk.Text(body, wrap="word", relief="flat", bg=PAPER, fg=INK, padx=16, pady=14,
-            font=("Helvetica", 12), width=60, height=18, yscrollcommand=scrollbar.set)
+        text = tk.Text(
+            body,
+            wrap="word",
+            relief="flat",
+            bg=PAPER,
+            fg=INK,
+            padx=16,
+            pady=14,
+            font=("Helvetica", 12),
+            width=60,
+            height=18,
+            yscrollcommand=scrollbar.set,
+        )
         text.pack(side="left", fill="both", expand=True)
         scrollbar.configure(command=text.yview)
-        text.tag_configure("heading", font=("Helvetica", 12, "bold"), spacing1=12, spacing3=6)
+        text.tag_configure(
+            "heading", font=("Helvetica", 12, "bold"), spacing1=12, spacing3=6
+        )
         text.tag_configure("body", spacing3=10)
         catalog = DISCLOSURE_CATALOG[self.locale]
-        text.insert("end", catalog["intro"]+"\n\n", "body")
+        text.insert("end", catalog["intro"] + "\n\n", "body")
         for title, description in catalog["sections"]:
-            text.insert("end", title+"\n", "heading")
-            text.insert("end", description+"\n\n", "body")
+            text.insert("end", title + "\n", "heading")
+            text.insert("end", description + "\n\n", "body")
         publication = catalog["publication"]
-        text.insert("end", publication["title"]+"\n", "heading")
+        text.insert("end", publication["title"] + "\n", "heading")
         for key in ("text", "example", "protection", "status"):
-            text.insert("end", publication[key]+"\n\n", "body")
+            text.insert("end", publication[key] + "\n\n", "body")
         text.configure(state="disabled")
         self.disclosure_text = text
         note = self.label(content, self.t("data_offline"), color=MUTED, size=10)
         note.pack(fill="x", pady=(12, 8))
-        note.bind(CONFIGURE_EVENT, lambda event: note.configure(wraplength=max(100, event.width)))
+        note.bind(
+            CONFIGURE_EVENT,
+            lambda event: note.configure(wraplength=max(100, event.width)),
+        )
         actions = tk.Frame(content, bg=BACKGROUND)
         actions.pack(fill="x")
-        self.button(actions, "data_portal", lambda: self.open_url(self.fields["origin"].get(), "/data")).pack(side="left")
+        self.button(
+            actions,
+            "data_portal",
+            lambda: self.open_url(self.fields["origin"].get(), "/data"),
+        ).pack(side="left")
         self.button(actions, "close", window.destroy).pack(side="right")
         window.bind(ESCAPE_EVENT, lambda _event: window.destroy())
         text.focus_set()
@@ -479,7 +801,9 @@ class Installer(HistoryScreen, tk.Tk):
             try:
                 url = pairing_url(self.pairing["verification_uri"], self.locale)
             except ValueError:
-                messagebox.showerror(self.t("title"), self.t("invalid_portal"), parent=self)
+                messagebox.showerror(
+                    self.t("title"), self.t("invalid_portal"), parent=self
+                )
                 return
             self.open_external(url)
 
@@ -492,7 +816,9 @@ class Installer(HistoryScreen, tk.Tk):
         self.open_external(url)
 
     def account_origin(self):
-        return (self.snapshot.get("configuration") or {}).get("origin", self.fields["origin"].get())
+        return (self.snapshot.get("configuration") or {}).get(
+            "origin", self.fields["origin"].get()
+        )
 
     def open_account(self):
         if (self.snapshot.get("configuration") or {}).get("origin"):
@@ -503,6 +829,7 @@ class Installer(HistoryScreen, tk.Tk):
         self.account_pending = True
         fallback = self.fields["origin"].get()
         self.feedback.configure(text=self.t("account_opening"))
+
         def worker():
             try:
                 result = self.controller.call("status")
@@ -510,15 +837,18 @@ class Installer(HistoryScreen, tk.Tk):
             except Exception:
                 origin = fallback
             self.portal_requests.put(origin)
+
         threading.Thread(target=worker, daemon=True).start()
 
     def open_external(self, url):
         # Show the address immediately, even if the OS reports success but its
         # default browser never appears. Browser launches cannot block maintenance.
         note = self.show_portal_link(url)
+
         def worker():
             result = request_browser(url, preview=self.controller.preview)
             self.browser_events.put((note, result["opened"]))
+
         threading.Thread(target=worker, daemon=True).start()
 
     def show_portal_link(self, url):
@@ -531,17 +861,22 @@ class Installer(HistoryScreen, tk.Tk):
         content.pack(fill="both", expand=True)
         note = self.label(content, self.t("browser_opening"), size=12)
         note.pack(fill="x", pady=(0, 14))
-        note.bind(CONFIGURE_EVENT, lambda event: note.configure(wraplength=max(100, event.width)))
+        note.bind(
+            CONFIGURE_EVENT,
+            lambda event: note.configure(wraplength=max(100, event.width)),
+        )
         entry = ttk.Entry(content, width=65)
         entry.insert(0, url)
         entry.configure(state="readonly")
         entry.pack(fill="x", pady=(0, 14))
         actions = tk.Frame(content, bg=BACKGROUND)
         actions.pack(fill="x")
+
         def copy():
             self.clipboard_clear()
             self.clipboard_append(url)
             self.feedback.configure(text=self.t("link_copied"))
+
         self.button(actions, "copy_link", copy).pack(side="left")
         self.button(actions, "close", window.destroy).pack(side="right")
         window.bind(ESCAPE_EVENT, lambda _event: window.destroy())
@@ -560,6 +895,7 @@ class Installer(HistoryScreen, tk.Tk):
                 return self.controller.call("status")
             except OSError:
                 return {"ok": True, "service": "unavailable"}
+
         self.work(read, self.received_status)
 
     def _status_state(self, paired, enabled):
@@ -585,8 +921,17 @@ class Installer(HistoryScreen, tk.Tk):
             item = comparison.get(metric) or {}
             if item.get("contracted_bps"):
                 measured = item.get("measured_bps")
-                value = self.t("plan_result").format(contracted=format_mbps(item["contracted_bps"]),
-                    measured=format_mbps(measured), percent=format(item["percent"], ".1f")) if measured is not None else self.t("plan_waiting").format(contracted=format_mbps(item["contracted_bps"]))
+                value = (
+                    self.t("plan_result").format(
+                        contracted=format_mbps(item["contracted_bps"]),
+                        measured=format_mbps(measured),
+                        percent=format(item["percent"], ".1f"),
+                    )
+                    if measured is not None
+                    else self.t("plan_waiting").format(
+                        contracted=format_mbps(item["contracted_bps"])
+                    )
+                )
                 plan_rows.append(self.t("metric_" + metric) + ": " + value)
         return plan_rows
 
@@ -594,31 +939,51 @@ class Installer(HistoryScreen, tk.Tk):
         primary = tk.Frame(actions, bg=BACKGROUND)
         primary.pack(fill="x", pady=(10, 0))
         if self.snapshot.get("contribute") and not paired:
-            self.button(primary, "resume_pair", self.begin_pairing, primary=True).pack(side="left")
+            self.button(primary, "resume_pair", self.begin_pairing, primary=True).pack(
+                side="left"
+            )
         elif paired:
             key = "pause" if enabled else "enable"
-            activate = self.button(primary, key, lambda action=key: self.schedule(action), primary=True)
+            activate = self.button(
+                primary, key, lambda action=key: self.schedule(action), primary=True
+            )
             if not enabled and self.snapshot.get("runner_available") is False:
                 activate.configure(state="disabled")
             activate.pack(side="left")
         self.button(primary, "refresh_status", self.load_status).pack(side="right")
         secondary = tk.Frame(actions, bg=BACKGROUND)
         secondary.pack(fill="x", pady=(10, 0))
-        for key, command in (("manage", self.configure_existing), ("account", self.open_account),
-                             ("copy_info", self.copy_information), ("home", lambda: self.show("welcome"))):
+        for key, command in (
+            ("manage", self.configure_existing),
+            ("account", self.open_account),
+            ("copy_info", self.copy_information),
+            ("home", lambda: self.show("welcome")),
+        ):
             index = ("manage", "account", "copy_info", "home").index(key)
             button = self.button(secondary, key, command)
             button.configure(font=("Helvetica", 10, "bold"), pady=8, padx=10)
-            button.grid(row=index // 2, column=index % 2, sticky="w", padx=(0, 8), pady=(0, 6))
-
+            button.grid(
+                row=index // 2, column=index % 2, sticky="w", padx=(0, 8), pady=(0, 6)
+            )
 
     def _status_explanation(self, paired, enabled, detail):
         problem = self.snapshot.get("problem") or {}
         code = problem.get("code") or self.snapshot.get("code")
         problem_key = self.status_problem(code)
-        if not problem_key and paired and not enabled and self.snapshot.get("runner_available") is False:
+        if (
+            not problem_key
+            and paired
+            and not enabled
+            and self.snapshot.get("runner_available") is False
+        ):
             problem_key = "no_runner"
-        explanation = self.t("last_notice") + " " + problem_text(self.locale, problem_key, compact=True) if problem_key else self.t(detail)
+        explanation = (
+            self.t("last_notice")
+            + " "
+            + problem_text(self.locale, problem_key, compact=True)
+            if problem_key
+            else self.t(detail)
+        )
         return problem_key, explanation
 
     def page_status(self):
@@ -635,8 +1000,13 @@ class Installer(HistoryScreen, tk.Tk):
         canvas.configure(yscrollcommand=scrollbar.set)
         body = tk.Frame(canvas, bg=BACKGROUND)
         item = canvas.create_window((0, 0), window=body, anchor="nw")
-        canvas.bind(CONFIGURE_EVENT, lambda event: canvas.itemconfigure(item, width=event.width))
-        body.bind(CONFIGURE_EVENT, lambda _event: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind(
+            CONFIGURE_EVENT, lambda event: canvas.itemconfigure(item, width=event.width)
+        )
+        body.bind(
+            CONFIGURE_EVENT,
+            lambda _event: canvas.configure(scrollregion=canvas.bbox("all")),
+        )
         self.status_canvas = canvas
         paired = self.snapshot.get("paired", False)
         enabled = self.snapshot.get("measurements_enabled", False)
@@ -645,18 +1015,38 @@ class Installer(HistoryScreen, tk.Tk):
         panel.pack(fill="x", pady=(0, 12))
         self.label(panel, self.t(state), bold=True, size=15).pack(fill="x")
         problem_key, explanation = self._status_explanation(paired, enabled, detail)
-        self.label(panel, explanation, size=11, width=580,
-            color="#705016" if problem_key else MUTED).pack(fill="x", pady=(6, 0))
-        zone = (self.snapshot.get("configuration") or {}).get("timezone", self.schedule_timezone)
-        self.label(body, self.t("schedule_short").format(timezone=zone),
-            color=MUTED, size=10).pack(fill="x", pady=(0, 8))
+        self.label(
+            panel,
+            explanation,
+            size=11,
+            width=580,
+            color="#705016" if problem_key else MUTED,
+        ).pack(fill="x", pady=(6, 0))
+        zone = (self.snapshot.get("configuration") or {}).get(
+            "timezone", self.schedule_timezone
+        )
+        self.label(
+            body, self.t("schedule_short").format(timezone=zone), color=MUTED, size=10
+        ).pack(fill="x", pady=(0, 8))
         if self.snapshot and self.snapshot.get("service") != "unavailable":
-            next_test = self.status_time(self.snapshot.get("next_due")) if enabled else self.t("next_paused")
-            rows = [("service_response", self.status_time(self.snapshot.get("observed_at"))),
-                    ("next_test", next_test),
-                    ("last_attempt", self.status_time(self.snapshot.get("last_attempt_at"))),
-                    ("accepted_records", str(self.snapshot.get("accepted", 0))),
-                    ("pending", str(self.snapshot.get("pending", 0)))]
+            next_test = (
+                self.status_time(self.snapshot.get("next_due"))
+                if enabled
+                else self.t("next_paused")
+            )
+            rows = [
+                (
+                    "service_response",
+                    self.status_time(self.snapshot.get("observed_at")),
+                ),
+                ("next_test", next_test),
+                (
+                    "last_attempt",
+                    self.status_time(self.snapshot.get("last_attempt_at")),
+                ),
+                ("accepted_records", str(self.snapshot.get("accepted", 0))),
+                ("pending", str(self.snapshot.get("pending", 0))),
+            ]
             if self.snapshot.get("quarantined"):
                 rows.append(("quarantined", str(self.snapshot["quarantined"])))
             for key, value in rows:
@@ -667,12 +1057,18 @@ class Installer(HistoryScreen, tk.Tk):
         comparison = self.snapshot.get("plan_comparison") or {}
         plan_rows = self._plan_rows(comparison)
         if plan_rows:
-            self.label(body, "\n".join(plan_rows), size=10, color=MUTED).pack(fill="x", pady=(2, 0))
+            self.label(body, "\n".join(plan_rows), size=10, color=MUTED).pack(
+                fill="x", pady=(2, 0)
+            )
         self._status_actions(actions, paired, enabled)
 
     @staticmethod
     def status_problem(code):
-        if code in {"test_target_unavailable", "invalid_test_target", "test_target_changed"}:
+        if code in {
+            "test_target_unavailable",
+            "invalid_test_target",
+            "test_target_changed",
+        }:
             return "no_target"
         if code == "iperf3_required":
             return "no_runner"
@@ -683,8 +1079,12 @@ class Installer(HistoryScreen, tk.Tk):
         return AUTHORIZATION_PROBLEMS.get(code)
 
     def copy_information(self):
-        text=diagnostic_text(self.snapshot)+"\nTk: "+self.tk.call("package","provide","Tk")
-        text+="\nWindow system: "+self.tk.call("tk","windowingsystem")
+        text = (
+            diagnostic_text(self.snapshot)
+            + "\nTk: "
+            + self.tk.call("package", "provide", "Tk")
+        )
+        text += "\nWindow system: " + self.tk.call("tk", "windowingsystem")
         self.clipboard_clear()
         self.clipboard_append(text)
 
@@ -694,9 +1094,15 @@ class Installer(HistoryScreen, tk.Tk):
         stored = self.snapshot.get("configuration")
         if stored:
             profile = stored["profile"]
-            values = {**profile, "origin": stored["origin"], "country": profile["country_code"]}
+            values = {
+                **profile,
+                "origin": stored["origin"],
+                "country": profile["country_code"],
+            }
             for metric in ("download", "upload"):
-                values["contracted_" + metric] = format_mbps(profile.get("contracted_" + metric + "_bps"))
+                values["contracted_" + metric] = format_mbps(
+                    profile.get("contracted_" + metric + "_bps")
+                )
             self.schedule_timezone = stored.get("timezone", self.schedule_timezone)
             for key, variable in self.fields.items():
                 variable.set(values[key])
@@ -710,19 +1116,38 @@ class Installer(HistoryScreen, tk.Tk):
     def schedule(self, operation):
         if self.busy:
             return
-        if operation == "enable" and not self.ask_confirmation("enable", "enable_confirm"):
+        if operation == "enable" and not self.ask_confirmation(
+            "enable", "enable_confirm"
+        ):
             return
         self.work(lambda: self.controller.call(operation), self.received_status)
 
     def page_remove(self):
         self.heading("remove_title", "remove_detail")
-        tk.Checkbutton(self.content, text=self.t("purge"), variable=self.purge, bg=BACKGROUND,
-            fg=INK, activebackground=BACKGROUND, wraplength=650, justify="left",
-            font=("Helvetica", 12), anchor="w").pack(fill="x", pady=(8, 24))
-        self.label(self.content, self.t("revoke_notice"), color=MUTED).pack(fill="x", pady=(0, 20))
-        self.button(self.content, "account", self.open_account).pack(anchor="w", pady=(0, 24))
-        self.button(self.content, "uninstall", self.uninstall, primary=True).pack(anchor="w", pady=10)
-        self.button(self.content, "back", lambda: self.show("welcome")).pack(anchor="w", pady=10)
+        tk.Checkbutton(
+            self.content,
+            text=self.t("purge"),
+            variable=self.purge,
+            bg=BACKGROUND,
+            fg=INK,
+            activebackground=BACKGROUND,
+            wraplength=650,
+            justify="left",
+            font=("Helvetica", 12),
+            anchor="w",
+        ).pack(fill="x", pady=(8, 24))
+        self.label(self.content, self.t("revoke_notice"), color=MUTED).pack(
+            fill="x", pady=(0, 20)
+        )
+        self.button(self.content, "account", self.open_account).pack(
+            anchor="w", pady=(0, 24)
+        )
+        self.button(self.content, "uninstall", self.uninstall, primary=True).pack(
+            anchor="w", pady=10
+        )
+        self.button(self.content, "back", lambda: self.show("welcome")).pack(
+            anchor="w", pady=10
+        )
 
     def uninstall(self):
         if self.busy:
@@ -730,12 +1155,14 @@ class Installer(HistoryScreen, tk.Tk):
         if not self.ask_confirmation("uninstall", "remove_confirm"):
             return
         purge = self.purge.get()
+
         def completed(result):
             message = self.t("purged" if purge else "preserved")
             if result.get("reboot_required"):
                 message += "\n\n" + self.t("reboot")
             messagebox.showinfo(self.t("removed"), message, parent=self)
             self.show("welcome")
+
         self.work(lambda: self.controller.native("uninstall", purge), completed)
 
     def work(self, operation, completed, *, busy_key="busy"):
@@ -744,11 +1171,13 @@ class Installer(HistoryScreen, tk.Tk):
         self.busy = True
         self.busy_key = busy_key
         self.feedback.configure(text=self.t(busy_key))
+
         def worker():
             try:
                 self.events.put((True, operation(), completed))
             except Exception:
                 self.events.put((False, None, completed))
+
         threading.Thread(target=worker, daemon=True).start()
 
     def _finish_work(self, success, result, completed):
@@ -764,7 +1193,9 @@ class Installer(HistoryScreen, tk.Tk):
                 self.render()
             code = result.get("code") if isinstance(result, dict) else None
             key = self.status_problem(code) or "error"
-            messagebox.showerror(self.t("title"), problem_text(self.locale, key), parent=self)
+            messagebox.showerror(
+                self.t("title"), problem_text(self.locale, key), parent=self
+            )
 
     def drain(self):
         try:
@@ -786,7 +1217,11 @@ class Installer(HistoryScreen, tk.Tk):
             while True:
                 note, opened = self.browser_events.get_nowait()
                 if note.winfo_exists():
-                    note.configure(text=self.t("browser_requested" if opened else "browser_unavailable"))
+                    note.configure(
+                        text=self.t(
+                            "browser_requested" if opened else "browser_unavailable"
+                        )
+                    )
         except queue.Empty:
             pass
         self.after(100, self.drain)
@@ -796,13 +1231,23 @@ class Installer(HistoryScreen, tk.Tk):
             self.destroy()
 
     def _smoke_dismiss_confirmation(self, popup):
-        buttons = [widget for child in popup.winfo_children()
-                   for widget in child.winfo_children() if isinstance(widget, tk.Button)]
-        assert {widget.cget("text") for widget in buttons} == {self.t("yes"), self.t("no")}
-        next(widget for widget in buttons if widget.cget("text") == self.t("no")).invoke()
+        buttons = [
+            widget
+            for child in popup.winfo_children()
+            for widget in child.winfo_children()
+            if isinstance(widget, tk.Button)
+        ]
+        assert {widget.cget("text") for widget in buttons} == {
+            self.t("yes"),
+            self.t("no"),
+        }
+        next(
+            widget for widget in buttons if widget.cget("text") == self.t("no")
+        ).invoke()
 
     def _smoke_confirmation(self):
         confirmation_errors = []
+
         def dismiss_confirmation():
             popup = self.confirmation_window
             if not popup.winfo_viewable():
@@ -813,6 +1258,7 @@ class Installer(HistoryScreen, tk.Tk):
             except Exception as exc:
                 confirmation_errors.append(exc)
                 popup.destroy()
+
         self.after(20, dismiss_confirmation)
         assert not self.ask_confirmation("enable", "enable_confirm")
         assert not confirmation_errors, confirmation_errors
@@ -848,6 +1294,7 @@ class Installer(HistoryScreen, tk.Tk):
 
     def _smoke_timezone_database(self):
         from zoneinfo import ZoneInfo, reset_tzpath, TZPATH
+
         paths = TZPATH
         try:
             reset_tzpath(())
@@ -868,17 +1315,28 @@ class Installer(HistoryScreen, tk.Tk):
                 self.update()
                 assert self.winfo_exists()
                 assert CLIENT_VERSION in self.title()
-                if page=="configure":
+                if page == "configure":
                     self._smoke_configuration(locale)
         self._smoke_timezone_database()
         import os
-        if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted":
+
+        if (
+            os.environ.get("GITHUB_ACTIONS") == "true"
+            and os.environ.get("RUNNER_ENVIRONMENT") == "github-hosted"
+        ):
             from .machine import machine_identity
-            first=machine_identity("https://server.example")
+
+            first = machine_identity("https://server.example")
             assert first == machine_identity("https://SERVER.example:443/")
-            assert first["machine_id"] != machine_identity("https://another.example")["machine_id"]
+            assert (
+                first["machine_id"]
+                != machine_identity("https://another.example")["machine_id"]
+            )
             assert len(first["machine_id"]) == 64
-        if self.tk.call("tk","windowingsystem")=="x11" and os.environ.get("SPEEDTESTER_INPUT_SMOKE") in {"1", "fallback"}:
+        if self.tk.call("tk", "windowingsystem") == "x11" and os.environ.get(
+            "SPEEDTESTER_INPUT_SMOKE"
+        ) in {"1", "fallback"}:
             from .input_methods import smoke_dead_keys
+
             smoke_dead_keys(self)
         self.destroy()

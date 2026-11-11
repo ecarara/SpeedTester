@@ -28,7 +28,7 @@ DISCLOSURE_CATALOG = {
                 "3. Sistema operacional do Client",
                 "Família do sistema operacional, identificador da distribuição, versão da "
                 "distribuição quando disponível, arquitetura (por exemplo, amd64 ou arm64), "
-                "versão do Client e revisão de build. O Client coleta esses campos "
+                "versão do Client, versão do aplicativo e revisão de build. O Client coleta esses campos "
                 "automaticamente após o pareamento e os envia somente enquanto autorizado, "
                 "quando o Server oferece esse recurso. Alterações geram novos registros; não "
                 "alteram medições anteriores. São informações reportadas pelo equipamento do "
@@ -146,7 +146,7 @@ DISCLOSURE_CATALOG = {
             [
                 "3. Client operating system",
                 "OS family, distribution identifier, distribution version when available, "
-                "architecture (for example, amd64 or arm64), Client version and build revision. "
+                "architecture (for example, amd64 or arm64), Client version, application release version and build revision. "
                 "The Client collects these fields automatically after pairing and sends them "
                 "only while authorized, when the Server advertises this capability. Changes "
                 "create new records and do not alter earlier measurements. This is "
@@ -261,7 +261,7 @@ DISCLOSURE_CATALOG = {
                 "3. Sistema operativo del cliente",
                 "Familia del sistema operativo, identificador de la distribución, versión de la "
                 "distribución cuando esté disponible, arquitectura (por ejemplo, amd64 o arm64), "
-                "versión del Cliente y revisión de compilación. El cliente recoge estos campos "
+                "versión del Cliente, versión de la aplicación y revisión de compilación. El cliente recoge estos campos "
                 "automáticamente tras la vinculación y los envía solo mientras esté autorizado, "
                 "cuando el servidor anuncia esta capacidad. Los cambios crean nuevos registros y "
                 "no alteran mediciones anteriores. Son datos declarados por el equipo del "

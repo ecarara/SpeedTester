@@ -9,6 +9,20 @@ em <https://github.com/ecarara/SpeedTester>.
 
 ## [Unreleased]
 
+## [0.4.51] - 2026-11-11
+
+### Adicionado
+
+- o Client escolhe o alvo iperf3 aprovado mais próximo por RTT e o servidor
+  valida o alvo escolhido;
+- registro da versão do aplicativo (`release_version`) e da versão do
+  protocolo (`client_version`) no ambiente e nos manifests.
+
+### Corrigido
+
+- pausa e nova tentativa entre as direções em alvos públicos de iperf3;
+- achados do SonarQube em modelos, alvos e empacotamento do iperf3.
+
 ## [0.4.50] - 2026-11-07
 
 ### Corrigido

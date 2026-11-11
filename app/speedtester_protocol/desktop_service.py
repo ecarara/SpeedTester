@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
 """GUI-independent agent: optional enrollment and a persistent future-only schedule."""
+
 import json
 from pathlib import Path
 from .bundled_tools import iperf_binary
@@ -44,6 +45,7 @@ class DesktopConfiguration(StrictModel):
     def valid_timezone(cls, value):
         ZoneInfo(value)
         return value
+
     contribute: bool = False
 
     @field_validator("origin")
@@ -60,8 +62,15 @@ class DesktopConfiguration(StrictModel):
 
 
 class DesktopEngine:
-    def __init__(self, queue, *, transport=None, runner=None, clock=time.time, maintenance=False):
-        self.queue, self.transport, self.runner, self.clock = queue, transport, runner, clock
+    def __init__(
+        self, queue, *, transport=None, runner=None, clock=time.time, maintenance=False
+    ):
+        self.queue, self.transport, self.runner, self.clock = (
+            queue,
+            transport,
+            runner,
+            clock,
+        )
         self.lock = threading.RLock()
         self.pairing = None
         self.next_poll = 0
@@ -69,23 +78,34 @@ class DesktopEngine:
         self.maintenance = maintenance
         self.last_tick = 0
         self.wake = threading.Event()
-        installed=self.installation()
-        if self.queue.state(CONFIGURATION) and installed and installed.get("target_mode")!="automatic":
+        installed = self.installation()
+        if (
+            self.queue.state(CONFIGURATION)
+            and installed
+            and installed.get("target_mode") != "automatic"
+        ):
             installed.update(target_mode="automatic")
-            installed.pop("host",None)
-            installed.pop("port",None)
-            self.queue.state("installation",installed)
-            self.queue.state(ENABLED,False)
+            installed.pop("host", None)
+            installed.pop("port", None)
+            self.queue.state("installation", installed)
+            self.queue.state(ENABLED, False)
         if installed:
             installed, migrated = migrate_installation(queue, installed)
             if migrated:
                 self.queue.state(ENABLED, False)
             if self.queue.state(CONFIGURATION):
-                configuration = self.configuration().model_copy(update={"timezone":installed["schedule"]["timezone"], "profile":Profile.model_validate(installed["profile"])})
+                configuration = self.configuration().model_copy(
+                    update={
+                        "timezone": installed["schedule"]["timezone"],
+                        "profile": Profile.model_validate(installed["profile"]),
+                    }
+                )
                 self.queue.state(CONFIGURATION, configuration.model_dump())
             # Upgrades retain the user's choice, but never catch up a due slot at restart.
             upgraded = bool(queue.state("desktop:upgrade_pending"))
-            DailySchedule(queue, installed["schedule"]).refresh(int(self.clock()), activate=upgraded)
+            DailySchedule(queue, installed["schedule"]).refresh(
+                int(self.clock()), activate=upgraded
+            )
             if upgraded:
                 queue.state("desktop:upgrade_pending", False)
         self.last_snapshot = self.status()
@@ -103,7 +123,9 @@ class DesktopEngine:
 
     def counts(self):
         with self.queue.connection() as connection:
-            rows = connection.execute("SELECT status,COUNT(*) FROM entries GROUP BY status").fetchall()
+            rows = connection.execute(
+                "SELECT status,COUNT(*) FROM entries GROUP BY status"
+            ).fetchall()
         return dict(rows)
 
     def status(self):
@@ -111,35 +133,63 @@ class DesktopEngine:
         credentials, _ = self.credentials()
         paired = bool(credentials and credentials.bundle)
         counts = self.counts()
-        from .version import CLIENT_VERSION, BUILD_REVISION
-        result = {"client_version":CLIENT_VERSION,"build_revision":BUILD_REVISION,"ok": True, "service": "running", "code": self.last_code,
-            "configured": bool(configuration), "paired": paired,
+        from .version import CLIENT_VERSION, RELEASE_VERSION, BUILD_REVISION
+
+        result = {
+            "client_version": CLIENT_VERSION,
+            "release_version": RELEASE_VERSION,
+            "build_revision": BUILD_REVISION,
+            "ok": True,
+            "service": "running",
+            "code": self.last_code,
+            "configured": bool(configuration),
+            "paired": paired,
             "contribute": bool(configuration and configuration.contribute),
-            "measurements_enabled": bool(self.queue.state(ENABLED)) and not self.maintenance,
-            "next_due": self.queue.state("next_due"), "pending": counts.get("pending", 0),
-            "accepted": counts.get("accepted", 0), "observed_at": int(self.clock()),
+            "measurements_enabled": bool(self.queue.state(ENABLED))
+            and not self.maintenance,
+            "next_due": self.queue.state("next_due"),
+            "pending": counts.get("pending", 0),
+            "accepted": counts.get("accepted", 0),
+            "observed_at": int(self.clock()),
             "runner_available": self.runner is not None or iperf_binary() is not None,
             "last_attempt_at": self.queue.state("desktop:last_attempt_at"),
             "problem": self.queue.state(LAST_PROBLEM) or None,
-            "quarantined": counts.get("quarantined", 0), "database_bytes": self.queue.path.stat().st_size,
+            "quarantined": counts.get("quarantined", 0),
+            "database_bytes": self.queue.path.stat().st_size,
             "plan_comparison": comparison(self.queue, self.installation()),
-            "last_tick": self.last_tick, "configuration": configuration.model_dump() if configuration else None}
+            "last_tick": self.last_tick,
+            "configuration": configuration.model_dump() if configuration else None,
+        }
         if self.pairing and self.pairing.expires_at > int(self.clock()):
-            result["pairing"] = {"user_code": self.pairing.user_code,
-                "verification_uri": self.pairing.verification_uri, "expires_at": self.pairing.expires_at,
-                "fingerprint": digest(credentials.identity)}
+            result["pairing"] = {
+                "user_code": self.pairing.user_code,
+                "verification_uri": self.pairing.verification_uri,
+                "expires_at": self.pairing.expires_at,
+                "fingerprint": digest(credentials.identity),
+            }
         self.last_snapshot = result
         return result
 
     def record_problem(self, code):
         self.last_code = code if code in DISPLAY_CODES else "server_rejected"
-        self.queue.state(LAST_PROBLEM, {"code": self.last_code, "at": int(self.clock())})
+        self.queue.state(
+            LAST_PROBLEM, {"code": self.last_code, "at": int(self.clock())}
+        )
         # An explicit authorization block also pauses the schedule, so the
         # displayed recovery action is available. A transient/unknown refusal
         # must not be mistaken for withdrawn consent or account suspension.
-        if self.last_code in {"account_suspended", "account_disabled", "client_revoked", "token_revoked",
-                              "consent_required", "consent_withdrawn", "contribution_consent_required",
-                              "legal_acceptance_required", "terms_acceptance_required", "legal_context_changed"}:
+        if self.last_code in {
+            "account_suspended",
+            "account_disabled",
+            "client_revoked",
+            "token_revoked",
+            "consent_required",
+            "consent_withdrawn",
+            "contribution_consent_required",
+            "legal_acceptance_required",
+            "terms_acceptance_required",
+            "legal_context_changed",
+        }:
             self.queue.state(ENABLED, False)
 
     def configure(self, arguments):
@@ -149,22 +199,46 @@ class DesktopEngine:
         if installed and installed["origin"] != configuration.origin:
             raise ProtocolError("installation_server_changed")
         # Configuration never enrolls, discovers or sends OS metadata implicitly.
-        unchanged = bool(old and old.contribute == configuration.contribute
+        unchanged = bool(
+            old
+            and old.contribute == configuration.contribute
             and old.origin == configuration.origin
-            and old.profile.model_dump(exclude={"version"}) == configuration.profile.model_dump(exclude={"version"}))
+            and old.profile.model_dump(exclude={"version"})
+            == configuration.profile.model_dump(exclude={"version"})
+        )
         self.queue.state(CONFIGURATION, configuration.model_dump())
         # Connection metadata changes create a new profile, never a new
         # activation choice. Preserve active/paused when contribution continues.
-        continuing = bool(old and old.contribute and configuration.contribute and old.origin == configuration.origin)
+        continuing = bool(
+            old
+            and old.contribute
+            and configuration.contribute
+            and old.origin == configuration.origin
+        )
         if not unchanged and not continuing:
             self.queue.state(ENABLED, False)
         self.pairing = None
         if installed:
-            changed = {key: value for key, value in installed["profile"].items() if key != "version"} != configuration.profile.model_dump(exclude={"version"})
-            profile = configuration.profile.model_copy(update={"version": installed["profile"]["version"] + 1}) if changed else Profile.model_validate(installed["profile"])
+            changed = {
+                key: value
+                for key, value in installed["profile"].items()
+                if key != "version"
+            } != configuration.profile.model_dump(exclude={"version"})
+            profile = (
+                configuration.profile.model_copy(
+                    update={"version": installed["profile"]["version"] + 1}
+                )
+                if changed
+                else Profile.model_validate(installed["profile"])
+            )
             installed.update(profile=profile.model_dump(), target_mode="automatic")
             installed.pop("interval", None)
-            configuration=configuration.model_copy(update={"timezone":installed["schedule"]["timezone"], "profile": profile})
+            configuration = configuration.model_copy(
+                update={
+                    "timezone": installed["schedule"]["timezone"],
+                    "profile": profile,
+                }
+            )
             self.queue.state(CONFIGURATION, configuration.model_dump())
             installed.pop("host", None)
             installed.pop("port", None)
@@ -184,14 +258,24 @@ class DesktopEngine:
         server = discover(configuration.origin, self.transport)
         installed = self.installation()
         if installed:
-            if installed["origin"] != configuration.origin or installed["server_key"] != b64(public_bytes(server)):
+            if installed["origin"] != configuration.origin or installed[
+                "server_key"
+            ] != b64(public_bytes(server)):
                 raise ProtocolError("installation_server_changed")
         else:
-            installed = {"origin": configuration.origin, "server_key": b64(public_bytes(server)),
-                "possession_private": Ed25519PrivateKey.generate().private_bytes_raw().hex(),
-                "measurement_private": Ed25519PrivateKey.generate().private_bytes_raw().hex(),
-                "profile": configuration.profile.model_dump(), "target_mode": "automatic",
-                "schedule": policy(configuration.timezone)}
+            installed = {
+                "origin": configuration.origin,
+                "server_key": b64(public_bytes(server)),
+                "possession_private": Ed25519PrivateKey.generate()
+                .private_bytes_raw()
+                .hex(),
+                "measurement_private": Ed25519PrivateKey.generate()
+                .private_bytes_raw()
+                .hex(),
+                "profile": configuration.profile.model_dump(),
+                "target_mode": "automatic",
+                "schedule": policy(configuration.timezone),
+            }
             self.queue.state("installation", installed)
         credentials, measurement = self.credentials()
         if credentials.bundle:
@@ -209,24 +293,41 @@ class DesktopEngine:
         self.queue.state(ENABLED, False)
         configuration = self.configuration()
         credentials, measurement = self.credentials()
-        if not configuration or not configuration.contribute or not credentials or not credentials.bundle:
+        if (
+            not configuration
+            or not configuration.contribute
+            or not credentials
+            or not credentials.bundle
+        ):
             raise ProtocolError("pairing_required")
         credentials.ensure_current(force=True)
         installed = sync_machine(credentials, measurement, self.installation())
-        self.queue.state(CONFIGURATION, configuration.model_copy(update={"timezone": installed["schedule"]["timezone"]}).model_dump())
+        self.queue.state(
+            CONFIGURATION,
+            configuration.model_copy(
+                update={"timezone": installed["schedule"]["timezone"]}
+            ).model_dump(),
+        )
         from .targets import obtain_target
+
         obtain_target(credentials.client(), credentials.bundle.client_id)
         if self.runner is None and not iperf_binary():
             raise ProtocolError("iperf3_required")
         self.maintenance = False
-        DailySchedule(self.queue, installed["schedule"]).refresh(int(self.clock()), activate=True)
+        DailySchedule(self.queue, installed["schedule"]).refresh(
+            int(self.clock()), activate=True
+        )
         self.queue.state(ENABLED, True)
         self.queue.state(LAST_PROBLEM, {})
         self.last_code = "ready"
 
     def dispatch(self, operation, arguments):
         if not self.lock.acquire(blocking=False):
-            return {**self.last_snapshot, "busy": True} if operation == "status" else {"ok": False, "code": "local_busy"}
+            return (
+                {**self.last_snapshot, "busy": True}
+                if operation == "status"
+                else {"ok": False, "code": "local_busy"}
+            )
         try:
             return self._dispatch(operation, arguments)
         finally:
@@ -236,14 +337,20 @@ class DesktopEngine:
 
     def _history(self, arguments):
         from .local_history import read_history
-        result = read_history(self.queue, self.installation(), arguments, now=int(self.clock()))
+
+        result = read_history(
+            self.queue, self.installation(), arguments, now=int(self.clock())
+        )
         installed = self.installation()
         credentials, _ = self.credentials()
-        result["integration"] = {"paired": bool(credentials and credentials.bundle),
+        result["integration"] = {
+            "paired": bool(credentials and credentials.bundle),
             "origin": installed["origin"] if installed else None,
             "enabled": bool(self.queue.state(ENABLED)) and not self.maintenance,
             "problem": (self.queue.state(LAST_PROBLEM) or {}).get("code"),
-            "observed_at": int(self.clock()), "timezone": installed["schedule"]["timezone"] if installed else "UTC"}
+            "observed_at": int(self.clock()),
+            "timezone": installed["schedule"]["timezone"] if installed else "UTC",
+        }
         return {"ok": True, **result}
 
     def _dispatch(self, operation, arguments):
@@ -268,7 +375,12 @@ class DesktopEngine:
                     self.queue.state(ENABLED, False)
                     configuration = self.configuration()
                     if configuration:
-                        self.queue.state(CONFIGURATION, configuration.model_copy(update={"contribute": False}).model_dump())
+                        self.queue.state(
+                            CONFIGURATION,
+                            configuration.model_copy(
+                                update={"contribute": False}
+                            ).model_dump(),
+                        )
                     self.pairing = None
                 elif operation == "enable":
                     self.enable_schedule()
@@ -303,7 +415,11 @@ class DesktopEngine:
             # Pairing stays saved if activation is blocked. Do not pretend
             # it is active, loop into a measurement, or auto-resume a pause.
             self.queue.state(ENABLED, False)
-            self.record_problem(exc.code if isinstance(exc, ProtocolError) else "local_or_network_failure")
+            self.record_problem(
+                exc.code
+                if isinstance(exc, ProtocolError)
+                else "local_or_network_failure"
+            )
             return "paired"
         self.last_code = "paired"
         return self.last_code
@@ -326,32 +442,95 @@ class DesktopEngine:
                 self.last_code = "paused"
                 return self.last_code
             counts = self.counts()
-            if self.queue.path.stat().st_size >= MAX_DATABASE_BYTES or counts.get("pending", 0) >= MAX_PENDING_RECORDS:
+            if (
+                self.queue.path.stat().st_size >= MAX_DATABASE_BYTES
+                or counts.get("pending", 0) >= MAX_PENDING_RECORDS
+            ):
                 # Preserve all records; drain existing data without authorizing new tests.
                 from .agent import CommunityAgent
-                CommunityAgent(credentials.client(), self.queue, measurement,
-                    Profile.model_validate(self.installation()["profile"]), "iperf3").sync()
+
+                CommunityAgent(
+                    credentials.client(),
+                    self.queue,
+                    measurement,
+                    Profile.model_validate(self.installation()["profile"]),
+                    "iperf3",
+                ).sync()
                 self.last_code = "storage_limit"
                 return self.last_code
             try:
-                self.last_code = cycle(self.queue, transport=self.transport, runner=self.runner, now=self.last_tick, clock=self.clock)
+                self.last_code = cycle(
+                    self.queue,
+                    transport=self.transport,
+                    runner=self.runner,
+                    now=self.last_tick,
+                    clock=self.clock,
+                )
                 if self.last_code == "attempt_completed":
                     self.queue.state("desktop:last_attempt_at", self.last_tick)
                 self.queue.state(LAST_PROBLEM, {})
             except ProtocolError as exc:
-                if exc.code not in {"test_target_unavailable", "invalid_test_target", "test_target_changed"}:
+                if exc.code not in {
+                    "test_target_unavailable",
+                    "invalid_test_target",
+                    "test_target_changed",
+                }:
                     raise
                 self.queue.state(ENABLED, False)
                 self.record_problem(exc.code)
             return self.last_code
 
 
-DISPLAY_CODES = frozenset({"ready", "configured", "paired", "paused", "waiting", "synchronized",
-    "attempt_completed", "attempt_recovered", "schedule_slot_expired", "authorization_pending", "pairing_expired", "pairing_cancelled", "maintenance",
-    "contribution_not_selected", "pairing_required", "iperf3_required", "installation_server_changed",
-    "account_suspended", "account_disabled", "client_revoked", "token_revoked", "consent_required", "consent_withdrawn", "contribution_consent_required",
-    "legal_acceptance_required", "terms_acceptance_required", "legal_context_changed", "server_rejected", "storage_limit",
-    "machine_privacy_not_ready", "machine_identity_unavailable", "machine_identity_required", "invalid_machine_policy", "invalid_machine_permission", "machine_identity_changed", "schedule_update_required", "slot_already_reserved", "slot_not_due", "slot_expired", "test_target_unavailable", "invalid_test_target", "test_target_changed", "local_or_network_failure", "unknown_local_operation", "invalid_local_arguments", "local_busy"})
+DISPLAY_CODES = frozenset(
+    {
+        "ready",
+        "configured",
+        "paired",
+        "paused",
+        "waiting",
+        "synchronized",
+        "attempt_completed",
+        "attempt_recovered",
+        "schedule_slot_expired",
+        "authorization_pending",
+        "pairing_expired",
+        "pairing_cancelled",
+        "maintenance",
+        "contribution_not_selected",
+        "pairing_required",
+        "iperf3_required",
+        "installation_server_changed",
+        "account_suspended",
+        "account_disabled",
+        "client_revoked",
+        "token_revoked",
+        "consent_required",
+        "consent_withdrawn",
+        "contribution_consent_required",
+        "legal_acceptance_required",
+        "terms_acceptance_required",
+        "legal_context_changed",
+        "server_rejected",
+        "storage_limit",
+        "machine_privacy_not_ready",
+        "machine_identity_unavailable",
+        "machine_identity_required",
+        "invalid_machine_policy",
+        "invalid_machine_permission",
+        "machine_identity_changed",
+        "schedule_update_required",
+        "slot_already_reserved",
+        "slot_not_due",
+        "slot_expired",
+        "test_target_unavailable",
+        "invalid_test_target",
+        "test_target_changed",
+        "local_or_network_failure",
+        "unknown_local_operation",
+        "invalid_local_arguments",
+        "local_busy",
+    }
+)
 
 
 def run_service(state, key, stop=None, *, port=45873, maintenance=False):
@@ -361,9 +540,11 @@ def run_service(state, key, stop=None, *, port=45873, maintenance=False):
         engine = DesktopEngine(queue, maintenance=maintenance)
         control = ControlServer(key, engine.dispatch, port)
         serve_in_thread(control)
+
         def on_stop():
             stop.wait()
             engine.wake.set()
+
         threading.Thread(target=on_stop, daemon=True).start()
         delay = 1
         try:
@@ -377,7 +558,11 @@ def run_service(state, key, stop=None, *, port=45873, maintenance=False):
                     engine.status()
                     delay = 5 if engine.pairing else 60
                 except (OSError, ValueError, ProtocolError) as exc:
-                    code = exc.code if isinstance(exc, ProtocolError) else "local_or_network_failure"
+                    code = (
+                        exc.code
+                        if isinstance(exc, ProtocolError)
+                        else "local_or_network_failure"
+                    )
                     engine.record_problem(code)
                     delay = min(300, max(5, delay * 2))
         finally:

@@ -25,7 +25,7 @@ from speedtester_protocol.models import (
 from speedtester_protocol.enrollment import Credentials
 from speedtester_protocol.installation import protected_queue
 from speedtester_protocol.environment import collect_environment, sync_environment
-from speedtester_protocol.version import CLIENT_VERSION, BUILD_REVISION
+from speedtester_protocol.version import CLIENT_VERSION, RELEASE_VERSION, BUILD_REVISION
 from speedtester_protocol.client import ProtocolError
 
 
@@ -128,6 +128,7 @@ class EnvironmentContractTests(unittest.TestCase):
                     version="44",
                     architecture="amd64",
                     client_version=CLIENT_VERSION,
+                    release_version=RELEASE_VERSION,
                     build_revision=BUILD_REVISION,
                 ),
             )

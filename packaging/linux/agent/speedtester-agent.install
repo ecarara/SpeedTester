@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Edson Angelo Carara
 post_install() {
   printf '%s\n' \
-    "SpeedTester Agent instalado; nada foi compartilhado." \
+    "SpeedTester Agent instalado; este pacote não ativa o compartilhamento." \
     "Para compartilhar medições com o Server: sudo speedtester-agent enable" \
     "Para manter tudo desativado, não execute o comando acima."
 }

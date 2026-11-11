@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Edson Angelo Carara
 """Short-lived, centrally signed destinations; fetching never probes a target."""
+
 import re
+import socket
 import time
 from uuid import uuid4
 from typing import Literal
@@ -13,7 +15,7 @@ from .runner import IperfRunner
 
 
 def target_identifier(host, port, scope, authentication="none"):
-    value = {"runner":"iperf3","host":host,"port":port,"scope":scope}
+    value = {"runner": "iperf3", "host": host, "port": port, "scope": scope}
     if authentication != "none":
         value["authentication"] = authentication
     return "central-" + digest(value)
@@ -28,72 +30,208 @@ class TargetRequest(StrictModel):
 
 
 class TestTarget(StrictModel):
-    protocol_version: Literal['1'] = '1'
+    protocol_version: Literal["1"] = "1"
     request_id: Identifier
     client_id: Identifier
-    runner: Literal['iperf3'] = 'iperf3'
-    target_id: str = Field(pattern=r'^central-[0-9a-f]{64}$')
-    target_scope: Literal['unconfirmed', 'lan', 'external-controlled']
-    authentication: Literal['none', 'rsa-ephemeral-v1'] = 'none'
+    runner: Literal["iperf3"] = "iperf3"
+    target_id: str = Field(pattern=r"^central-[0-9a-f]{64}$")
+    target_scope: Literal["unconfirmed", "lan", "external-controlled"]
+    authentication: Literal["none", "rsa-ephemeral-v1"] = "none"
     host: str = Field(min_length=1, max_length=253)
     port: int = Field(ge=1, le=65535)
     issued_at: int = Field(ge=0)
     expires_at: int = Field(ge=0)
 
-    @field_validator('host')
+    @field_validator("host")
     @classmethod
     def valid_host(cls, value):
-        if not re.fullmatch(r'[A-Za-z0-9:.\[\]-]{1,253}', value) or value.startswith('-'):
-            raise ValueError('invalid_target_host')
+        if not re.fullmatch(r"[A-Za-z0-9:.\[\]-]{1,253}", value) or value.startswith(
+            "-"
+        ):
+            raise ValueError("invalid_target_host")
         return value
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def bounded_lifetime(self):
-        if self.target_id!=target_identifier(self.host,self.port,self.target_scope,self.authentication):
-            raise ValueError('target_binding_mismatch')
-        if not 1 <= self.expires_at-self.issued_at <= 300:
-            raise ValueError('invalid_target_lifetime')
+        if self.target_id != target_identifier(
+            self.host, self.port, self.target_scope, self.authentication
+        ):
+            raise ValueError("target_binding_mismatch")
+        if not 1 <= self.expires_at - self.issued_at <= 300:
+            raise ValueError("invalid_target_lifetime")
+        return self
+
+
+class TestTargetEntry(StrictModel):
+    name: str = Field(min_length=1, max_length=64)
+    target_id: str = Field(pattern=r"^central-[0-9a-f]{64}$")
+    target_scope: Literal["unconfirmed", "lan", "external-controlled"]
+    authentication: Literal["none", "rsa-ephemeral-v1"] = "none"
+    host: str = Field(min_length=1, max_length=253)
+    port: int = Field(ge=1, le=65535)
+    country_code: str = Field(default="", max_length=2)
+    region: str = Field(default="", max_length=100)
+    city: str = Field(default="", max_length=100)
+    priority: int = Field(default=100, ge=1, le=10000)
+
+    @field_validator("host")
+    @classmethod
+    def valid_host(cls, value):
+        if not re.fullmatch(r"[A-Za-z0-9:.\[\]-]{1,253}", value) or value.startswith(
+            "-"
+        ):
+            raise ValueError("invalid_target_host")
+        return value
+
+    @model_validator(mode="after")
+    def bounded_target(self):
+        if self.target_id != target_identifier(
+            self.host, self.port, self.target_scope, self.authentication
+        ):
+            raise ValueError("target_binding_mismatch")
+        return self
+
+
+class TestTargetList(StrictModel):
+    protocol_version: Literal["1"] = "1"
+    request_id: Identifier
+    client_id: Identifier
+    runner: Literal["iperf3"] = "iperf3"
+    targets: list[TestTargetEntry] = Field(min_length=1, max_length=64)
+    issued_at: int = Field(ge=0)
+    expires_at: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def bounded_lifetime(self):
+        if not 1 <= self.expires_at - self.issued_at <= 300:
+            raise ValueError("invalid_target_lifetime")
         return self
 
 
 def obtain_target(client, client_id, profile=None):
-    request_id=str(uuid4())
-    payload={'request_id':request_id}
+    request_id = str(uuid4())
+    payload = {"request_id": request_id}
     if profile is not None:
-        payload['profile']=profile.model_dump() if isinstance(profile, Profile) else profile
+        payload["profile"] = (
+            profile.model_dump() if isinstance(profile, Profile) else profile
+        )
     try:
-        body=client.request('POST', '/api/v1/test-target', payload)
+        body = client.request("POST", "/api/v1/test-target", payload)
     except ProtocolError as exc:
-        if exc.code in {'server_rejected','not_found'}:
-            raise ProtocolError('test_target_unavailable') from exc
+        if exc.code in {"server_rejected", "not_found"}:
+            raise ProtocolError("test_target_unavailable") from exc
         raise
     try:
-        target=TestTarget.model_validate(verify(body, client.server_key, 'test-target-v1'))
-        now=int(time.time())
-        if target.request_id!=request_id or target.client_id!=client_id or not target.issued_at-30<=now<target.expires_at:
-            raise ValueError('target_context_mismatch')
+        target = TestTarget.model_validate(
+            verify(body, client.server_key, "test-target-v1")
+        )
+        now = int(time.time())
+        if (
+            target.request_id != request_id
+            or target.client_id != client_id
+            or not target.issued_at - 30 <= now < target.expires_at
+        ):
+            raise ValueError("target_context_mismatch")
         return target
     except Exception as exc:
-        raise ProtocolError('invalid_test_target') from exc
+        raise ProtocolError("invalid_test_target") from exc
+
+
+def obtain_targets(client, client_id, profile=None):
+    request_id = str(uuid4())
+    payload = {"request_id": request_id}
+    if profile is not None:
+        payload["profile"] = (
+            profile.model_dump() if isinstance(profile, Profile) else profile
+        )
+    body = client.request("POST", "/api/v1/test-targets", payload)
+    try:
+        result = TestTargetList.model_validate(
+            verify(body, client.server_key, "test-target-list-v1")
+        )
+        now = int(time.time())
+        if (
+            result.request_id != request_id
+            or result.client_id != client_id
+            or not result.issued_at - 30 <= now < result.expires_at
+        ):
+            raise ValueError("target_context_mismatch")
+        return result
+    except Exception as exc:
+        raise ProtocolError("invalid_test_target") from exc
+
+
+def target_rtt(host, port, timeout=0.75, samples=2):
+    best = None
+    for _ in range(samples):
+        started = time.monotonic()
+        try:
+            with socket.create_connection((host, port), timeout=timeout):
+                pass
+        except OSError:
+            continue
+        elapsed = time.monotonic() - started
+        best = elapsed if best is None else min(best, elapsed)
+    return best
+
+
+def choose_target(targets):
+    ranked = []
+    for target in targets:
+        ranked.append(
+            (target_rtt(target.host, target.port), target.priority, target.name, target)
+        )
+    return min(
+        ranked,
+        key=lambda item: (
+            item[0] if item[0] is not None else float("inf"),
+            item[1],
+            item[2],
+        ),
+    )[3]
 
 
 def automatic_runner(client, client_id, execute=None, profile=None):
-    target=obtain_target(client, client_id, profile)
-    bound=IperfRunner(target.host, target.port, target_id=target.target_id,
-        target_scope=target.target_scope, expires_at=target.expires_at,
-        authorize=(lambda grant: obtain_access(client, target, grant)) if target.authentication == "rsa-ephemeral-v1" else None)
+    include_target_id = False
+    try:
+        listing = obtain_targets(client, client_id, profile)
+        target = choose_target(listing.targets)
+        authentication = target.authentication
+        expires_at = listing.expires_at
+        include_target_id = True
+    except ProtocolError:
+        target = obtain_target(client, client_id, profile)
+        authentication = target.authentication
+        expires_at = target.expires_at
+    bound = IperfRunner(
+        target.host,
+        target.port,
+        target_id=target.target_id,
+        target_scope=target.target_scope,
+        expires_at=expires_at,
+        authorize=(lambda grant: obtain_access(client, target, grant))
+        if authentication == "rsa-ephemeral-v1"
+        else None,
+    )
+    bound.include_target_id = include_target_id
+
     def validate(grant):
         try:
             bound.check_policy(grant)
         except ValueError as exc:
             raise ProtocolError("test_target_changed") from exc
+
     if execute is None:
-        bound.validate_grant=validate
+        bound.validate_grant = validate
         return bound
+
     def checked(grant):
         validate(grant)
         return execute(grant)
-    checked.validate_grant=validate
+
+    checked.validate_grant = validate
+    checked.target_id = target.target_id
+    checked.include_target_id = include_target_id
     return checked
 
 
@@ -101,7 +239,7 @@ class TargetAccess(StrictModel):
     request_id: Identifier
     attempt_id: Identifier
     client_id: Identifier
-    target_id: str = Field(pattern=r'^central-[0-9a-f]{64}$')
+    target_id: str = Field(pattern=r"^central-[0-9a-f]{64}$")
     host: str = Field(min_length=1, max_length=253)
     upload_port: int = Field(ge=1, le=65535)
     download_port: int = Field(ge=1, le=65535)
@@ -114,19 +252,32 @@ class TargetAccess(StrictModel):
 def obtain_access(client, target, grant):
     """Obtain per-attempt, one-use endpoints only after the signed start receipt."""
     request_id = str(uuid4())
-    body = client.request("POST", "/api/v1/attempts/" + grant.attempt_id + "/target-access", {"request_id": request_id})
+    body = client.request(
+        "POST",
+        "/api/v1/attempts/" + grant.attempt_id + "/target-access",
+        {"request_id": request_id},
+    )
     try:
-        access = TargetAccess.model_validate(verify(body, client.server_key, "target-access-v1"))
+        access = TargetAccess.model_validate(
+            verify(body, client.server_key, "target-access-v1")
+        )
         from cryptography.hazmat.primitives.serialization import load_pem_public_key
         from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
+
         key = load_pem_public_key(access.rsa_public_key.encode())
         if not isinstance(key, RSAPublicKey) or key.key_size < 2048:
             raise ValueError("invalid RSA public key")
-        if (access.request_id != request_id or access.client_id != grant.client_id
-                or access.attempt_id != grant.attempt_id or access.username != grant.attempt_id
-                or access.target_id != grant.target_id or target.target_id != grant.target_id
-                or access.host != target.host or access.upload_port == access.download_port
-                or not int(time.time()) < access.expires_at <= int(time.time()) + 30):
+        if (
+            access.request_id != request_id
+            or access.client_id != grant.client_id
+            or access.attempt_id != grant.attempt_id
+            or access.username != grant.attempt_id
+            or access.target_id != grant.target_id
+            or target.target_id != grant.target_id
+            or access.host != target.host
+            or access.upload_port == access.download_port
+            or not int(time.time()) < access.expires_at <= int(time.time()) + 30
+        ):
             raise ValueError("target access binding mismatch")
         return access
     except Exception as exc:

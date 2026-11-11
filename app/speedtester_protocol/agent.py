@@ -100,7 +100,7 @@ class CommunityAgent:
             raise ValueError("invalid runner metric")
         return round(value * multiplier)
 
-    def _authorize(self, validate=None):
+    def _authorize(self, validate=None, target_id=None, include_target_id=False):
         request_id = self.state("grant_request")
         if request_id is None:
             request_id = str(uuid4())
@@ -112,6 +112,8 @@ class CommunityAgent:
         }
         if self.schedule_slot is not None:
             request["schedule_slot"] = self.schedule_slot
+        if include_target_id and target_id:
+            request["target_id"] = target_id
         grant = self.client.grant(request)
         # Persist verified evidence before checking the start window.
         self.state("active_attempt", grant.model_dump())
@@ -141,7 +143,9 @@ class CommunityAgent:
                     return None
                 return self._measure(
                     self._authorize(
-                        getattr(execute, "__dict__", {}).get("validate_grant")
+                        getattr(execute, "__dict__", {}).get("validate_grant"),
+                        getattr(execute, "target_id", None),
+                        getattr(execute, "include_target_id", False),
                     ),
                     execute,
                 )

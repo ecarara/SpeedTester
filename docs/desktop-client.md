@@ -191,3 +191,29 @@ Abrir a tela, alterar filtros, paginar e **Atualizar consulta** apenas leem o SQ
 Atualize o runtime/serviço usando o fluxo de upgrade para habilitar a consulta em uma instalação anterior; o vínculo, as configurações e o histórico são preservados. O aplicativo informa quando o serviço ainda não suporta essa operação. A consulta está disponível em português por padrão, inglês e espanhol.
 
 As regressões verificam SQLite sem alterações, assinaturas adulteradas, recibos incorretos, fechamento ausente, isolamento entre destinos, filtros, paginação, respostas limitadas ao tamanho do IPC, serviço indisponível e navegação gráfica nos três idiomas. O executor de medições é proibido nesses testes; fixtures sintéticas não medem a conexão de ninguém.
+
+
+## Compartilhamento opt-in — pacote `speedtester-agent`
+
+O agente que envia medições ao Server vem em um pacote separado,
+`speedtester-agent`, para que instalar ou atualizar o aplicativo não comece a
+compartilhar dados. Instalar o pacote apenas coloca o runtime congelado em
+`/usr/lib/speedtester-agent`; nada é criado em `/opt`, nenhum serviço é
+habilitado e nenhum dado sai da máquina.
+
+O opt-in é explícito:
+
+```bash
+sudo speedtester-agent enable
+```
+
+Só então o helper nativo instala/atualiza `/opt/cararalab-speedtester-client`,
+registra e inicia o serviço, grava a chave de controle do usuário e cria o
+atalho “SpeedTester Client” no menu para pareamento e aceite dos documentos. A
+fila cifrada em `/var/lib/cararalab-speedtester-client` é preservada.
+
+Atualizações do pacote executam `repair` somente se o agente já estava
+instalado e não foi desativado; o reparo pausa as medições até o usuário
+reabrir o aplicativo. `sudo speedtester-agent disable` para o serviço e grava um
+marcador que impede uma atualização posterior de reativá-lo; `remove` apaga
+runtime, serviço e atalho, mantendo os dados locais.

@@ -24,7 +24,9 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - run: python -m pip install -r requirements-dev.txt
       - name: Install graphical and native fixture runtime
-        run: sudo apt-get update && sudo apt-get install --yes xvfb libtk8.6 build-essential libssl-dev patchelf pkg-config
+        uses: ./.github/actions/apt-mirrors
+        with:
+          packages: xvfb libtk8.6 build-essential libssl-dev patchelf pkg-config
       - name: Generate coverage including real graphical flows
         env:
           PYTHONPATH: app

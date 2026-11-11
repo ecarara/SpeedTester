@@ -31,7 +31,9 @@ jobs:
           cache-dependency-path: requirements-desktop.txt
       - name: Native Linux graphical libraries
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y xvfb libtk8.6 xdotool x11-xkb-utils xdg-utils build-essential libssl-dev patchelf pkg-config
+        uses: ./.github/actions/apt-mirrors
+        with:
+          packages: xvfb libtk8.6 xdotool x11-xkb-utils xdg-utils build-essential libssl-dev patchelf pkg-config
       - name: Native Windows compiler from MSYS2
         id: msys2
         if: runner.os == 'Windows'

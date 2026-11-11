@@ -69,6 +69,37 @@ jobs:
           path: dist/release/*
           if-no-files-found: error
 
+  linux-agent:
+    name: Linux agent bundle
+    needs: [metadata, quality]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+          check-latest: true
+          cache: pip
+          cache-dependency-path: requirements-desktop.txt
+      - name: Native Linux build dependencies
+        uses: ./.github/actions/apt-mirrors
+        with:
+          packages: xvfb libtk8.6 xdotool x11-xkb-utils xdg-utils build-essential libssl-dev patchelf pkg-config
+      - name: Install public native build dependencies
+        run: |
+          python -m pip install --only-binary=:all: -r requirements-desktop.txt -r app/requirements.txt
+          python -m pip install --no-deps '.[desktop]'
+      - name: Build frozen Linux agent bundle
+        run: xvfb-run -a python scripts/build_desktop.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-linux-agent
+          path: |
+            dist/desktop/releases/SpeedTesterClient-*-linux-*.tar.gz
+            dist/desktop/releases/SpeedTesterClient-*-linux-*.tar.gz.sha256
+            dist/desktop/releases/SpeedTesterClient-*-linux-*-components.json
+          if-no-files-found: error
+
   macos:
     name: macOS ${{ matrix.arch }}
     needs: [metadata, quality]
@@ -181,7 +212,9 @@ jobs:
           check-latest: true
       - name: Install RPM toolchain
         if: matrix.format == 'rpm'
-        run: sudo apt-get update && sudo apt-get install --yes rpm
+        uses: ./.github/actions/apt-mirrors
+        with:
+          packages: rpm
       - name: Prepare isolated runtime
         run: |
           python -m venv .release-venv
@@ -214,9 +247,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install Flatpak toolchain
+        uses: ./.github/actions/apt-mirrors
+        with:
+          packages: flatpak flatpak-builder
+      - name: Register the Flatpak SDK
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes flatpak flatpak-builder
           sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
           sudo flatpak install --system --noninteractive flathub org.freedesktop.Sdk//24.08 org.freedesktop.Platform//24.08
       - name: Build Flatpak bundle
@@ -275,7 +310,9 @@ jobs:
           python-version: '3.14'
           check-latest: true
       - name: Install installer prerequisites
-        run: sudo apt-get update && sudo apt-get install --yes iperf3
+        uses: ./.github/actions/apt-mirrors
+        with:
+          packages: iperf3
       - name: Run isolated install, upgrade and removal test
         run: ./scripts/smoke_linux_install.sh
 
@@ -312,7 +349,7 @@ jobs:
 
   validate:
     name: Validate release contents
-    needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke]
+    needs: [metadata, source, linux-agent, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -323,7 +360,9 @@ jobs:
           path: dist/release
           merge-multiple: true
       - name: Install RPM inspection tool
-        run: sudo apt-get update && sudo apt-get install --yes rpm
+        uses: ./.github/actions/apt-mirrors
+        with:
+          packages: rpm
       - name: Generate aggregate checksums
         run: python3 scripts/generate_checksums.py dist/release
       - name: Validate checksums and package contents
@@ -331,7 +370,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    needs: [metadata, source, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke, validate]
+    needs: [metadata, source, linux-agent, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke, validate]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -149,7 +149,14 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - run: python -m pip install -r requirements-dev.txt
       - run: npm ci --ignore-scripts
-      - run: npx playwright install --with-deps chromium
+      - uses: ./.github/actions/apt-mirrors
+      - name: Install the browser runtime
+        run: |
+          for attempt in 1 2 3; do
+            npx playwright install --with-deps chromium && exit 0
+            sleep $((attempt * 20))
+          done
+          exit 1
       - run: npm run test:ui
 
   dependencies:
@@ -177,10 +184,11 @@ jobs:
           check-latest: true
           cache: pip
           cache-dependency-path: requirements-dev.txt
-      - name: Install package toolchain and runtime dependencies
+      - uses: ./.github/actions/apt-mirrors
+        with:
+          packages: rpm cpio iperf3
+      - name: Install the frozen build toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes rpm cpio iperf3
           python -m pip install --only-binary=:all: -r requirements-dev.txt pyinstaller==6.22.3
       - name: Freeze the shared Python 3.14 runtime
         run: python scripts/build_linux_runtime.py --output dist/linux-runtime --version 0.0.0

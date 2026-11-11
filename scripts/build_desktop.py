@@ -110,7 +110,7 @@ def build(smoke=True):
         result=subprocess.run(["git","rev-parse","HEAD"],capture_output=True,text=True,cwd=ROOT)
         revision=result.stdout.strip() if result.returncode==0 else "source"
     sys.path.insert(0,str(ROOT/"app"))
-    from speedtester_protocol.version import CLIENT_VERSION
+    from speedtester_protocol.version import CLIENT_VERSION, RELEASE_VERSION
     launcher.write_text("from speedtester_protocol.version import set_build_revision\nset_build_revision("+repr(revision)+")\nfrom speedtester_protocol.desktop_entry import main\nraise SystemExit(main())\n")
     command = [sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir",
         "--collect-all", "tzdata", "--name", "SpeedTesterClient", "--paths", str(ROOT / "app"),
@@ -135,7 +135,7 @@ def build(smoke=True):
             directory=bundle/"THIRD-PARTY-LICENSES/libX11"
             directory.mkdir(parents=True,exist_ok=True)
             shutil.copyfile(notice,directory/"copyright")
-    (bundle/"build-info.json").write_text(json.dumps({"version":CLIENT_VERSION,"revision":revision,"experimental":True},indent=2)+"\n")
+    (bundle/"build-info.json").write_text(json.dumps({"version":CLIENT_VERSION,"release_version":RELEASE_VERSION,"revision":revision,"experimental":True},indent=2)+"\n")
     (bundle / "PREVIEW.txt").write_text(
         "EXPERIMENTAL DEVELOPER PREVIEW — not a certified production installer.\n"
         "CI exercises native service maintenance on disposable VMs; interactive elevation/reboot certification remains pending; iPerf3 3.22 is included.\n"
@@ -146,7 +146,7 @@ def build(smoke=True):
     executable = _bundle_executable(bundle, system)
     if smoke:
         _smoke_bundle(executable, system)
-    _archive_bundle(output, bundle, CLIENT_VERSION, system)
+    _archive_bundle(output, bundle, RELEASE_VERSION, system)
 
 
 if __name__ == "__main__":

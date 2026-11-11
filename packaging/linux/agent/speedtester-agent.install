@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Edson Angelo Carara
+post_upgrade() {
+  if [ -f /var/lib/cararalab-speedtester-client/service.json ] && [ ! -f /var/lib/cararalab-speedtester-client/disabled ]; then
+    /usr/bin/speedtester-agent repair || true
+  fi
+}
+
+pre_remove() {
+  /usr/bin/speedtester-agent remove || true
+}

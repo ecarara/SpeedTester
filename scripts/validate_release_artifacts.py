@@ -40,7 +40,11 @@ def validate_checksums(directory: Path) -> None:
     manifest = directory / "SHA256SUMS"
     if not manifest.is_file():
         raise ValueError("SHA256SUMS is missing")
-    entries = [line.split("  ", 1) for line in manifest.read_text(encoding="utf-8").splitlines() if line.strip()]
+    entries = [
+        line.split("  ", 1)
+        for line in manifest.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
     if not entries:
         raise ValueError("SHA256SUMS is empty")
     for expected, name in entries:
@@ -53,7 +57,9 @@ def validate_source_archive(path: Path) -> None:
     """Check that source archive contains the public project contract."""
     with tarfile.open(path, "r:gz") as archive:
         names = archive.getnames()
-    require_tokens(path.name, "\n".join(names), ("/LICENSE", "/README.md", "/app/", "/docs/"))
+    require_tokens(
+        path.name, "\n".join(names), ("/LICENSE", "/README.md", "/app/", "/docs/")
+    )
     forbidden = ("/.env", "/data/", "/backups/", ".db")
     if any(token in name for name in names for token in forbidden):
         raise ValueError(f"private data found in {path.name}")
@@ -74,23 +80,31 @@ def validate_zip(path: Path) -> None:
     with ZipFile(path) as archive:
         names = set(archive.namelist())
         if path.suffix == ".msix":
-            require_tokens(path.name, "\n".join(names), (
-                "AppxManifest.xml",
-                "SpeedTesterLauncher.exe",
-                "SpeedTesterClient.exe",
-                "Assets/Square44x44Logo.png",
-                "Assets/Square150x150Logo.png",
-            ))
+            require_tokens(
+                path.name,
+                "\n".join(names),
+                (
+                    "AppxManifest.xml",
+                    "SpeedTesterLauncher.exe",
+                    "SpeedTesterClient.exe",
+                    "Assets/Square44x44Logo.png",
+                    "Assets/Square150x150Logo.png",
+                ),
+            )
             manifest = archive.read("AppxManifest.xml")
             if b"ecarara.SpeedTester" not in manifest:
                 raise ValueError(f"{path.name} has an unexpected package identity")
         else:
-            require_tokens(path.name, "\n".join(names), (
-                "SpeedTester.app/Contents/Info.plist",
-                "SpeedTester.app/Contents/MacOS/SpeedTesterLauncher",
-                "SpeedTester.app/Contents/MacOS/SpeedTesterClient",
-                "SpeedTester.app/Contents/Resources/SpeedTester.icns",
-            ))
+            require_tokens(
+                path.name,
+                "\n".join(names),
+                (
+                    "SpeedTester.app/Contents/Info.plist",
+                    "SpeedTester.app/Contents/MacOS/SpeedTesterLauncher",
+                    "SpeedTester.app/Contents/MacOS/SpeedTesterClient",
+                    "SpeedTester.app/Contents/Resources/SpeedTester.icns",
+                ),
+            )
 
 
 def validate_native_package(path: Path) -> None:
@@ -101,33 +115,66 @@ def validate_native_package(path: Path) -> None:
         listing = command_output(["rpm", "-qlp", str(path)])
     else:
         return
-    require_tokens(path.name, listing, (
-        "speedtester.desktop",
-        "speedtester-api.service",
-        "speedtester-client.service",
-        "speedtester-launcher",
-        "collector/target_selection.py",
-    ))
+    require_tokens(
+        path.name,
+        listing,
+        (
+            "speedtester.desktop",
+            "speedtester-api.service",
+            "speedtester-client.service",
+            "speedtester-launcher",
+            "collector/target_selection.py",
+        ),
+    )
 
 
 def validate_pacman_package(path: Path) -> None:
     """Inspect an Arch package as a zstd-compressed tar archive."""
     listing = command_output(["tar", "--zstd", "-tf", str(path)])
-    require_tokens(path.name, listing, (
-        "usr/share/applications/speedtester.desktop",
-        "usr/lib/systemd/user/speedtester-api.service",
-        "usr/lib/systemd/user/speedtester-client.service",
-        "usr/bin/speedtester-launcher",
-        "usr/lib/speedtester/app/collector/target_selection.py",
-    ))
+    require_tokens(
+        path.name,
+        listing,
+        (
+            "usr/share/applications/speedtester.desktop",
+            "usr/lib/systemd/user/speedtester-api.service",
+            "usr/lib/systemd/user/speedtester-client.service",
+            "usr/bin/speedtester-launcher",
+            "usr/lib/speedtester/app/collector/target_selection.py",
+        ),
+    )
+
+
+def validate_agent_bundle(path: Path) -> None:
+    """Validate the opt-in frozen agent bundle layout."""
+    with tarfile.open(path) as archive:
+        names = archive.getnames()
+    require_tokens(
+        path.name,
+        "\n".join(names),
+        (
+            "SpeedTesterClient/SpeedTesterClient",
+            "SpeedTesterClient/bundle-manifest.json",
+            "SpeedTesterClient/LICENSE",
+            "SpeedTesterClient/tools/iperf3",
+        ),
+    )
 
 
 def validate_artifact(artifact: Path) -> None:
     """Dispatch validation for one supported release artifact."""
-    if artifact.name.endswith(".src.tar.zst"):
-        pins = json.loads((Path(__file__).resolve().parents[1] / 'security/iperf3.json').read_text())['windows_source']
-        if artifact.name != pins['url'].rsplit('/', 1)[1] or sha256(artifact) != pins['sha256']:
-            raise ValueError('native source archive checksum mismatch')
+    if artifact.name.startswith("SpeedTesterClient-") and artifact.name.endswith(
+        ".tar.gz"
+    ):
+        validate_agent_bundle(artifact)
+    elif artifact.name.endswith(".src.tar.zst"):
+        pins = json.loads(
+            (Path(__file__).resolve().parents[1] / "security/iperf3.json").read_text()
+        )["windows_source"]
+        if (
+            artifact.name != pins["url"].rsplit("/", 1)[1]
+            or sha256(artifact) != pins["sha256"]
+        ):
+            raise ValueError("native source archive checksum mismatch")
     elif artifact.name.endswith(".tar.gz"):
         validate_source_archive(artifact)
     elif artifact.name.endswith(".spdx.json"):
@@ -153,7 +200,11 @@ def main(argv: list[str] | None = None) -> int:
     if not directory.is_dir():
         parser.error(f"release directory does not exist: {directory}")
     validate_checksums(directory)
-    artifacts = sorted(path for path in directory.iterdir() if path.is_file() and path.name != "SHA256SUMS")
+    artifacts = sorted(
+        path
+        for path in directory.iterdir()
+        if path.is_file() and path.name != "SHA256SUMS"
+    )
     if not artifacts:
         raise ValueError("release directory has no artifacts")
     for artifact in artifacts:

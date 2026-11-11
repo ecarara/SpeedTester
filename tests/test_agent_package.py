@@ -132,6 +132,7 @@ class AgentPackagingTests(unittest.TestCase):
         script = (AGENT / "speedtester-agent.install").read_text()
         self.assertIn("/var/lib/cararalab-speedtester-client/service.json", script)
         self.assertIn("/var/lib/cararalab-speedtester-client/disabled", script)
+        self.assertIn("não ativa o compartilhamento", script)
         self.assertIn("sudo speedtester-agent enable", script)
         install, upgrade = script.split("post_install()", 1)[1].split(
             "post_upgrade()", 1

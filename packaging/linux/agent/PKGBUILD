@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Edson Angelo Carara
 pkgname=speedtester-agent
 pkgver=0.4.52
-pkgrel=1
+pkgrel=2
 pkgdesc='Agente comunitário SpeedTester (opt-in, compartilhamento com o Server)'
 arch=('x86_64')
 url='https://github.com/ecarara/SpeedTester'
@@ -17,7 +17,7 @@ options=('!debug')
 source=("SpeedTesterClient-${pkgver}-linux-x86_64.tar.gz::https://github.com/ecarara/SpeedTester/releases/download/v${pkgver}/SpeedTesterClient-${pkgver}-linux-x86_64.tar.gz"
         'speedtester-agent.py'
         'speedtester-agent.install')
-sha256sums=('7ddb5d083a499ab3e46f8c6094f060db81218a983deedf1f1bd608f69133998f' 'f2c43b18ec19a1845ae214c7a9df1aad9fbedfed983b9f72a801a42ad3d176cf' 'bb3715f31ae6971dd765746016d339066553f5610ec67fa80eab5ef0f04ae14c')
+sha256sums=('7ddb5d083a499ab3e46f8c6094f060db81218a983deedf1f1bd608f69133998f', 'f2c43b18ec19a1845ae214c7a9df1aad9fbedfed983b9f72a801a42ad3d176cf', 'a8e655e33c1273b99b07720711ff5ec8ab8d0e39afbc66e29eafd5808b6d9850')
 
 package() {
   install -dm755 "${pkgdir}/usr/lib/speedtester-agent"

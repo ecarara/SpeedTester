@@ -9,7 +9,7 @@ from uuid import uuid4
 from .crypto import digest, sign
 from .models import Observation, Manifest, METRICS
 from .client import ProtocolError
-from .version import CLIENT_VERSION, BUILD_REVISION
+from .version import CLIENT_VERSION, RELEASE_VERSION, BUILD_REVISION
 
 
 TERMINAL_ATTEMPT_CODES = frozenset(
@@ -224,6 +224,7 @@ class CommunityAgent:
             legal_digest=grant.legal_digest,
             previous_receipt=previous,
             client_version=CLIENT_VERSION,
+            release_version=RELEASE_VERSION,
             build_revision=BUILD_REVISION,
             observations=checksums,
         )

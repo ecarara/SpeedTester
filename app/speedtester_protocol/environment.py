@@ -7,7 +7,7 @@ from uuid import uuid4
 from .models import SystemEnvironment, EnvironmentReport
 from .crypto import b64, public_bytes, digest, sign
 from .client import ProtocolError
-from .version import CLIENT_VERSION, BUILD_REVISION
+from .version import CLIENT_VERSION, RELEASE_VERSION, BUILD_REVISION
 
 PENDING_SUFFIX = ":pending"
 
@@ -48,6 +48,7 @@ def collect_environment():
         version=version,
         architecture=architecture,
         client_version=CLIENT_VERSION,
+        release_version=RELEASE_VERSION,
         build_revision=BUILD_REVISION,
     )
 

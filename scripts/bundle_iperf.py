@@ -19,6 +19,7 @@ import urllib.request
 
 OPENSSL_NOTICES = "THIRD-PARTY-LICENSES/OpenSSL"
 MSYS_RUNTIME_DLL = "msys-2.0.dll"
+MSYS_BIN = "usr/bin"
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -122,35 +123,38 @@ def _copy_darwin_runtime(bundle, binary, tools, prefix):
     shutil.copy2(Path(prefix) / "LICENSE.txt", notice / "LICENSE.txt")
 
 
+def _msys_imports(item, bash, environment):
+    return re.findall(
+        r"DLL Name:\s*(\S+)",
+        run(
+            [str(bash), "-lc", "objdump -p " + shlex.quote(item.as_posix())],
+            env=environment,
+        ),
+    )
+
+
+def _msys_source(name, crypto_dir, msys):
+    source = crypto_dir / name
+    return source if source.exists() else msys / MSYS_BIN / name
+
+
 def _copy_msys_dependencies(binary, tools, bash, msys, environment, crypto_dir=None):
-    crypto_dir = crypto_dir or (msys / "usr/bin")
+    crypto_dir = crypto_dir or (msys / MSYS_BIN)
+    allowed = {MSYS_RUNTIME_DLL, "msys-crypto-3.dll", "msys-z.dll"}
     pending = [binary]
     seen = set()
     while pending:
         item = pending.pop()
-        imports = re.findall(
-            r"DLL Name:\s*(\S+)",
-            run(
-                [str(bash), "-lc", "objdump -p " + shlex.quote(item.as_posix())],
-                env=environment,
-            ),
-        )
-        for name in imports:
-            if not name.lower().startswith("msys-") or name.lower() in seen:
+        for name in _msys_imports(item, bash, environment):
+            lower = name.lower()
+            if not lower.startswith("msys-") or lower in seen:
                 continue
-            if name.lower() not in (
-                MSYS_RUNTIME_DLL,
-                "msys-crypto-3.dll",
-                "msys-z.dll",
-            ):
+            if lower not in allowed:
                 raise ValueError("Unexpected native dependency: " + name)
-            seen.add(name.lower())
+            seen.add(lower)
             destination = tools / name
-            if name.lower() != MSYS_RUNTIME_DLL:
-                source = crypto_dir / name
-                if not source.exists():
-                    source = msys / "usr/bin" / name
-                shutil.copy2(source, destination)
+            if lower != MSYS_RUNTIME_DLL:
+                shutil.copy2(_msys_source(name, crypto_dir, msys), destination)
             pending.append(destination)
 
 
@@ -158,8 +162,8 @@ def _copy_windows_runtime(bundle, binary, tools, pins, work, environment, versio
     msys = Path(environment["SPEEDTESTER_MSYS_ROOT"])
     openssl_root = environment.get("SPEEDTESTER_OPENSSL_ROOT")
     openssl_root = Path(openssl_root) if openssl_root else None
-    crypto_dir = openssl_root / "bin" if openssl_root else msys / "usr/bin"
-    bash = msys / "usr/bin/bash.exe"
+    crypto_dir = openssl_root / "bin" if openssl_root else msys / MSYS_BIN
+    bash = msys / MSYS_BIN / "bash.exe"
     # Compile ourselves; copy only known dependency DLLs from the official
     # package installation. The POSIX runtime itself is independently pinned.
     runtime = fetch(pins["windows_runtime"], work / "runtime.pkg.tar.zst")
@@ -170,10 +174,12 @@ def _copy_windows_runtime(bundle, binary, tools, pins, work, environment, versio
         + shlex.quote(runtime.as_posix())
         + " -C "
         + shlex.quote(extraction.as_posix())
-        + " usr/bin/msys-2.0.dll usr/share/doc/Cygwin/COPYING usr/share/doc/Cygwin/CYGWIN_LICENSE"
+        + " "
+        + MSYS_BIN
+        + "/msys-2.0.dll usr/share/doc/Cygwin/COPYING usr/share/doc/Cygwin/CYGWIN_LICENSE"
     )
     run([str(bash), "-lc", command], env=environment)
-    shutil.copy2(extraction / "usr/bin/msys-2.0.dll", tools / MSYS_RUNTIME_DLL)
+    shutil.copy2(extraction / MSYS_BIN / "msys-2.0.dll", tools / MSYS_RUNTIME_DLL)
     _copy_msys_dependencies(binary, tools, bash, msys, environment, crypto_dir)
     license_dir = bundle / "THIRD-PARTY-LICENSES/MSYS2"
     license_dir.mkdir(exist_ok=True)
@@ -250,7 +256,7 @@ def build(bundle, version):
         crypto_version = run(["openssl", "version"]).split()[1]
     else:
         msys = Path(environment["SPEEDTESTER_MSYS_ROOT"])
-        bash = msys / "usr/bin/bash.exe"
+        bash = msys / MSYS_BIN / "bash.exe"
         environment["MSYSTEM"] = "MSYS"
         environment["CHERE_INVOKING"] = "1"
         openssl_prefix = environment.get("SPEEDTESTER_OPENSSL_PREFIX", "/usr")

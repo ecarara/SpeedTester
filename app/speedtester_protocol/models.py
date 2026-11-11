@@ -13,6 +13,8 @@ Identifier = Annotated[
     Field(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"),
 ]
 Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+SAFE_VERSION_PATTERN = r"^[A-Za-z0-9._+-]+$"
+TARGET_ID_PATTERN = r"^central-[0-9a-f]{64}$"
 METRICS = {
     "download": ("bit/s", 10**12, "higher"),
     "upload": ("bit/s", 10**12, "higher"),
@@ -60,7 +62,7 @@ class GrantRequest(StrictModel):
     profile: Profile
     runner: Literal["iperf3", "ookla", "fast"]
     schedule_slot: ScheduleSlot | None = None
-    target_id: str | None = Field(default=None, pattern=r"^central-[0-9a-f]{64}$")
+    target_id: str | None = Field(default=None, pattern=TARGET_ID_PATTERN)
 
 
 class Grant(StrictModel):
@@ -122,10 +124,13 @@ class Manifest(StrictModel):
     legal_digest: Digest
     previous_receipt: Digest | None = None
     client_version: str | None = Field(
-        default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9._+-]+$"
+        default=None, min_length=1, max_length=40, pattern=SAFE_VERSION_PATTERN
+    )
+    release_version: str | None = Field(
+        default=None, min_length=1, max_length=40, pattern=SAFE_VERSION_PATTERN
     )
     build_revision: str | None = Field(
-        default=None, min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._+-]+$"
+        default=None, min_length=1, max_length=64, pattern=SAFE_VERSION_PATTERN
     )
     observations: dict[str, Digest]
 
@@ -225,14 +230,17 @@ class SystemEnvironment(StrictModel):
         default=None, min_length=1, max_length=64, pattern=r"^[a-z0-9._-]+$"
     )
     version: str | None = Field(
-        default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9._+-]+$"
+        default=None, min_length=1, max_length=40, pattern=SAFE_VERSION_PATTERN
     )
     architecture: Literal["amd64", "arm64", "x86", "arm", "other"]
     client_version: str | None = Field(
-        default=None, min_length=1, max_length=40, pattern=r"^[A-Za-z0-9._+-]+$"
+        default=None, min_length=1, max_length=40, pattern=SAFE_VERSION_PATTERN
+    )
+    release_version: str | None = Field(
+        default=None, min_length=1, max_length=40, pattern=SAFE_VERSION_PATTERN
     )
     build_revision: str | None = Field(
-        default=None, min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._+-]+$"
+        default=None, min_length=1, max_length=64, pattern=SAFE_VERSION_PATTERN
     )
 
 

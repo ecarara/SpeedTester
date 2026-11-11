@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import Field, field_validator, model_validator
 from .client import ProtocolError
 from .crypto import digest, verify
-from .models import Identifier, Profile, StrictModel
+from .models import Identifier, Profile, StrictModel, TARGET_ID_PATTERN
 from .runner import IperfRunner
 
 
@@ -34,7 +34,7 @@ class TestTarget(StrictModel):
     request_id: Identifier
     client_id: Identifier
     runner: Literal["iperf3"] = "iperf3"
-    target_id: str = Field(pattern=r"^central-[0-9a-f]{64}$")
+    target_id: str = Field(pattern=TARGET_ID_PATTERN)
     target_scope: Literal["unconfirmed", "lan", "external-controlled"]
     authentication: Literal["none", "rsa-ephemeral-v1"] = "none"
     host: str = Field(min_length=1, max_length=253)
@@ -64,7 +64,7 @@ class TestTarget(StrictModel):
 
 class TestTargetEntry(StrictModel):
     name: str = Field(min_length=1, max_length=64)
-    target_id: str = Field(pattern=r"^central-[0-9a-f]{64}$")
+    target_id: str = Field(pattern=TARGET_ID_PATTERN)
     target_scope: Literal["unconfirmed", "lan", "external-controlled"]
     authentication: Literal["none", "rsa-ephemeral-v1"] = "none"
     host: str = Field(min_length=1, max_length=253)
@@ -166,8 +166,8 @@ def target_rtt(host, port, timeout=0.75, samples=2):
     for _ in range(samples):
         started = time.monotonic()
         try:
-            with socket.create_connection((host, port), timeout=timeout):
-                pass
+            connection = socket.create_connection((host, port), timeout=timeout)
+            connection.close()
         except OSError:
             continue
         elapsed = time.monotonic() - started
@@ -239,7 +239,7 @@ class TargetAccess(StrictModel):
     request_id: Identifier
     attempt_id: Identifier
     client_id: Identifier
-    target_id: str = Field(pattern=r"^central-[0-9a-f]{64}$")
+    target_id: str = Field(pattern=TARGET_ID_PATTERN)
     host: str = Field(min_length=1, max_length=253)
     upload_port: int = Field(ge=1, le=65535)
     download_port: int = Field(ge=1, le=65535)

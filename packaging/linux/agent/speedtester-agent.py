@@ -87,6 +87,7 @@ def enable(repair=False):
     key = bootstrap_key() if existing else secrets.token_hex(32)
     operation = "repair" if existing or repair else "install"
     code = invoke(operation, key)
+    (STATE / "disabled").unlink(missing_ok=True)
     write_user_control(key)
     subprocess.run(["systemctl", "daemon-reload"], check=False)
     subprocess.run(["systemctl", "enable", "--now", SERVICE], check=False)
@@ -102,6 +103,8 @@ def enable(repair=False):
 def disable():
     require_root()
     subprocess.run(["systemctl", "disable", "--now", SERVICE], check=False)
+    STATE.mkdir(parents=True, exist_ok=True)
+    (STATE / "disabled").write_text("")
     print("speedtester-agent: compartilhamento desativado; dados preservados")
     return 0
 

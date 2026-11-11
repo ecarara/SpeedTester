@@ -132,7 +132,13 @@ class AgentPackagingTests(unittest.TestCase):
         script = (AGENT / "speedtester-agent.install").read_text()
         self.assertIn("/var/lib/cararalab-speedtester-client/service.json", script)
         self.assertIn("/var/lib/cararalab-speedtester-client/disabled", script)
-        self.assertNotIn("post_install", script)
+        self.assertIn("sudo speedtester-agent enable", script)
+        install, upgrade = script.split("post_install()", 1)[1].split(
+            "post_upgrade()", 1
+        )
+        self.assertNotIn("repair", install)
+        self.assertIn("speedtester-agent repair", upgrade)
+        self.assertNotIn("systemctl", script)
 
     def test_package_ships_the_frozen_bundle_without_precreating_the_service(self):
         build = (AGENT / "PKGBUILD").read_text()

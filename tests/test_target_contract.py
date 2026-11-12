@@ -146,3 +146,25 @@ class TargetAccessTests(unittest.TestCase):
                 name='iperf3.exe' if __import__('sys').platform=='win32' else 'iperf3'
                 tool=root/'tools'/name;tool.write_text('fixture')
                 self.assertEqual(iperf_binary(),str(tool));path.assert_not_called()
+
+
+class SlotGuardTests(unittest.TestCase):
+    """The schedule wrapper must not hide the target bound to the runner."""
+
+    def test_guard_keeps_the_bound_target_for_the_grant_request(self):
+        from speedtester_protocol.cli import slot_guard
+        order=[]
+        def execute(grant):
+            order.append('execute');return 'measured'
+        execute.target_id='central-bound-target';execute.include_target_id=True
+        checked=slot_guard(execute,lambda grant: order.append('validate'))
+        self.assertEqual(checked.target_id,'central-bound-target')
+        self.assertTrue(checked.include_target_id)
+        self.assertEqual(checked(object()),'measured')
+        self.assertEqual(order,['validate','execute'])
+
+    def test_guard_does_not_invent_target_metadata_for_legacy_runners(self):
+        from speedtester_protocol.cli import slot_guard
+        checked=slot_guard(lambda grant: None,lambda grant: None)
+        self.assertFalse(hasattr(checked,'target_id'))
+        self.assertFalse(hasattr(checked,'include_target_id'))

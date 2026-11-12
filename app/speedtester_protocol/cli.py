@@ -107,6 +107,18 @@ def setup(queue,origin,*,transport=None,input_fn=input,sleep=time.sleep,repair=F
     return config
 
 
+def slot_guard(execute,validate):
+    """Keep the bound target of the automatic runner visible to the grant request."""
+    def checked(grant):
+        validate(grant)
+        return execute(grant)
+    checked.validate_grant=validate
+    for attribute in ("target_id","include_target_id"):
+        if hasattr(execute,attribute):
+            setattr(checked,attribute,getattr(execute,attribute))
+    return checked
+
+
 def cycle(queue,*,transport=None,runner=None,now=None,clock=time.time):
     config=queue.state("installation")
     if not config:raise ProtocolError("setup_required")
@@ -146,11 +158,7 @@ def cycle(queue,*,transport=None,runner=None,now=None,clock=time.time):
                 raise ProtocolError("schedule_slot_expired")
             guard=getattr(execute,"__dict__",{}).get("validate_grant")
             if guard:guard(grant)
-        def checked(grant):
-            validate(grant)
-            return execute(grant)
-        checked.validate_grant=validate
-        attempt_id=agent.run_once(checked)
+        attempt_id=agent.run_once(slot_guard(execute,validate))
         return "attempt_completed"
     finally:
         schedule.finish(slot,attempt_id=attempt_id)

@@ -21,7 +21,8 @@ Cada release também publica o pacote pronto (gerado no CI a partir do bundle
 daquela release), então não é preciso rodar `makepkg` para atualizar:
 
 ```bash
-sudo pacman -U https://github.com/ecarara/SpeedTester/releases/download/v0.4.52/speedtester-agent-0.4.52-1-x86_64.pkg.tar.zst
+gh release download v0.4.52 -R ecarara/SpeedTester -p "speedtester-agent-*.pkg.tar.zst" -D /tmp/speedtester-agent
+sudo pacman -U /tmp/speedtester-agent/*.pkg.tar.zst
 ```
 
 ## Opt-in

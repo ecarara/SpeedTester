@@ -24,7 +24,8 @@ _speedtester_agent_hint() {
   cat <<EOF
 SpeedTester Agent $agent_version does not match SpeedTester $version.
 Update the opt-in agent (sharing stays disabled until you enable it) with:
-  sudo pacman -U https://github.com/ecarara/SpeedTester/releases/download/v$version/speedtester-agent-$version-1-x86_64.pkg.tar.zst
+  gh release download v$version -R ecarara/SpeedTester -p "speedtester-agent-*.pkg.tar.zst" -D /tmp/speedtester-agent
+  sudo pacman -U /tmp/speedtester-agent/*.pkg.tar.zst
 EOF
 }
 

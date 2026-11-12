@@ -9,6 +9,18 @@ em <https://github.com/ecarara/SpeedTester>.
 
 ## [Unreleased]
 
+## [0.4.53] - 2026-11-12
+
+### Corrigido
+
+- o cliente automático passa a enviar ao Server o `target_id` do alvo que
+  vinculou; o wrapper do horário agendado descartava `target_id` e
+  `include_target_id`, então o Server escolhia o alvo autenticado enquanto o
+  cliente media o alvo público, resultando em `test_target_changed` e tentativas
+  em quarentena sem métricas;
+- alvos públicos não autenticados voltam a completar a tentativa pelo alvo
+  escolhido pelo cliente.
+
 ## [0.4.52] - 2026-11-11
 
 ### Adicionado

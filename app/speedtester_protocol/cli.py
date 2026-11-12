@@ -145,21 +145,28 @@ def cycle(queue,*,transport=None,runner=None,now=None,clock=time.time):
     attempt_id=None
     try:
         if config.get("target_mode")=="automatic":
-            from .targets import automatic_runner
-            execute=automatic_runner(
+            from .targets import candidate_runners
+            executes=candidate_runners(
                 client, credentials.bundle.client_id, runner,
                 profile=Profile.model_validate(config["profile"]),
             )
         else:
-            execute=runner or IperfRunner(config["host"],config["port"])
-        def validate(grant):
-            moment=int(clock())
-            if not slot["at"]<=moment<=slot["deadline"] or moment+(grant.max_duration_ms+999)//1000+60>slot["end_at"]:
-                raise ProtocolError("schedule_slot_expired")
-            guard=getattr(execute,"__dict__",{}).get("validate_grant")
-            if guard:guard(grant)
-        attempt_id=agent.run_once(slot_guard(execute,validate))
-        return "attempt_completed"
+            executes=[runner or IperfRunner(config["host"],config["port"])]
+        for index,execute in enumerate(executes):
+            def validate(grant,execute=execute):
+                moment=int(clock())
+                if not slot["at"]<=moment<=slot["deadline"] or moment+(grant.max_duration_ms+999)//1000+60>slot["end_at"]:
+                    raise ProtocolError("schedule_slot_expired")
+                guard=getattr(execute,"__dict__",{}).get("validate_grant")
+                if guard:guard(grant)
+            try:
+                attempt_id=agent.run_once(slot_guard(execute,validate))
+                return "attempt_completed"
+            except ProtocolError as exc:
+                # A busy public target is retried once on the next signed target.
+                if exc.code!="target_busy" or index==len(executes)-1:
+                    raise
+        return "synchronized"
     finally:
         schedule.finish(slot,attempt_id=attempt_id)
 

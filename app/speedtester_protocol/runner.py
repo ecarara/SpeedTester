@@ -83,7 +83,13 @@ class IperfRunner:
                             )
                         time.sleep(min(0.01, remaining))
                     if process.returncode:
-                        raise RuntimeError("iperf_failed")
+                        error.seek(0)
+                        diagnostic = error.read(8192).lower()
+                        raise RuntimeError(
+                            "iperf_busy"
+                            if b"server is busy" in diagnostic
+                            else "iperf_failed"
+                        )
                 finally:
                     _stop_process(process)
             output.seek(0)
@@ -100,14 +106,16 @@ class IperfRunner:
         time.sleep(min(seconds, remaining))
 
     def _capture_public(self, command, deadline, max_duration_ms):
+        # One short retry keeps transient blips local; a busy public server is
+        # surfaced as iperf_busy so the agent can choose another signed target.
         for attempt in (0, 1):
             try:
                 return self._capture(command, deadline, max_duration_ms)
             except RuntimeError as exc:
                 if (
-                    getattr(exc, "args", ("",))[0] != "iperf_failed"
+                    getattr(exc, "args", ("",))[0] not in {"iperf_failed", "iperf_busy"}
                     or attempt == 1
-                    or deadline - time.monotonic() < 3
+                    or deadline - time.monotonic() < 4
                 ):
                     raise
                 self._pause(deadline, 3.0)

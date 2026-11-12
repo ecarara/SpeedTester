@@ -168,3 +168,81 @@ class SlotGuardTests(unittest.TestCase):
         checked=slot_guard(lambda grant: None,lambda grant: None)
         self.assertFalse(hasattr(checked,'target_id'))
         self.assertFalse(hasattr(checked,'include_target_id'))
+
+
+class TargetFailoverTests(unittest.TestCase):
+    def setUp(self):
+        self.client = Mock()
+        self.client_id = str(uuid4())
+
+    def _target(self, name, host, priority=100):
+        return SimpleNamespace(
+            name=name, host=host, port=5201, priority=priority,
+            target_id=target_identifier(host, 5201, "external-controlled"),
+            target_scope="external-controlled", authentication="none",
+        )
+
+    def test_candidates_are_signed_targets_ordered_by_rtt(self):
+        from speedtester_protocol import targets as module
+        near = self._target("near", "138.199.4.1", priority=100)
+        far = self._target("far", "203.0.113.9", priority=1)
+        listing = SimpleNamespace(targets=(far, near), expires_at=int(time.time()) + 300)
+        with (
+            patch.object(module, "obtain_targets", return_value=listing),
+            patch.object(module, "target_rtt", side_effect=lambda host, port: 0.005 if host == "138.199.4.1" else 0.2),
+        ):
+            runners = module.candidate_runners(self.client, self.client_id, Mock())
+        self.assertEqual([runner.target_id for runner in runners], [near.target_id, far.target_id])
+        self.assertTrue(all(runner.include_target_id for runner in runners))
+
+    def test_legacy_server_keeps_the_compatibility_path_without_a_target_id(self):
+        from speedtester_protocol import targets as module
+        only = SimpleNamespace(
+            host="only.example", port=5201,
+            target_id=target_identifier("only.example", 5201, "unconfirmed"),
+            target_scope="unconfirmed", authentication="none",
+            expires_at=int(time.time()) + 300,
+        )
+        with (
+            patch.object(module, "obtain_targets", side_effect=ProtocolError("test_target_unavailable")),
+            patch.object(module, "obtain_target", return_value=only),
+        ):
+            runners = module.candidate_runners(self.client, self.client_id, Mock())
+        self.assertEqual(len(runners), 1)
+        self.assertFalse(runners[0].include_target_id)
+
+
+class RunnerBusyTests(unittest.TestCase):
+    def test_busy_server_is_reported_as_a_retryable_target(self):
+        import sys
+        runner = IperfRunner("target.example")
+        command = [sys.executable, "-c", "import sys;sys.stderr.write('the server is busy running a test');sys.exit(1)"]
+        with self.assertRaisesRegex(RuntimeError, "iperf_busy"):
+            runner._capture(command, time.monotonic() + 10, 1000)
+
+    def test_public_capture_retries_once_before_reporting_busy(self):
+        runner = IperfRunner("target.example")
+        with (
+            patch.object(runner, "_capture", side_effect=RuntimeError("iperf_busy")) as capture,
+            patch.object(runner, "_pause"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "iperf_busy"):
+                runner._capture_public(["iperf3"], time.monotonic() + 30, 30000)
+        self.assertEqual(capture.call_count, 2)
+
+
+class AgentBusyTests(unittest.TestCase):
+    def test_busy_measurement_is_recorded_then_signalled_for_another_target(self):
+        from speedtester_protocol.agent import CommunityAgent
+        agent = object.__new__(CommunityAgent)
+        recorded = {}
+        agent._complete = lambda grant, values, failure, measured_at: recorded.update(
+            failure=failure, values=values
+        ) or "attempt"
+        def execute(grant):
+            raise RuntimeError("iperf_busy")
+        with self.assertRaises(ProtocolError) as raised:
+            agent._measure(SimpleNamespace(attempt_id="a"), execute)
+        self.assertEqual(raised.exception.code, "target_busy")
+        self.assertTrue(recorded["failure"])
+        self.assertTrue(all(value is None for value in recorded["values"].values()))

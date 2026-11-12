@@ -160,6 +160,7 @@ class CommunityAgent:
     def _measure(self, grant, execute):
         measured_at = int(time.time())
         failure = False
+        retry_target = False
         try:
             result = execute(grant)
             values = {
@@ -172,10 +173,16 @@ class CommunityAgent:
                 "transfer": self.value(result, "transfer_bytes", 1),
                 "tcp_retransmits": self.value(result, "tcp_retransmits", 1),
             }
-        except Exception:
+        except Exception as exc:
             failure = True
             values = dict.fromkeys(METRICS)
-        return self._complete(grant, values, failure, measured_at)
+            retry_target = getattr(exc, "args", (None,))[0] == "iperf_busy"
+        # Record the failed attempt before asking for another target: the Server
+        # authorizes one attempt at a time.
+        completed = self._complete(grant, values, failure, measured_at)
+        if retry_target:
+            raise ProtocolError("target_busy")
+        return completed
 
     @staticmethod
     def _value_status(value):

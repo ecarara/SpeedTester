@@ -9,6 +9,21 @@ em <https://github.com/ecarara/SpeedTester>.
 
 ## [Unreleased]
 
+## [0.4.54] - 2026-11-12
+
+### Adicionado
+
+- o agente escolhe outro alvo assinado quando o alvo público responde que está
+  ocupado (`iperf_busy`): a tentativa com erro é registrada, o grant é fechado e
+  o cliente tenta o próximo alvo da lista, dentro da mesma janela de horário;
+- a lista de alvos é ordenada por RTT uma única vez e todos os candidatos levam
+  o `target_id` no pedido de grant.
+
+### Corrigido
+
+- a falha por servidor ocupado deixa de encerrar o horário com métricas de erro
+  quando existe outro alvo disponível.
+
 ## [0.4.53] - 2026-11-12
 
 ### Corrigido

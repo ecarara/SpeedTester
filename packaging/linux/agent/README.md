@@ -17,6 +17,13 @@ da release privada, confere o sha256 publicado ao lado do asset e instala o
 helper `speedtester-agent`. O serviço fica **desabilitado** até o opt-in; o
 próprio `pacman` imprime o comando de ativação no final da instalação.
 
+Cada release também publica o pacote pronto (gerado no CI a partir do bundle
+daquela release), então não é preciso rodar `makepkg` para atualizar:
+
+```bash
+sudo pacman -U https://github.com/ecarara/SpeedTester/releases/download/v0.4.52/speedtester-agent-0.4.52-1-x86_64.pkg.tar.zst
+```
+
 ## Opt-in
 
 ```bash

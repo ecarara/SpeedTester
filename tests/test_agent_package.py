@@ -145,6 +145,7 @@ class AgentPackagingTests(unittest.TestCase):
         build = (AGENT / "PKGBUILD").read_text()
         self.assertIn("SpeedTesterClient-${pkgver}-linux-x86_64.tar.gz", build)
         self.assertNotIn(".desktop", build)
+        self.assertIn("'!strip'", build)
         self.assertNotIn("systemctl", build)
         self.assertNotIn("/opt/", build)
 

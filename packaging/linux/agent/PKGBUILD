@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Edson Angelo Carara
 pkgname=speedtester-agent
 pkgver=0.4.52
-pkgrel=2
+pkgrel=3
 pkgdesc='Agente comunitário SpeedTester (opt-in, compartilhamento com o Server)'
 arch=('x86_64')
 url='https://github.com/ecarara/SpeedTester'
@@ -10,7 +10,9 @@ license=('GPL-3.0-or-later')
 depends=('python' 'systemd' 'glibc')
 optdepends=('speedtester: ícone do menu e coletor local')
 install=speedtester-agent.install
-options=('!debug')
+# makepkg must not strip the frozen bundle: every file is covered by
+# bundle-manifest.json and the native helper rejects any byte change.
+options=('!strip' '!debug')
 # The bundle checksum is the one published next to the release asset
 # (SpeedTesterClient-<release>-linux-x86_64.tar.gz.sha256). Update it together
 # with pkgver whenever the release is rebuilt or re-uploaded.

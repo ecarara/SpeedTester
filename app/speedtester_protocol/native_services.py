@@ -412,7 +412,7 @@ def read_request(path):
         raise ValueError(INVALID_NATIVE_REQUEST)
     request = json.loads(raw)
     if (set(request) != {"operation", "control_key", "purge"}
-            or request["operation"] not in ("install", "repair", "uninstall")
+            or request["operation"] not in ("install", "repair", "upgrade", "uninstall")
             or type(request["purge"]) is not bool or not isinstance(request["control_key"], str)
             or len(request["control_key"]) != 64):
         raise ValueError(INVALID_NATIVE_REQUEST)
@@ -555,6 +555,11 @@ def _installation_transaction(layout, source, request):
     return existing, staged, previous
 
 
+def maintenance_operation(operation):
+    """Upgrades keep the participant's choice; repairs pause for review."""
+    return "install" if operation == "upgrade" else operation
+
+
 def native_operation(request):
     layout = native_layout()
     require_admin()
@@ -571,7 +576,9 @@ def native_operation(request):
             shutil.rmtree(layout.state)
         return {"ok": True, "reboot_required": reboot, "data_preserved": not request["purge"], "central_revocation": "not_requested"}
     if existing:
-        _prepare_maintenance_state(layout, request["operation"])
+        # A package upgrade must keep the participant's previous choice; only
+        # an explicit repair pauses the schedule for review.
+        _prepare_maintenance_state(layout, maintenance_operation(request["operation"]))
     # Install from a separate downloaded bundle. Never mutate the running GUI's
     # own directory or overwrite a runtime that Windows is still mapping.
     layout.runtime.parent.mkdir(parents=True, exist_ok=True)

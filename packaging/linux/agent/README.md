@@ -42,10 +42,9 @@ serviço é habilitado e nenhum dado sai da máquina.
 
 O `pacman -U` substitui o bundle em `/usr/lib/speedtester-agent`; o
 `post_upgrade` executa `speedtester-agent repair` **somente se o agente já
-estiver instalado e não tiver sido desativado**, atualizando `/opt` e
-reiniciando o serviço. O reparo pausa as medições por segurança: reabra o app
-para retomar o compartilhamento. Nenhuma atualização do app/coletor habilita o
-agente.
+estiver instalado e não tiver sido desativado**: a operação `upgrade` atualiza
+`/opt`, reinicia o serviço e **preserva a escolha anterior** de compartilhamento
+(não pausa a agenda). O `disable` continua valendo entre atualizações.
 
 ## Desativar/remover
 

@@ -212,8 +212,9 @@ registra e inicia o serviço, grava a chave de controle do usuário e cria o
 atalho “SpeedTester Client” no menu para pareamento e aceite dos documentos. A
 fila cifrada em `/var/lib/cararalab-speedtester-client` é preservada.
 
-Atualizações do pacote executam `repair` somente se o agente já estava
-instalado e não foi desativado; o reparo pausa as medições até o usuário
-reabrir o aplicativo. `sudo speedtester-agent disable` para o serviço e grava um
+Atualizações do pacote executam a operação `upgrade` somente se o agente já
+estava instalado e não foi desativado: o runtime é trocado, o serviço reinicia e
+a escolha anterior (agenda ativa ou pausada) é preservada. O `repair` explícito
+— inclusive o botão "Reparar instalação" — continua pausando para revisão. `sudo speedtester-agent disable` para o serviço e grava um
 marcador que impede uma atualização posterior de reativá-lo; `remove` apaga
 runtime, serviço e atalho, mantendo os dados locais.

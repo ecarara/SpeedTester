@@ -90,6 +90,17 @@ class AgentPackageTests(unittest.TestCase):
         self.assertEqual(self.agent.enable(), 0)
         self.assertEqual(self.calls, [("repair", key)])
 
+    def test_package_upgrade_preserves_the_sharing_choice(self):
+        key = "c" * 64
+        self.state.mkdir(parents=True)
+        self.agent.BOOTSTRAP.write_text(
+            json.dumps(
+                {"format": "cararalab-speedtester-desktop-v1", "control_key": key}
+            )
+        )
+        self.assertEqual(self.agent.enable(repair=True), 0)
+        self.assertEqual(self.calls, [("upgrade", key)])
+
     def test_disable_marks_the_agent_so_upgrades_do_not_reenable_it(self):
         self.state.mkdir(parents=True)
         self.agent.BOOTSTRAP.write_text(

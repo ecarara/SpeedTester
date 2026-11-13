@@ -5,9 +5,9 @@
 import platform
 import re
 
-CLIENT_VERSION = "0.3.0.dev19"
+CLIENT_VERSION = "0.3.0.dev20"
 BUILD_REVISION = "source"
-RELEASE_VERSION = "0.4.53"
+RELEASE_VERSION = "0.4.54"
 
 
 def set_build_revision(value):

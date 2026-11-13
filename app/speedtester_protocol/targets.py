@@ -175,42 +175,35 @@ def target_rtt(host, port, timeout=0.75, samples=2):
     return best
 
 
-def choose_target(targets):
+def rank_targets(targets):
     ranked = []
     for target in targets:
         ranked.append(
             (target_rtt(target.host, target.port), target.priority, target.name, target)
         )
-    return min(
-        ranked,
+    ranked.sort(
         key=lambda item: (
             item[0] if item[0] is not None else float("inf"),
             item[1],
             item[2],
-        ),
-    )[3]
+        )
+    )
+    return [item[3] for item in ranked]
 
 
-def automatic_runner(client, client_id, execute=None, profile=None):
-    include_target_id = False
-    try:
-        listing = obtain_targets(client, client_id, profile)
-        target = choose_target(listing.targets)
-        authentication = target.authentication
-        expires_at = listing.expires_at
-        include_target_id = True
-    except ProtocolError:
-        target = obtain_target(client, client_id, profile)
-        authentication = target.authentication
-        expires_at = target.expires_at
+def choose_target(targets):
+    return rank_targets(targets)[0]
+
+
+def _bound_runner(client, target, expires_at, execute, include_target_id):
     bound = IperfRunner(
         target.host,
         target.port,
         target_id=target.target_id,
         target_scope=target.target_scope,
         expires_at=expires_at,
-        authorize=(lambda grant: obtain_access(client, target, grant))
-        if authentication == "rsa-ephemeral-v1"
+        authorize=(lambda grant, target=target: obtain_access(client, target, grant))
+        if target.authentication == "rsa-ephemeral-v1"
         else None,
     )
     bound.include_target_id = include_target_id
@@ -233,6 +226,25 @@ def automatic_runner(client, client_id, execute=None, profile=None):
     checked.target_id = target.target_id
     checked.include_target_id = include_target_id
     return checked
+
+
+def candidate_runners(client, client_id, execute=None, profile=None):
+    """Signed targets ordered by RTT, so a busy target can fail over to the next."""
+    try:
+        listing = obtain_targets(client, client_id, profile)
+    except ProtocolError:
+        # Older servers only expose a single target; keep their compatibility
+        # path without sending a client-chosen target id.
+        target = obtain_target(client, client_id, profile)
+        return [_bound_runner(client, target, target.expires_at, execute, False)]
+    return [
+        _bound_runner(client, target, listing.expires_at, execute, True)
+        for target in rank_targets(listing.targets)
+    ]
+
+
+def automatic_runner(client, client_id, execute=None, profile=None):
+    return candidate_runners(client, client_id, execute, profile)[0]
 
 
 class TargetAccess(StrictModel):

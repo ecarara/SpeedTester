@@ -100,11 +100,16 @@ def write_user_control(key):
     os.chown(target, entry.pw_uid, entry.pw_gid)
 
 
-def enable():
+def enable(repair=False):
     require_root()
     existing = BOOTSTRAP.exists()
     key = bootstrap_key() if existing else secrets.token_hex(32)
-    operation = "repair" if existing else "install"
+    if not existing:
+        operation = "install"
+    else:
+        # An upgrade keeps the participant's sharing choice; an explicit repair
+        # pauses the schedule for review.
+        operation = "upgrade" if repair else "repair"
     code = invoke(operation, key)
     (STATE / "disabled").unlink(missing_ok=True)
     write_user_control(key)
@@ -155,7 +160,7 @@ def main():
         if command == "enable":
             return enable()
         if command == "repair":
-            return enable()
+            return enable(repair=True)
         if command == "disable":
             return disable()
         if command == "remove":

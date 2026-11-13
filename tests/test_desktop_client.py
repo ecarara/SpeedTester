@@ -556,3 +556,11 @@ class IdentificationTests(unittest.TestCase):
                 os.environ['XLOCALEDIR']='/explicit-user-config'
                 input_methods.configure_input_methods()
                 self.assertEqual(os.environ['XLOCALEDIR'],'/explicit-user-config')
+
+
+class MaintenanceOperationTests(unittest.TestCase):
+    def test_package_upgrade_preserves_the_sharing_choice(self):
+        from speedtester_protocol.native_services import maintenance_operation
+        self.assertEqual(maintenance_operation("upgrade"), "install")
+        self.assertEqual(maintenance_operation("repair"), "repair")
+        self.assertEqual(maintenance_operation("install"), "install")

@@ -94,6 +94,25 @@ class ImageGateTests(unittest.TestCase):
                 self.assertEqual(grype.check_report(path)['blocking_findings'], expected)
                 self.assertEqual(path.read_text(), raw)
 
+    def test_reviewed_exemption_covers_only_the_named_python_cve_until_it_expires(self):
+        from datetime import date
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / 'report.json'
+            def write(cve, name='python'):
+                path.write_text(json.dumps({'descriptor': {'db': {'status': {'valid': True}}}, 'matches': [
+                    {'artifact': {'name': name}, 'vulnerability': {'id': cve, 'severity': 'High',
+                     'fix': {'state': 'fixed', 'versions': ['3.14.11']}}}]}))
+            write('CVE-2026-119170')
+            summary = grype.check_report(path, today=date(2026, 11, 13))
+            self.assertEqual(summary['blocking_findings'], 0)
+            self.assertEqual([item['id'] for item in summary['exemptions']], ['CVE-2026-119170'])
+            summary = grype.check_report(path, today=date(2026, 12, 9))
+            self.assertEqual((summary['blocking_findings'], summary['expired_exemptions']), (1, ['CVE-2026-119170']))
+            write('CVE-2026-119170', name='openssl')
+            self.assertEqual(grype.check_report(path, today=date(2026, 11, 13))['blocking_findings'], 1)
+            write('CVE-2026-999999')
+            self.assertEqual(grype.check_report(path, today=date(2026, 11, 13))['blocking_findings'], 1)
+
     def test_missing_report_evidence_and_invalid_database_fail_closed(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / 'report.json'

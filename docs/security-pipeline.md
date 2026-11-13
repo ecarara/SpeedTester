@@ -17,6 +17,14 @@ significa ausência de vulnerabilidades. `scripts/check_image_report.py` aplica
 a política aprovada e exige evidência de banco de vulnerabilidades válido.
 Relatórios e resumos do CI ficam como artifacts por 14 dias.
 
+Exceções são pontuais, nomeadas e temporárias. Cada entrada em `EXEMPTIONS`
+declara o pacote, a correção upstream que a remove e uma data-limite; depois
+dessa data o gate ignora a exceção de propósito, então ela não pode sobreviver
+ao conserto. O resumo do CI lista as exceções aplicadas e as expiradas. A
+primeira entrada cobre apenas `CVE-2026-119170` em `python`, enquanto nenhuma
+imagem oficial traz o 3.14.11 (PEP 745: 2026-12-01); ela deve ser removida
+assim que o digest da imagem for atualizado.
+
 O Conftest exige filesystem somente leitura, limites de memória/CPU/processos,
 `no-new-privileges`, descarte de capabilities e UID 10001 na API e collector.
 Permissões excepcionais são restritas a CHOWN na inicialização do volume,

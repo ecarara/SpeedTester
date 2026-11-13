@@ -160,9 +160,27 @@ def validate_agent_bundle(path: Path) -> None:
     )
 
 
+def validate_agent_package(path: Path) -> None:
+    """Validate the opt-in agent package built from the release bundle."""
+    listing = command_output(["tar", "--zstd", "-tf", str(path)])
+    require_tokens(
+        path.name,
+        listing,
+        (
+            "usr/bin/speedtester-agent",
+            "usr/lib/speedtester-agent/SpeedTesterClient/SpeedTesterClient",
+            "usr/share/licenses/speedtester-agent/LICENSE",
+        ),
+    )
+
+
 def validate_artifact(artifact: Path) -> None:
     """Dispatch validation for one supported release artifact."""
-    if artifact.name.startswith("SpeedTesterClient-") and artifact.name.endswith(
+    if artifact.name.startswith("speedtester-agent-") and artifact.name.endswith(
+        ".pkg.tar.zst"
+    ):
+        validate_agent_package(artifact)
+    elif artifact.name.startswith("SpeedTesterClient-") and artifact.name.endswith(
         ".tar.gz"
     ):
         validate_agent_bundle(artifact)

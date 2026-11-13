@@ -100,6 +100,47 @@ jobs:
             dist/desktop/releases/SpeedTesterClient-*-linux-*-components.json
           if-no-files-found: error
 
+  linux-agent-package:
+    name: Arch agent package
+    needs: [metadata, linux-agent]
+    runs-on: ubuntu-latest
+    container: archlinux/archlinux:base-devel-20260925.0.599509
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-linux-agent
+          path: dist/agent
+      - name: Install pinned build utilities
+        run: pacman -Sy --noconfirm --needed curl python
+      - name: Build the opt-in agent package from this run's bundle
+        env:
+          APP_VERSION: ${{ needs.metadata.outputs.version }}
+        run: |
+          useradd --create-home builder
+          mkdir -p dist/agent-pkg
+          cp "dist/agent/SpeedTesterClient-${APP_VERSION}-linux-x86_64.tar.gz" dist/agent-pkg/
+          cp -r packaging/linux/agent dist/agent-pkg/src
+          sed -i "s/^pkgver=.*/pkgver=${APP_VERSION}/; s/^pkgrel=.*/pkgrel=1/" dist/agent-pkg/src/PKGBUILD
+          python - <<'PY'
+          from pathlib import Path
+
+          pkgbuild = Path("dist/agent-pkg/src/PKGBUILD")
+          lines = pkgbuild.read_text().splitlines()
+          for index, line in enumerate(lines):
+              if line.startswith("source=("):
+                  lines[index] = 'source=("SpeedTesterClient-${pkgver}-linux-x86_64.tar.gz"'
+                  break
+          pkgbuild.write_text("\n".join(lines) + "\n")
+          PY
+          chown -R builder:builder dist/agent-pkg
+          su builder -s /bin/bash -c "cd dist/agent-pkg/src && SRCDEST='$GITHUB_WORKSPACE/dist/agent-pkg' PKGDEST='$GITHUB_WORKSPACE/dist/agent-pkg' makepkg -f --nodeps --skipinteg"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-linux-agent-package
+          path: dist/agent-pkg/*.pkg.tar.zst
+          if-no-files-found: error
+
   macos:
     name: macOS ${{ matrix.arch }}
     needs: [metadata, quality]
@@ -349,7 +390,7 @@ jobs:
 
   validate:
     name: Validate release contents
-    needs: [metadata, source, linux-agent, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke]
+    needs: [metadata, source, linux-agent, linux-agent-package, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -370,7 +411,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    needs: [metadata, source, linux-agent, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke, validate]
+    needs: [metadata, source, linux-agent, linux-agent-package, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke, validate]
     runs-on: ubuntu-latest
     permissions:
       contents: write

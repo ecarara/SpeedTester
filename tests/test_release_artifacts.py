@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from build_sbom import build_document  # noqa: E402
 from generate_checksums import main as checksums_main  # noqa: E402
 from validate_release_artifacts import main as validate_main  # noqa: E402
+import validate_release_artifacts as validator  # noqa: E402
 
 
 class ReleaseArtifactTests(TestCase):
@@ -35,10 +36,11 @@ class ReleaseArtifactTests(TestCase):
         self.assertIn("validate_release_artifacts.py", workflow)
         self.assertIn("macos-install-smoke", workflow)
         self.assertIn(
-            "needs: [metadata, source, linux-agent, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke]",
+            "needs: [metadata, source, linux-agent, linux-agent-package, macos, windows, linux, flatpak, pacman, linux-install-smoke, macos-install-smoke]",
             workflow,
         )
         self.assertIn("gh release create", workflow)
+        self.assertIn("release-linux-agent-package", workflow)
 
     def test_sbom_is_spdx_and_contains_direct_dependencies(self):
         document = build_document("0.3.0", "ecarara/SpeedTester", "abc123")
@@ -83,3 +85,20 @@ class ReleaseArtifactTests(TestCase):
             )
             checksums_main([str(directory)])
             self.assertEqual(validate_main([str(directory)]), 0)
+
+
+class AgentPackageValidationTests(TestCase):
+    def test_agent_package_dispatches_to_its_own_layout(self):
+        from unittest.mock import patch
+        listing = "\n".join((
+            "usr/",
+            "usr/bin/",
+            "usr/bin/speedtester-agent",
+            "usr/lib/speedtester-agent/SpeedTesterClient/SpeedTesterClient",
+            "usr/share/licenses/speedtester-agent/LICENSE",
+        ))
+        artifact = Path("speedtester-agent-0.4.53-1-x86_64.pkg.tar.zst")
+        with patch("validate_release_artifacts.command_output", return_value=listing) as run:
+            validator.validate_artifact(artifact)
+        run.assert_called_once()
+        self.assertEqual(run.call_args[0][0][0], "tar")

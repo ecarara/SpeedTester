@@ -5,10 +5,10 @@ FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends build-essential libssl-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
-ADD --checksum=sha256:1c0d0fb02c52626111d6e132db80edfbf27bbaff8bd9245df2a371dcb0b35a92 \
-    https://github.com/esnet/iperf/releases/download/3.22/iperf-3.22.tar.gz /tmp/iperf.tar.gz
+ADD --checksum=sha256:de018b5252e2a7068c89fac8b35a295d83334f2b7814aa9532a2a8107b04a4a9 \
+    https://github.com/esnet/iperf/releases/download/3.22.1/iperf-3.22.1.tar.gz /tmp/iperf.tar.gz
 RUN tar -xzf /tmp/iperf.tar.gz -C /tmp \
-    && cd /tmp/iperf-3.22 \
+    && cd /tmp/iperf-3.22.1 \
     && ./configure --disable-shared --enable-static --without-sctp --with-openssl=/usr \
     && make -j2
 
@@ -31,8 +31,8 @@ RUN apt-get update \
        elif [ "$TARGETARCH" != "arm64" ]; then exit 1; fi \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=iperf-builder /tmp/iperf-3.22/src/iperf3 /usr/local/bin/iperf3
-COPY --from=iperf-builder /tmp/iperf-3.22/LICENSE /usr/share/doc/iperf3/LICENSE
+COPY --from=iperf-builder /tmp/iperf-3.22.1/src/iperf3 /usr/local/bin/iperf3
+COPY --from=iperf-builder /tmp/iperf-3.22.1/LICENSE /usr/share/doc/iperf3/LICENSE
 
 WORKDIR /app
 COPY app/requirements.txt /app/requirements.txt

@@ -14,10 +14,10 @@ FROM python:3.14.10-slim-trixie@sha256:af8a5aa14780025dbfbcfbc81bd8a91ebd87711dd
 RUN apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends build-essential libssl-dev zlib1g-dev pkg-config \
     && rm -rf /var/lib/apt/lists/*
-ADD --checksum=sha256:a9dc9565dffe8640f64d863cd29a32bc4a3dbdec0566a7fc44c5d6ee767d5f39 \
-    https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.6p1.tar.gz /tmp/openssh.tar.gz
+ADD --checksum=sha256:9ae44872090cf2f06b3cf9ff147e7f16f309671340763ed2f99248398ae29d5b \
+    https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-10.6p2.tar.gz /tmp/openssh.tar.gz
 RUN tar -xzf /tmp/openssh.tar.gz -C /tmp \
-    && cd /tmp/openssh-10.6p1 \
+    && cd /tmp/openssh-10.6p2 \
     && ./configure --prefix=/usr/local --without-pam --without-kerberos5 --without-libedit \
     && make -j2 ssh scp
 
@@ -31,8 +31,8 @@ RUN python -m pip uninstall -y setuptools wheel pip
 
 COPY --from=age-builder /out/age /out/age-keygen /usr/local/bin/
 COPY --from=age-builder /go/pkg/mod/filippo.io/age@v1.3.2/LICENSE /usr/share/doc/age/LICENSE
-COPY --from=ssh-builder /tmp/openssh-10.6p1/ssh /tmp/openssh-10.6p1/scp /usr/local/bin/
-COPY --from=ssh-builder /tmp/openssh-10.6p1/LICENCE /usr/share/doc/openssh/LICENCE
+COPY --from=ssh-builder /tmp/openssh-10.6p2/ssh /tmp/openssh-10.6p2/scp /usr/local/bin/
+COPY --from=ssh-builder /tmp/openssh-10.6p2/LICENCE /usr/share/doc/openssh/LICENCE
 
 COPY scripts/backup.sh scripts/restore.py scripts/check_restore.py scripts/export_backup.py /opt/speedtester-scripts/
 RUN chmod 0755 /opt/speedtester-scripts/backup.sh
